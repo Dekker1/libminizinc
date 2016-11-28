@@ -87,8 +87,9 @@ namespace MiniZinc {
       void vFunctionI(FunctionI* i) {
         Expression* ann = getAnnotation(i->ann(),constants().presolve.presolve);
         if (ann) {
-          if (! i->e()->type().isvarbool())
-            throw TypeError(env, i->loc(), "Presolve annotation on non-predicate `" + i->id().str() + "'");
+//          TODO: Put this error somewhere when the model has been typechecked.
+//          if (! i->e()->type().isvarbool())
+//            throw TypeError(env, i->loc(), "Presolve annotation on non-predicate `" + i->id().str() + "'");
           if(ann->eid() == Expression::E_CALL) {
             ASTExprVec<Expression> args = ann->cast<Call>()->args();
             Id* s_id = args[0]->cast<Id>();
@@ -128,9 +129,6 @@ namespace MiniZinc {
     GCLock lock;
     m = new Model();
     e = new Env(m);
-
-    origin->mergeStdLib(e->envi(), m);
-    registerBuiltins(*e, m);
 
     pred_orig->ann().clear();
     predicate = copy(e->envi(), cm, pred_orig, false, true)->cast<FunctionI>();
@@ -229,7 +227,6 @@ namespace MiniZinc {
   void Presolver::ModelSubproblem::constructModel() {
     GCLock lock;
 
-    recursiveRegisterFns(m, e->envi(), predicate);
     std::vector<Expression*> args;
     if (predicate->params().size() < 1) {
       throw EvalError(origin_env, predicate->loc(), "Presolving requires a predicate which includes parameters as targeted "
@@ -244,14 +241,17 @@ namespace MiniZinc {
       VarDecl* vd = new VarDecl(Location(), it->ti(), it->id(), NULL);
       m->addItem(new VarDeclI(Location(), vd));
       Id* arg = new Id(Location(), vd->id()->str().str(), vd);
-      arg->type(vd->type());
       args.push_back(arg);
     }
     Call* pred_call = new Call(predicate->loc().introduce(), predicate->id().str(), args, predicate);
-    pred_call->type(Type::varbool());
     ConstraintI* constraint = new ConstraintI(predicate->loc().introduce(), pred_call);
     m->addItem(constraint);
     m->addItem(SolveI::sat(predicate->loc().introduce()));
+
+    origin->mergeStdLib(e->envi(), m);
+    std::vector<TypeError> typeErrors;
+    typecheck(*e, m, typeErrors, flattener->flag_model_check_only || flattener->flag_model_interface_only);
+    registerBuiltins(*e, m);
 
     generateFlatZinc(*e, flattener->flag_only_range_domains, flattener->flag_optimize, flattener->flag_newfzn);
   }
@@ -309,7 +309,6 @@ namespace MiniZinc {
           Expression* type = computeDomainExpr(origin_env, (*it)->args()[i] );
           if (type != nullptr) {
             Expression* expr = new BinOp(predicate->loc().introduce(), domains[i], BOT_UNION, type);
-            expr->type( type->type() );
             domains[i] = expr;
           } else {
             domains[i] = nullptr;
@@ -390,12 +389,9 @@ namespace MiniZinc {
       delete e;
       m = new Model();
       e = new Env(m);
-      origin->mergeStdLib(e->envi(), m);
-      registerBuiltins(*e, m);
       m->addItem(predicate);
     }
 
-    recursiveRegisterFns(m, e->envi(), predicate);
     std::vector<Expression*> args;
     if (predicate->params().size() < 1) {
       // TODO: Make parameter included call-based.
@@ -415,11 +411,9 @@ namespace MiniZinc {
       decls.push_back(vd);
 
       Id* arg = new Id(predicate->loc().introduce(), vd->id()->str().str(), vd);
-      arg->type(vd->type());
       args.push_back(arg);
     }
     Call* pred_call = new Call(predicate->loc().introduce(), predicate->id().str(), args, predicate);
-    pred_call->type(Type::varbool());
     ConstraintI* constraint = new ConstraintI(predicate->loc().introduce(), pred_call);
     m->addItem(constraint);
     m->addItem(SolveI::sat(Location()));
@@ -437,6 +431,10 @@ namespace MiniZinc {
         decls[i]->ti()->setRanges(ranges);
       }
     }
+
+    origin->mergeStdLib(e->envi(), m);
+    std::vector<TypeError> typeErrors;
+    typecheck(*e, m, typeErrors, flattener->flag_model_check_only || flattener->flag_model_interface_only);
 
     generateFlatZinc(*e, flattener->flag_only_range_domains, flattener->flag_optimize, flattener->flag_newfzn);
   }

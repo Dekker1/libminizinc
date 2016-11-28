@@ -323,6 +323,16 @@ void Flattener::flatten()
         if (flag_typecheck) {
           if (flag_verbose)
             std::cerr << " done parsing (" << stoptime(lasttime) << ")" << std::endl;
+#ifdef PRESOLVE
+          Presolver* presolver;
+          if (!flag_no_presolve){
+            if (flag_verbose)
+              std::cerr << "Marking Pre-Solve Annotations ...";
+            presolver = new Presolver(env, this);
+            if (flag_verbose)
+              std::cerr << " done (" << stoptime(lasttime) << ")" << std::endl;
+          }
+#endif
           if (flag_verbose)
             std::cerr << "Typechecking ...";
           vector<TypeError> typeErrors;
@@ -350,16 +360,6 @@ void Flattener::flatten()
               env.swap();
               populateOutput(env);
             } else {
-#ifdef PRESOLVE
-              Presolver* presolver;
-              if (!flag_no_presolve){
-                if (flag_verbose)
-                  std::cerr << "Marking Pre-Solve Annotations ...";
-                presolver = new Presolver(env, this);
-                if (flag_verbose)
-                  std::cerr << " done (" << stoptime(lasttime) << ")" << std::endl;
-              }
-#endif
               if (flag_verbose)
                 std::cerr << "Flattening ...";
 

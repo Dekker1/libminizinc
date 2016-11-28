@@ -19,9 +19,6 @@
 
 namespace MiniZinc {
 
-  /// Registers function and all dependencies to model
-  void recursiveRegisterFns(Model*, EnvI&, FunctionI*);
-
   /// Computes decision variable domain for a given variable expression
   Expression* computeDomainExpr(EnvI& env, Expression* exp);
 
