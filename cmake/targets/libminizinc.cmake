@@ -111,6 +111,7 @@ add_library(minizinc_compiler
   lib/aststring.cpp
   lib/astvec.cpp
   lib/builtins.cpp
+  lib/bytecode.cpp
   lib/copy.cpp
   lib/chain_compressor.cpp
   lib/eval_par.cpp
@@ -160,6 +161,7 @@ add_library(minizinc_compiler
   include/minizinc/aststring.hh
   include/minizinc/astvec.hh
   include/minizinc/builtins.hh
+  include/minizinc/bytecode.hh
   include/minizinc/config.hh.in
   include/minizinc/chain_compressor.hh
   include/minizinc/copy.hh
