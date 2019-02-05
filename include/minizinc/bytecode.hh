@@ -16,6 +16,7 @@
 #include <iostream>
 
 #include <minizinc/values.hh>
+#include <minizinc/ast.hh>
 
 namespace MiniZinc {
 
@@ -33,12 +34,14 @@ namespace MiniZinc {
       INCI, // R1
       DECI, // R1
       
-      IMMI, // I, R : Load immediate integer to register
+      IMMI, // I, R : Load immediate integer into register
+      LOAD_GLOBAL, // i -> R : Load global i into register R (globals are registers of the bottom stack frame)
+      STORE_GLOBAL, // R -> i : Store register R into global i
       MOV,  // R1 -> R2
 
-      JMP,  // i : pc+=i
-      JMPIF,     // R, i: if R then pc+=i
-      JMPIFNOT,  // R, i: if not R then pc+=i
+      JMP,  // i : pc=i
+      JMPIF,     // R, i: if R then pc=i
+      JMPIFNOT,  // R, i: if not R then pc=i
       
       EQI,
       LTI,
@@ -61,17 +64,12 @@ namespace MiniZinc {
       TRACE, // output string
       ABORT, // abort execution
       
-      NEW_VEC_I, // R: allocate new integer vector in R
-      DEL_VEC_I, // R: delete integer vector in R
-      GET_VEC_I, // R1, R2 -> R3: get element R2 from integer vector in R1 into R3
-      PUT_VEC_I, // R1, R2, R3: put R1 into element R2 of vector in R3
-      NEW_VEC_E, // R: allocate new expression vector in R
-      DEL_VEC_E, // R: delete expression vector in R
-      GET_VEC_E, // R1, R2 -> R3: get element R2 from expression vector in R1 into R3
-      PUT_VEC_E, // R1, R2, R3: put R1 into element R2 of vector in R3
+      NEW_VEC, // R: allocate new expression vector in R
+      DEL_VEC, // R: delete expression vector in R
+      GET_VEC, // R1, R2 -> R3: get element R2 from expression vector in R1 into R3
+      PUT_VEC, // R1, R2, R3: put R1 into element R2 of vector in R3
       
-      MK_ARRAY_I, // R1 -> R2: Make array literal from integer vector in R1
-      MK_ARRAY_E, // R1 -> R2: Make array literal from expression vector in R1
+      MK_ARRAY, // R1 -> R2: Make array literal from integer vector in R1
     };
     
     /// Get instruction at \a pc and increment \a pc
@@ -116,32 +114,22 @@ namespace MiniZinc {
 
   class RegisterFile {
   protected:
-    union RegContent {
-      Expression* e;
-      IntVal i;
-      std::vector<IntVal>* iv;
-      std::vector<Expression*>* ev;
-      RegContent() : i() {}
-    };
-    std::vector<RegContent> _r;
+    std::vector<void*> _r;
   public:
-    Expression* e(int reg) { return _r[reg].e; }
-    IntVal i(int reg) { return _r[reg].i; }
-    std::vector<IntVal>* iv(int reg) { return _r[reg].iv; }
-    std::vector<Expression*>* ev(int reg) { return _r[reg].ev; }
-    void e(Expression* exp, int reg) { if (reg >= _r.size()) _r.resize(reg+1); _r[reg].e=exp; }
-    void i(IntVal iv, int reg) { if (reg >= _r.size()) _r.resize(reg+1); _r[reg].i=iv; }
-    void new_iv(int reg) { if (reg >= _r.size()) _r.resize(reg+1); _r[reg].iv = new std::vector<IntVal>(); }
-    void delete_iv(int reg) { delete _r[reg].iv; _r[reg].iv=NULL; }
-    void new_ev(int reg) { if (reg >= _r.size()) _r.resize(reg+1); _r[reg].ev = new std::vector<Expression*>(); }
-    void delete_ev(int reg) { delete _r[reg].ev; _r[reg].ev=NULL; }
+    Expression* e(int reg) { assert(reg < _r.size()); return static_cast<Expression*>(_r[reg]); }
+    IntVal i(int reg) { assert(reg < _r.size()); return static_cast<Expression*>(_r[reg])->cast<IntLit>()->v(); }
+    std::vector<Expression*>* ev(int reg) { assert(reg < _r.size()); return static_cast<std::vector<Expression*>*>(_r[reg]); }
+    void e(Expression* exp, int reg) { if (reg >= _r.size()) _r.resize(reg+1); _r[reg]=exp; }
+    void i(IntVal iv, int reg) { if (reg >= _r.size()) _r.resize(reg+1); _r[reg]=IntLit::a(iv); }
+    void new_ev(int reg) { if (reg >= _r.size()) _r.resize(reg+1); _r[reg] = new std::vector<Expression*>(); }
+    void delete_ev(int reg) { assert(reg < _r.size()); delete static_cast<std::vector<Expression*>*>(_r[reg]); _r[reg]=NULL; }
     void mov(int r1, int r2) {
-      if (r1 >= _r.size()) _r.resize(r1+1);
+      assert(r1 < _r.size());
       if (r2 >= _r.size()) _r.resize(r2+1);
       _r[r2] = _r[r1];
     }
     void mov(int r1, RegisterFile& rf, int r2) {
-      if (r1 >= _r.size()) _r.resize(r1+1);
+      assert(r1 < _r.size());
       if (r2 >= rf._r.size()) rf._r.resize(r2+1);
       rf._r[r2] = _r[r1];
     }
@@ -166,8 +154,6 @@ namespace MiniZinc {
     void run(void);
   };
   
-  void testBytecode();
-
   std::vector<BytecodeStream> parse(const std::string& s);
 
 }
