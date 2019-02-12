@@ -32,6 +32,22 @@ using namespace MiniZinc;
 
 int main(int argc, const char** argv) {
 
+  Val v1(123);
+  assert(v1.isInt());
+  assert(v1()==123);
+  Val v2(Ref(123));
+  assert(v2.isRef());
+  assert(v2.r()()==123);
+  std::vector<Val> v(3);
+  v[0] = v1;
+  v[1] = v2;
+  v[2] = v1;
+  Val v3(Vec::a(v));
+  assert(v3.isVec());
+  assert(v3[0]()==v1());
+  assert(v3[1].r()()==v2.r()());
+  assert(v3[2]()==v1());
+  
   if (argc < 2) {
     std::cerr << "Usage: mznasm [-v] <ASMFILE>\n";
     return 1;
@@ -56,10 +72,10 @@ int main(int argc, const char** argv) {
     if (verbose) {
       std::cerr << "Disassembled code:\n";
       for (auto& b : bs) {
-        std::cerr << "---------------\n";
-        std::cerr << b.toString();
+        std::cerr << ":" << b.name() << ":\n";
+        std::cerr << b.toString(bs);
       }
-      std::cerr << "---------------\n";
+      std::cerr << "\n";
     }
     // The main procedure is the last one in the file
     BytecodeFrame frame(bs.back());
@@ -70,6 +86,11 @@ int main(int argc, const char** argv) {
     interpreter.run();
     if (verbose) {
       std::cerr << "Done\n";
+      for (unsigned int i=0; i<interpreter.defStack().size(); i++) {
+        std::cerr << i << ":\t";
+        std::cerr << bs[interpreter.defStack()[i].call.pred].name() << " ";
+        std::cerr << interpreter.defStack()[i].call.args.toString() << "\n";
+      }
     }
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";
