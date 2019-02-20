@@ -100,6 +100,7 @@ include(cmake/targets/libminizinc_solver.cmake)
 include(cmake/targets/minizinc.cmake)
 include(cmake/targets/mzn2doc.cmake)
 include(cmake/targets/mznasm.cmake)
+include(cmake/targets/mzncc.cmake)
 
 # -------------------------------------------------------------------------------------------------------------------
 #  -- CMake configuration generation
