@@ -54,7 +54,10 @@ namespace MiniZinc {
       NOT,
       XOR,
       
-      ISPAR,
+      ISPAR,   // R: whether value in R is not a variable
+      ISEMPTY, // R: whether vector in R is empty
+      LENGTH,  // R1 -> R2: put length of vector in R1 into R2
+      GET_VEC, // R1, R2 -> R3: put element R2 of vector in R1 into R3
       
       OPEN_AGGREGATION, // i: Create a new aggregation context with symbol i
       CLOSE_AGGREGATION,  // Close current aggregation context, put result onto context above
@@ -63,7 +66,8 @@ namespace MiniZinc {
       POP,   // R: pop from value stack into R
       
       RET, // return from call
-      CALL, // i, n, R1, ..., Rn
+      CALL, // i, n, R1, ..., Rn: call code i
+      BUILTIN, // i, n, R1, ..., Rn : call builtin function i
       TCALL, // i : call code i (arguments are assumed to be in correct registers already)
       
       TRACE, // R: output string representation of R
@@ -183,9 +187,8 @@ namespace MiniZinc {
     void destroy(void);
     void construct(void);
   public:
-    Val(void) : _v(nullptr) {}
-    Val(Vec* v);
-    Val(const IntVal& i) {
+    explicit Val(Vec* v);
+    Val(const IntVal& i=IntVal(0)) {
       assert(i.isFinite());
       static const unsigned int pointerBits = sizeof(void*)*8;
       static const long long int maxUnboxedVal = (static_cast<long long int>(1) << (pointerBits - 2)) - static_cast<long long int>(1);
@@ -228,7 +231,7 @@ namespace MiniZinc {
     }
     void inc(void) { _ref_count++; }
     static void dec(Vec* v) {
-      if ( (--v->_ref_count)==0 )
+      if ( v && (--v->_ref_count)==0 )
         delete v;
     }
   };
@@ -236,6 +239,7 @@ namespace MiniZinc {
   
   inline
   Val::Val(Vec* v) {
+    assert(v != NULL);
     _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(v) | static_cast<ptrdiff_t>(3));
     v->inc();
   }
@@ -295,7 +299,13 @@ namespace MiniZinc {
     std::vector<Val> _r;
   public:
     const Val& operator [](int r) { assert(r < _r.size()); return _r[r]; }
-    void assign(int r, const Val& v) { if (r >= _r.size()) _r.resize(r+1); _r[r] = v; }
+    void assign(int r, const Val& v) {
+      if (r >= _r.size()) {
+        _r.resize(r+1);
+        assert(_r.size()==r+1);
+      }
+      _r[r] = v;
+    }
     
     void cp(int r1, int r2) {
       assert(r1 < _r.size());
@@ -335,6 +345,7 @@ namespace MiniZinc {
     Val domain;
     Val ann;
     CallVal call;
+    Definition(void) : domain(IntVal(0)), ann(IntVal(0)), call(CallVal(0,IntVal(0))) {}
     Definition(Val domain0,int pred0,Val args0,Val ann0=IntVal(0))
     : domain(domain0), ann(ann0), call(CallVal(pred0,args0)) {}
   };
@@ -347,23 +358,32 @@ namespace MiniZinc {
     int n_symbols;
     /// Stack of values that need to be aggregated
     std::vector<Val> stack;
-    AggregationCtx(int s) : symbol(static_cast<Symbol>(s)), n_symbols(1) {
+    /// Depth of definition stack when this frame was created
+    int def_stack_depth;
+    AggregationCtx(int s, int d) : symbol(static_cast<Symbol>(s)), n_symbols(1), def_stack_depth(d) {
       assert(s >= 0 && s <= VCTX_OTHER);
     }
   };
   
   class Interpreter {
+  public:
+    typedef void (*builtin) (Interpreter& i, std::vector<Val> args);
+    enum FlatZincBuiltins { CLAUSE=-1, FORALL=-2 };
   protected:
     std::vector<BytecodeFrame> _stack;
     std::vector<Definition> _defstack;
     std::vector<AggregationCtx> _agg;
     const std::vector<BytecodeStream>& _procs;
+    const std::vector<builtin>& _builtins;
   public:
-    Interpreter(const std::vector<BytecodeStream>& procs, const BytecodeFrame& f) : _procs(procs) {
+    Interpreter(const std::vector<BytecodeStream>& procs,
+                const std::vector<builtin>& builtins,
+                const BytecodeFrame& f) : _procs(procs), _builtins(builtins) {
       _stack.push_back(f);
     }
     void run(void);
     const std::vector<Definition>& defStack(void) const { return _defstack; }
+    void push(const Val& v, int stackOffset);
   };
   
   std::vector<BytecodeStream> parse(const std::string& s);

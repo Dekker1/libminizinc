@@ -31,22 +31,6 @@ using namespace std;
 using namespace MiniZinc;
 
 int main(int argc, const char** argv) {
-
-  Val v1(123);
-  assert(v1.isInt());
-  assert(v1()==123);
-  Val v2(Ref(123));
-  assert(v2.isRef());
-  assert(v2.r()()==123);
-  std::vector<Val> v(3);
-  v[0] = v1;
-  v[1] = v2;
-  v[2] = v1;
-  Val v3(Vec::a(v));
-  assert(v3.isVec());
-  assert(v3[0]()==v1());
-  assert(v3[1].r()()==v2.r()());
-  assert(v3[2]()==v1());
   
   if (argc < 2) {
     std::cerr << "Usage: mznasm [-v] <ASMFILE>\n";
@@ -68,6 +52,7 @@ int main(int argc, const char** argv) {
   std::string str((std::istreambuf_iterator<char>(t)),
                   std::istreambuf_iterator<char>());
   try {
+    // Parse assembly file
     auto bs = parse(str);
     if (verbose) {
       std::cerr << "Disassembled code:\n";
@@ -77,9 +62,11 @@ int main(int argc, const char** argv) {
       }
       std::cerr << "\n";
     }
+    // Built-in procedures
+    std::vector<Interpreter::builtin> builtins;
     // The main procedure is the last one in the file
     BytecodeFrame frame(bs.back());
-    Interpreter interpreter(bs, frame);
+    Interpreter interpreter(bs, builtins, frame);
     if (verbose) {
       std::cerr << "Run:\n";
     }

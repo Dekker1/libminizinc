@@ -158,6 +158,21 @@ namespace MiniZinc {
           oss << "ISPAR R" << reg(pc) << " R" << reg(pc) << "\n";
         }
           break;
+        case BytecodeStream::ISEMPTY:
+        {
+          oss << "ISEMPTY R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::LENGTH:
+        {
+          oss << "LENGTH R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::GET_VEC:
+        {
+          oss << "GET_VEC R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
         case BytecodeStream::RET:
         {
           oss << "RET\n";
@@ -171,6 +186,18 @@ namespace MiniZinc {
           } else {
             oss << "CALL " << procs[p].name() << " ";
           }
+          int n=reg(pc);
+          oss << n;
+          for (int i=0; i<n; i++) {
+            oss << " R" << reg(pc);
+          }
+          oss << "\n";
+        }
+          break;
+        case BytecodeStream::BUILTIN:
+        {
+          int p = reg(pc);
+          oss << "BUILTIN " << p << " ";
           int n=reg(pc);
           oss << n;
           for (int i=0; i<n; i++) {
@@ -245,8 +272,20 @@ namespace MiniZinc {
     return oss.str();
   }
   
-//#define DBG_INTERPRETER(msg) std::cerr << msg
-#define DBG_INTERPRETER(msg) do {} while(0)
+#define DBG_INTERPRETER(msg) std::cerr << msg
+//#define DBG_INTERPRETER(msg) do {} while(0)
+  
+  void
+  Interpreter::push(const Val& v, int stackOffset) {
+    assert(stackOffset < 0);
+    assert(_agg.size()+stackOffset >= 0);
+    if (_agg[_agg.size()+stackOffset].symbol==AggregationCtx::VCTX_LIN) {
+      // add coefficient to surrounding linear context
+      _agg[_agg.size()+stackOffset].stack.push_back(IntVal(1));
+    }
+    // push value onto surrounding context
+    _agg[_agg.size()+stackOffset].stack.push_back(v);
+  }
   
   void
   Interpreter::run(void) {
@@ -318,7 +357,7 @@ namespace MiniZinc {
           int i = frame.bs->reg(frame.pc);
           int r1 = frame.bs->reg(frame.pc);
           _stack[0].reg.cp(i, frame.reg, r1);
-          DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame.reg.i(r1) << ")" << "\n");
+          DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame.reg[r1]() << ")" << "\n");
         }
           break;
         case BytecodeStream::STORE_GLOBAL:
@@ -326,7 +365,7 @@ namespace MiniZinc {
           int r1 = frame.bs->reg(frame.pc);
           int i = frame.bs->reg(frame.pc);
           frame.reg.cp(r1, _stack[0].reg, i);
-          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame.reg.i(r1) << ")" << " " << i << "\n");
+          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame.reg[r1]() << ")" << " " << i << "\n");
         }
           break;
         case BytecodeStream::MOV:
@@ -348,7 +387,7 @@ namespace MiniZinc {
         {
           int r0 = frame.bs->reg(frame.pc);
           int i = frame.bs->reg(frame.pc);
-          DBG_INTERPRETER("JMPIF " << r0 << "(" << frame.reg.i(r0) << ")" << " " << i << "\n");
+          DBG_INTERPRETER("JMPIF " << r0 << "(" << frame.reg[r0]() << ")" << " " << i << "\n");
           if (frame.reg[r0]() != 0) {
             frame.pc = i;
           }
@@ -446,6 +485,33 @@ namespace MiniZinc {
           }
         }
           break;
+        case BytecodeStream::ISEMPTY:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          assert(frame.reg[r1].isVec());
+          frame.reg.assign(r2, IntVal(frame.reg[r1].size()==0));
+        }
+          break;
+        case BytecodeStream::LENGTH:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          assert(frame.reg[r1].isVec());
+          frame.reg.assign(r2, IntVal(frame.reg[r1].size()));
+        }
+          break;
+        case BytecodeStream::GET_VEC:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          assert(frame.reg[r1].isVec());
+          assert(frame.reg[r2].isInt());
+          assert(frame.reg[r2]() < frame.reg[r1].size());
+          frame.reg.assign(r3, frame.reg[r1][frame.reg[r2]().toInt()]);
+        }
+          break;
         case BytecodeStream::RET:
         {
           DBG_INTERPRETER("RET\n");
@@ -462,29 +528,43 @@ namespace MiniZinc {
           int code = frame.bs->reg(frame.pc);
           assert(code >= 0);
           assert(code < _procs.size());
+          int n = frame.bs->reg(frame.pc);
           if (_procs[code].size()==0) {
+            DBG_INTERPRETER("CALL fzn builtin " << code  << " " << n << "\n");
             // this is a FlatZinc builtin
-            int n = frame.bs->reg(frame.pc);
             std::vector<Val> args(n);
             for (int i=0; i<n; i++) {
               int r = frame.bs->reg(frame.pc);
               args[i] = frame.reg[r];
             }
-            _defstack.push_back(Definition(IntVal(0),code,Vec::a(args)));
-            assert(!_agg.empty());
-            _agg.back().stack.push_back(Ref(_defstack.size()-1));
+            _defstack.push_back(Definition(IntVal(0),code,Val(Vec::a(args))));
+            push(Ref(_defstack.size()-1),-1);
           } else {
+            DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
             _stack.emplace_back(_procs[code]);
             BytecodeFrame& oldFrame = _stack[_stack.size()-2];
             BytecodeFrame& newFrame = _stack[_stack.size()-1];
-            int n = oldFrame.bs->reg(oldFrame.pc);
             for (int i=0; i<n; i++) {
               int r = oldFrame.bs->reg(oldFrame.pc);
               oldFrame.reg.cp(r, newFrame.reg, i);
             }
-            DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
             frame = _stack.back();
           }
+        }
+          break;
+        case BytecodeStream::BUILTIN:
+        {
+          int code = frame.bs->reg(frame.pc);
+          assert(code >= 0);
+          assert(code < _builtins.size());
+          // this is a FlatZinc builtin
+          int n = frame.bs->reg(frame.pc);
+          std::vector<Val> args(n);
+          for (int i=0; i<n; i++) {
+            int r = frame.bs->reg(frame.pc);
+            args[i] = frame.reg[r];
+          }
+          _builtins[code](*this, args);
         }
           break;
         case BytecodeStream::TCALL:
@@ -536,7 +616,7 @@ namespace MiniZinc {
           assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
           if (r==AggregationCtx::VCTX_OTHER || AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
             // Push a new aggregation context
-            _agg.push_back(AggregationCtx(r));
+            _agg.push_back(AggregationCtx(r, _defstack.size()));
           } else {
             // Increment depth counter for current aggregation context
             _agg.back().n_symbols++;
@@ -553,14 +633,105 @@ namespace MiniZinc {
             assert(_agg.size() >= 2);
             switch (_agg.back().symbol) {
               case AggregationCtx::VCTX_AND:
+              {
+                // Create a conjunction on the definition stack
+                std::vector<Val> args;
+                args.reserve(_agg.back().stack.size());
+                bool isFalse = false;
+                for (unsigned int i=0; i<_agg.back().stack.size(); i++) {
+                  Val& v = _agg.back().stack[i];
+                  if (v.isInt()) {
+                    if ( v()==0 ) {
+                      // Disjunction is constant false
+                      isFalse = true;
+                      break;
+                    }
+                  } else {
+                    args.push_back(v);
+                  }
+                }
+                if (isFalse || args.empty()) {
+                  // Conjunction is constant true or false
+                  // Remove all elements from definition stack
+                  _defstack.resize(_agg.back().def_stack_depth);
+                  push(IntVal(!isFalse),-2);
+                } else {
+                  _defstack.push_back(Definition(IntVal(0),FORALL,Val(Vec::a(args))));
+                  push(Ref(_defstack.size()-1),-2);
+                }
+              }
                 break;
               case AggregationCtx::VCTX_OR:
+              {
+                // Create a clause on the definition stack, and push a reference
+                // to it onto the aggregation stack
+                
+                std::vector<Val> pos;
+                pos.reserve(_agg.back().stack.size());
+                std::vector<Val> neg;
+                neg.reserve(_agg.back().stack.size());
+                bool isTrue = false;
+                for (unsigned int i=0; i<_agg.back().stack.size(); i+=2) {
+                  IntVal sign = _agg.back().stack[i]();
+                  Val& v = _agg.back().stack[i+1];
+                  if (v.isInt()) {
+                    if ( (sign==0 && v()==0) || (sign!=0 && v()!=0) ) {
+                      // Disjunction is constant true
+                      isTrue = true;
+                      break;
+                    }
+                  } else {
+                    if (sign==0) {
+                      neg.push_back(v);
+                    } else {
+                      pos.push_back(v);
+                    }
+                  }
+                }
+                if (isTrue || (pos.empty() && neg.empty())) {
+                  // Disjunction is constant true or false
+                  // Remove all elements from definition stack
+                  _defstack.resize(_agg.back().def_stack_depth);
+                  push(IntVal(isTrue),-2);
+                } else {
+                  _defstack.push_back(Definition(IntVal(0),CLAUSE,Val(Vec::a({Val(Vec::a(pos)),Val(Vec::a(neg))}))));
+                  push(Ref(_defstack.size()-1),-2);
+                }
+              }
                 break;
               case AggregationCtx::VCTX_LIN:
+              {
+                // Create a linear expression on the aggregation stack
+                // This will leave the coefficient vector, the variable vector, and a constant
+                // in the surrounding context
+                assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
+                assert(_agg.back().stack.size() % 2 == 0);
+                std::vector<Val> coeffs;
+                coeffs.reserve(_agg.back().stack.size());
+                std::vector<Val> vars;
+                vars.reserve(_agg.back().stack.size());
+                IntVal d = 0;
+                for (unsigned int i=0; i<_agg.back().stack.size(); i+=2) {
+                  Val& ci = _agg.back().stack[i];
+                  Val& vi = _agg.back().stack[i+1];
+                  if (ci() != 0) {
+                    if (vi.isInt()) {
+                      d += ci()*vi();
+                    } else {
+                      coeffs.push_back(ci);
+                      vars.push_back(vi);
+                    }
+                  }
+                }
+                _agg[_agg.size()-2].stack.push_back(Val(Vec::a(coeffs)));
+                _agg[_agg.size()-2].stack.push_back(Val(Vec::a(vars)));
+                _agg[_agg.size()-2].stack.push_back(d);
+              }
                 break;
               case AggregationCtx::VCTX_VEC:
+                // Create a vector on the aggregation stack
                 assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
-                _agg[_agg.size()-2].stack.push_back(Vec::a(_agg.back().stack));
+                _agg[_agg.size()-2].stack.push_back(Val(Vec::a(_agg.back().stack)));
                 break;
               case AggregationCtx::VCTX_OTHER:
                 // When closing a VCTX_OTHER context, it should contain at most one value
@@ -818,6 +989,19 @@ namespace MiniZinc {
         cur_code.addInstr(BytecodeStream::ISPAR);
         cur_code.addReg(r1);
         cur_code.addReg(r2);
+      } else if (instrRR(line,"ISEMPTY",r1,r2)) {
+        cur_code.addInstr(BytecodeStream::ISEMPTY);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+      } else if (instrRR(line,"LENGTH",r1,r2)) {
+        cur_code.addInstr(BytecodeStream::LENGTH);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+      } else if (instrRRR(line,"GET_VEC",r1,r2,r3)) {
+        cur_code.addInstr(BytecodeStream::GET_VEC);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+        cur_code.addReg(r3);
       } else if (line=="RET") {
         cur_code.addInstr(BytecodeStream::RET);
       } else if (startsWith(line,"CALL ")) {
@@ -830,7 +1014,7 @@ namespace MiniZinc {
         std::string n1 = n.substr(n.find(' ')+1);
         int n_args = std::stoi(n1.substr(0,n1.find(' ')));
         cur_code.addReg(n_args);
-        for (int i=0; i<n_args+1; i++) {
+        for (int i=0; i<n_args; i++) {
           n1 = n1.substr(n1.find(" R")+2);
           int r = std::stoi(n1.substr(0,n1.find(' ')));
           cur_code.addReg(r);
@@ -841,6 +1025,29 @@ namespace MiniZinc {
         cur_code.addReg(0); // placeholder
       } else if (instrR(line,"TRACE",r1)) {
         cur_code.addInstr(BytecodeStream::TRACE);
+        cur_code.addReg(r1);
+      } else if (instrS(line,"OPEN_AGGREGATION",rs)) {
+        cur_code.addInstr(BytecodeStream::OPEN_AGGREGATION);
+        if (rs=="AND") {
+          cur_code.addReg(AggregationCtx::VCTX_AND);
+        } else if (rs=="OR") {
+          cur_code.addReg(AggregationCtx::VCTX_OR);
+        } else if (rs=="LIN") {
+          cur_code.addReg(AggregationCtx::VCTX_LIN);
+        } else if (rs=="VEC") {
+          cur_code.addReg(AggregationCtx::VCTX_VEC);
+        } else if (rs=="OTHER") {
+          cur_code.addReg(AggregationCtx::VCTX_OTHER);
+        } else {
+          throw Error("Error: illegal context\n"+line);
+        }
+      } else if (line=="CLOSE_AGGREGATION") {
+        cur_code.addInstr(BytecodeStream::CLOSE_AGGREGATION);
+      } else if (instrR(line,"PUSH",r1)) {
+        cur_code.addInstr(BytecodeStream::PUSH);
+        cur_code.addReg(r1);
+      } else if (instrR(line,"POP",r1)) {
+        cur_code.addInstr(BytecodeStream::POP);
         cur_code.addReg(r1);
       } else if (line=="ABORT") {
         cur_code.addInstr(BytecodeStream::ABORT);
