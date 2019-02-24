@@ -60,7 +60,9 @@ void PUSH_INSTR(CodeGen& cg, T x, Args... args) {
 
 
 struct REGb {
-  void operator()(CodeGen& cg) { PUSH_INSTR(cg, BytecodeStream::PUSH_COND, (char) r); }
+  void operator()(CodeGen& cg) {
+//    PUSH_INSTR(cg, BytecodeStream::PUSH_COND, (char) r);
+  }
   int r;
 };
 
@@ -74,10 +76,10 @@ struct _LETb {
   auto operator()(CodeGen& cg) -> decltype(e(0)(cg)) {
     // 
     int reg(GET_REG(cg));
-    PUSH_INSTR(cg, BytecodeStream::OPEN_BOOL_CTX, 0);
+//    PUSH_INSTR(cg, BytecodeStream::OPEN_BOOL_CTX, 0);
     v(cg);
-    PUSH_INSTR(cg, BytecodeStream::CLOSE_BOOL_CTX);
-    PUSH_INSTR(cg, BytecodeStream::POP_COND, reg);
+//    PUSH_INSTR(cg, BytecodeStream::CLOSE_BOOL_CTX);
+//    PUSH_INSTR(cg, BytecodeStream::POP_COND, reg);
     return e(reg)(cg);
   }
 };
@@ -90,10 +92,10 @@ struct _LETx {
   E e; 
   auto operator()(CodeGen& cg) -> decltype(e(0)(cg)) {
     int reg(GET_REG(cg));
-    PUSH_INSTR(cg, BytecodeStream::OPEN_VAL_CTX, 0);
+//    PUSH_INSTR(cg, BytecodeStream::OPEN_VAL_CTX, 0);
     v(cg);
-    PUSH_INSTR(cg, BytecodeStream::CLOSE_VAL_CTX);
-    PUSH_INSTR(cg, BytecodeStream::POP_VAL, reg);
+//    PUSH_INSTR(cg, BytecodeStream::CLOSE_VAL_CTX);
+//    PUSH_INSTR(cg, BytecodeStream::POP_VAL, reg);
     return e(reg)(cg);
   }
 };
@@ -162,9 +164,9 @@ struct OPb {
   OPb(char _op, Args... _args)
     : op(_op), args(_args...) { }
   void operator()(CodeGen& cg) {
-    PUSH_INSTR(cg, BytecodeStream::OPEN_BOOL_CTX, op);
+//    PUSH_INSTR(cg, BytecodeStream::OPEN_BOOL_CTX, op);
     args(cg);
-    PUSH_INSTR(cg, BytecodeStream::CLOSE_BOOL_CTX);
+//    PUSH_INSTR(cg, BytecodeStream::CLOSE_BOOL_CTX);
   }
   char op;
   SEQ<Args...> args;
@@ -175,9 +177,9 @@ struct OPx {
   OPx(char _op, Args... _args)
     : op(_op), args(_args...) { }
   void operator()(CodeGen& cg) {
-    PUSH_INSTR(cg, BytecodeStream::OPEN_VAL_CTX, op);
+//    PUSH_INSTR(cg, BytecodeStream::OPEN_VAL_CTX, op);
     args(cg);
-    PUSH_INSTR(cg, BytecodeStream::CLOSE_VAL_CTX);
+//    PUSH_INSTR(cg, BytecodeStream::CLOSE_VAL_CTX);
   }
   char op;
   SEQ<Args...> args;
