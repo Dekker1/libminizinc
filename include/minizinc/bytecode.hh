@@ -218,7 +218,7 @@ namespace MiniZinc {
     Val _data[1];
     Vec(const std::vector<Val>& v) : _size(v.size()), _ref_count(0) {
       for (unsigned int i=0; i<v.size(); i++) {
-        _data[i] = v[i];
+        new (&_data[i]) Val(v[i]);
       }
     }
   public:
@@ -231,8 +231,12 @@ namespace MiniZinc {
     }
     void inc(void) { _ref_count++; }
     static void dec(Vec* v) {
-      if ( v && (--v->_ref_count)==0 )
-        delete v;
+      if ( v && (--v->_ref_count)==0 ) {
+        for (unsigned int i=0; i<v->size(); i++) {
+          (*v)[i].~Val();
+        }
+        free(v);
+      }
     }
   };
   
@@ -329,7 +333,6 @@ namespace MiniZinc {
     RegisterFile reg;
     const BytecodeStream* bs;
     int pc;
-    std::vector<std::vector<Val>> tmp_vecs;
     BytecodeFrame(const BytecodeStream& bs0) : bs(&bs0), pc(0) {}
   };
   

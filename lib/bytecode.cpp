@@ -105,7 +105,7 @@ namespace MiniZinc {
           break;
         case BytecodeStream::JMP:
         {
-          oss << "JMP " << intval(pc) << "\n";
+          oss << "JMP " << reg(pc) << "\n";
         }
           break;
         case BytecodeStream::JMPIF:
@@ -289,35 +289,35 @@ namespace MiniZinc {
   
   void
   Interpreter::run(void) {
-    BytecodeFrame& frame = _stack.back();
+    BytecodeFrame* frame = &_stack.back();
     for (;;) {
-      DBG_INTERPRETER(frame.pc << " ");
-      switch (frame.bs->instr(frame.pc)) {
+      DBG_INTERPRETER(frame->pc << " ");
+      switch (frame->bs->instr(frame->pc)) {
         case BytecodeStream::ADDI:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, frame.reg[r1]() + frame.reg[r2]());
-          DBG_INTERPRETER("ADDI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, frame->reg[r1]() + frame->reg[r2]());
+          DBG_INTERPRETER("ADDI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::SUBI:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, frame.reg[r1]() - frame.reg[r2]());
-          DBG_INTERPRETER("SUBI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, frame->reg[r1]() - frame->reg[r2]());
+          DBG_INTERPRETER("SUBI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::MULI:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, frame.reg[r1]() * frame.reg[r2]());
-          DBG_INTERPRETER("MULI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, frame->reg[r1]() * frame->reg[r2]());
+          DBG_INTERPRETER("MULI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::DIVI:
@@ -332,184 +332,189 @@ namespace MiniZinc {
           break;
         case BytecodeStream::INCI:
         {
-          int r1 = frame.bs->reg(frame.pc);
+          int r1 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("INCI " << r1 << "\n");
-          frame.reg.assign(r1, frame.reg[r1]()+1);
+          frame->reg.assign(r1, frame->reg[r1]()+1);
         }
           break;
         case BytecodeStream::DECI:
         {
-          int r1 = frame.bs->reg(frame.pc);
+          int r1 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("DECI " << r1 << "\n");
-          frame.reg.assign(r1, frame.reg[r1]()-1);
+          frame->reg.assign(r1, frame->reg[r1]()-1);
         }
           break;
         case BytecodeStream::IMMI:
         {
-          IntVal i = frame.bs->intval(frame.pc);
-          int r1 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r1, i);
-          DBG_INTERPRETER("IMMI " << i << " " << r1 << "(" << frame.reg[r1]() << ")" << "\n");
+          IntVal i = frame->bs->intval(frame->pc);
+          int r1 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r1, i);
+          DBG_INTERPRETER("IMMI " << i << " " << r1 << "(" << frame->reg[r1]() << ")" << "\n");
         }
           break;
         case BytecodeStream::LOAD_GLOBAL:
         {
-          int i = frame.bs->reg(frame.pc);
-          int r1 = frame.bs->reg(frame.pc);
-          _stack[0].reg.cp(i, frame.reg, r1);
-          DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame.reg[r1]() << ")" << "\n");
+          int i = frame->bs->reg(frame->pc);
+          int r1 = frame->bs->reg(frame->pc);
+          _stack[0].reg.cp(i, frame->reg, r1);
+          DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame->reg[r1]() << ")" << "\n");
         }
           break;
         case BytecodeStream::STORE_GLOBAL:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int i = frame.bs->reg(frame.pc);
-          frame.reg.cp(r1, _stack[0].reg, i);
-          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame.reg[r1]() << ")" << " " << i << "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int i = frame->bs->reg(frame->pc);
+          frame->reg.cp(r1, _stack[0].reg, i);
+          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame->reg[r1]() << ")" << " " << i << "\n");
         }
           break;
         case BytecodeStream::MOV:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("MOV " << r1 << " " << r2 << "\n");
-          frame.reg.cp(r1,r2);
+          frame->reg.cp(r1,r2);
         }
           break;
         case BytecodeStream::JMP:
         {
-          int i = frame.bs->reg(frame.pc);
+          int i = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("JMP " << i  << "\n");
-          frame.pc = i;
+          frame->pc = i;
         }
           break;
         case BytecodeStream::JMPIF:
         {
-          int r0 = frame.bs->reg(frame.pc);
-          int i = frame.bs->reg(frame.pc);
-          DBG_INTERPRETER("JMPIF " << r0 << "(" << frame.reg[r0]() << ")" << " " << i << "\n");
-          if (frame.reg[r0]() != 0) {
-            frame.pc = i;
+          int r0 = frame->bs->reg(frame->pc);
+          int i = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("JMPIF " << r0 << "(" << frame->reg[r0]() << ")" << " " << i << "\n");
+          if (frame->reg[r0]() != 0) {
+            frame->pc = i;
           }
         }
           break;
         case BytecodeStream::JMPIFNOT:
         {
-          int r0 = frame.bs->reg(frame.pc);
-          int i = frame.bs->reg(frame.pc);
+          int r0 = frame->bs->reg(frame->pc);
+          int i = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("JMPIFNOT " << r0 << " " << i << "\n");
-          if (frame.reg[r0]() == 0) {
-            frame.pc = i;
+          if (frame->reg[r0]() == 0) {
+            frame->pc = i;
           }
         }
           break;
         case BytecodeStream::EQI:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, IntVal(frame.reg[r1]() == frame.reg[r2]()));
-          DBG_INTERPRETER("EQI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, IntVal(frame->reg[r1]() == frame->reg[r2]()));
+          DBG_INTERPRETER("EQI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LTI:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, IntVal(frame.reg[r1]() < frame.reg[r2]()));
-          DBG_INTERPRETER("LTI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, IntVal(frame->reg[r1]() < frame->reg[r2]()));
+          DBG_INTERPRETER("LTI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LEI:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, IntVal(frame.reg[r1]() <= frame.reg[r2]()));
-          DBG_INTERPRETER("LEI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, IntVal(frame->reg[r1]() <= frame->reg[r2]()));
+          DBG_INTERPRETER("LEI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::AND:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, IntVal(frame.reg[r1]()!=0 && frame.reg[r2]()!=0));
-          DBG_INTERPRETER("AND " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, IntVal(frame->reg[r1]()!=0 && frame->reg[r2]()!=0));
+          DBG_INTERPRETER("AND " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::OR:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, IntVal(frame.reg[r1]()!=0 || frame.reg[r2]()!=0));
-          DBG_INTERPRETER("OR " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, IntVal(frame->reg[r1]()!=0 || frame->reg[r2]()!=0));
+          DBG_INTERPRETER("OR " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::NOT:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("NOT " << r1 << " " << r2 << "\n");
-          frame.reg.assign(r2, IntVal(frame.reg[r1]()==0));
+          frame->reg.assign(r2, IntVal(frame->reg[r1]()==0));
         }
           break;
         case BytecodeStream::XOR:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          frame.reg.assign(r3, IntVal( (frame.reg[r1]()!=0) ^ (frame.reg[r2]()!=0)));
-          DBG_INTERPRETER("XOR " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          frame->reg.assign(r3, IntVal( (frame->reg[r1]()!=0) ^ (frame->reg[r2]()!=0)));
+          DBG_INTERPRETER("XOR " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::ISPAR:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          if (frame.reg[r1].isInt()) {
-            frame.reg.assign(r2, IntVal(1));
-          } else if (frame.reg[r1].isRef()) {
-            int r = frame.reg[r1].r()();
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          if (frame->reg[r1].isInt()) {
+            frame->reg.assign(r2, IntVal(1));
+          } else if (frame->reg[r1].isRef()) {
+            int r = frame->reg[r1].r()();
             assert(r >= 0 && r < _defstack.size());
             if (_defstack[r].domain.isInt()) {
-              frame.reg.assign(r1, _defstack[r].domain);
-              frame.reg.assign(r2, IntVal(1));
+              frame->reg.assign(r1, _defstack[r].domain);
+              frame->reg.assign(r2, IntVal(1));
             } else {
-              frame.reg.assign(r2, IntVal(0));
+              frame->reg.assign(r2, IntVal(0));
             }
           } else {
-            frame.reg.assign(r2, IntVal(0));
+            frame->reg.assign(r2, IntVal(0));
           }
+          DBG_INTERPRETER("ISPAR " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::ISEMPTY:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          assert(frame.reg[r1].isVec());
-          frame.reg.assign(r2, IntVal(frame.reg[r1].size()==0));
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          assert(frame->reg[r1].isVec());
+          frame->reg.assign(r2, IntVal(frame->reg[r1].size()==0));
+          DBG_INTERPRETER("ISEMPTY " << r1  << "(" << frame->reg[r1].toString() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LENGTH:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          assert(frame.reg[r1].isVec());
-          frame.reg.assign(r2, IntVal(frame.reg[r1].size()));
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          assert(frame->reg[r1].isVec());
+          frame->reg.assign(r2, IntVal(frame->reg[r1].size()));
+          DBG_INTERPRETER("LENGTH " << r1  << "(" << frame->reg[r1].toString() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::GET_VEC:
         {
-          int r1 = frame.bs->reg(frame.pc);
-          int r2 = frame.bs->reg(frame.pc);
-          int r3 = frame.bs->reg(frame.pc);
-          assert(frame.reg[r1].isVec());
-          assert(frame.reg[r2].isInt());
-          assert(frame.reg[r2]() < frame.reg[r1].size());
-          frame.reg.assign(r3, frame.reg[r1][frame.reg[r2]().toInt()]);
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          assert(frame->reg[r1].isVec());
+          assert(frame->reg[r2].isInt());
+          assert(frame->reg[r2]() < frame->reg[r1].size());
+          DBG_INTERPRETER("GET_VEC " << r1  << "(" << frame->reg[r1].toString() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")");
+          frame->reg.assign(r3, frame->reg[r1][frame->reg[r2]().toInt()]);
+          DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::RET:
@@ -520,70 +525,70 @@ namespace MiniZinc {
             return;
           }
           _stack.pop_back();
-          frame = _stack.back();
+          frame = &_stack.back();
         }
           break;
         case BytecodeStream::CALL:
         {
-          int code = frame.bs->reg(frame.pc);
+          int code = frame->bs->reg(frame->pc);
           assert(code >= 0);
           assert(code < _procs.size());
-          int n = frame.bs->reg(frame.pc);
+          int n = frame->bs->reg(frame->pc);
           if (_procs[code].size()==0) {
             DBG_INTERPRETER("CALL fzn builtin " << code  << " " << n << "\n");
             // this is a FlatZinc builtin
             std::vector<Val> args(n);
             for (int i=0; i<n; i++) {
-              int r = frame.bs->reg(frame.pc);
-              args[i] = frame.reg[r];
+              int r = frame->bs->reg(frame->pc);
+              args[i] = frame->reg[r];
             }
             _defstack.push_back(Definition(IntVal(0),code,Val(Vec::a(args))));
             push(Ref(_defstack.size()-1),-1);
           } else {
             DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
             _stack.emplace_back(_procs[code]);
-            BytecodeFrame& oldFrame = _stack[_stack.size()-2];
-            BytecodeFrame& newFrame = _stack[_stack.size()-1];
+            BytecodeFrame* oldFrame = &_stack[_stack.size()-2];
+            BytecodeFrame* newFrame = &_stack[_stack.size()-1];
             for (int i=0; i<n; i++) {
-              int r = oldFrame.bs->reg(oldFrame.pc);
-              oldFrame.reg.cp(r, newFrame.reg, i);
+              int r = oldFrame->bs->reg(oldFrame->pc);
+              oldFrame->reg.cp(r, newFrame->reg, i);
             }
-            frame = _stack.back();
+            frame = newFrame;
           }
         }
           break;
         case BytecodeStream::BUILTIN:
         {
-          int code = frame.bs->reg(frame.pc);
+          int code = frame->bs->reg(frame->pc);
           assert(code >= 0);
           assert(code < _builtins.size());
           // this is a FlatZinc builtin
-          int n = frame.bs->reg(frame.pc);
+          int n = frame->bs->reg(frame->pc);
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
-            int r = frame.bs->reg(frame.pc);
-            args[i] = frame.reg[r];
+            int r = frame->bs->reg(frame->pc);
+            args[i] = frame->reg[r];
           }
           _builtins[code](*this, args);
         }
           break;
         case BytecodeStream::TCALL:
         {
-          int code = frame.bs->reg(frame.pc);
+          int code = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("TCALL " << code  << "\n");
           assert(code >= 0);
           assert(code < _procs.size());
-          frame.bs = &_procs[code];
-          frame.pc = 0;
+          frame->bs = &_procs[code];
+          frame->pc = 0;
         }
           break;
         case BytecodeStream::TRACE:
         {
-          int r = frame.bs->reg(frame.pc);
+          int r = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("TRACE " << r  << "\n");
-          std::cerr << frame.reg[r].toString() << "\n";
-          //            std::cerr << frame.reg.e(r)->cast<StringLit>();
-          //            std::cerr << *frame.reg.e(r) << "\n";
+          std::cerr << frame->reg[r].toString() << "\n";
+          //            std::cerr << frame->reg.e(r)->cast<StringLit>();
+          //            std::cerr << *frame->reg.e(r) << "\n";
         }
           break;
         case BytecodeStream::ABORT:
@@ -593,28 +598,28 @@ namespace MiniZinc {
         }
         case BytecodeStream::PUSH:
         {
-          int r = frame.bs->reg(frame.pc);
-          DBG_INTERPRETER("PUSH " << r  << "\n");
+          int r = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("PUSH R" << r << " (" << frame->reg[r].toString() << ")\n");
           assert(!_agg.empty());
-          _agg.back().stack.push_back(frame.reg[r]);
+          _agg.back().stack.push_back(frame->reg[r]);
         }
           break;
         case BytecodeStream::POP:
         {
-          int r = frame.bs->reg(frame.pc);
-          DBG_INTERPRETER("POP " << r  << "\n");
+          int r = frame->bs->reg(frame->pc);
           assert(!_agg.empty());
           assert(!_agg.back().stack.empty());
-          frame.reg.assign(r, _agg.back().stack.back());
+          frame->reg.assign(r, _agg.back().stack.back());
+          DBG_INTERPRETER("POP R" << r << " (" << frame->reg[r].toString() << ")\n");
           _agg.back().stack.pop_back();
         }
           break;
         case BytecodeStream::OPEN_AGGREGATION:
         {
-          int r = frame.bs->reg(frame.pc);
+          int r = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("OPEN_AGGREGATION " << r  << "\n");
           assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
-          if (r==AggregationCtx::VCTX_OTHER || AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
+          if (r==AggregationCtx::VCTX_OTHER || r==AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
             // Push a new aggregation context
             _agg.push_back(AggregationCtx(r, _defstack.size()));
           } else {
@@ -751,7 +756,7 @@ namespace MiniZinc {
         }
           break;
       }
-      assert(!frame.bs->eos(frame.pc));
+      assert(!frame->bs->eos(frame->pc));
     }
   }
     
