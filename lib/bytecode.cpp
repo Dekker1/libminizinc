@@ -160,7 +160,7 @@ namespace MiniZinc {
           break;
         case BytecodeStream::RET:
         {
-          oss << "RET R" << reg(pc) << "\n";
+          oss << "RET\n";
         }
           break;
         case BytecodeStream::CALL:
@@ -176,7 +176,6 @@ namespace MiniZinc {
           for (int i=0; i<n; i++) {
             oss << " R" << reg(pc);
           }
-          oss << " R" << reg(pc) << "\n";
         }
           break;
         case BytecodeStream::TCALL:
@@ -189,6 +188,48 @@ namespace MiniZinc {
           }
         }
           break;
+        case BytecodeStream::OPEN_AGGREGATION:
+        {
+          oss << "OPEN_AGGREGATION ";
+          int p = reg(pc);
+          switch (p) {
+            case AggregationCtx::VCTX_AND:
+              oss << "AND\n";
+              break;
+            case AggregationCtx::VCTX_OR:
+              oss << "OR\n";
+              break;
+            case AggregationCtx::VCTX_LIN:
+              oss << "LIN\n";
+              break;
+            case AggregationCtx::VCTX_VEC:
+              oss << "VEC\n";
+              break;
+            case AggregationCtx::VCTX_OTHER:
+              oss << "OTHER\n";
+              break;
+            default:
+              oss << "ERROR\n";
+              assert(false);
+              break;
+          }
+        }
+          break;
+        case BytecodeStream::CLOSE_AGGREGATION:
+        {
+          oss << "CLOSE_AGGREGATION\n";
+        }
+          break;
+        case BytecodeStream::PUSH:
+        {
+          oss << "PUSH R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::POP:
+        {
+          oss << "POP R" << reg(pc) << "\n";
+        }
+          break;
         case BytecodeStream::TRACE:
         {
           oss << "TRACE R" << reg(pc) << "\n";
@@ -197,26 +238,6 @@ namespace MiniZinc {
         case BytecodeStream::ABORT:
         {
           oss << "ABORT\n";
-        }
-          break;
-        case BytecodeStream::NEW_TMP_VEC:
-        {
-          oss << "NEW_TMP_VEC\n";
-        }
-          break;
-        case BytecodeStream::DEL_TMP_VEC:
-        {
-          oss << "DEL_TMP_VEC\n";
-        }
-          break;
-        case BytecodeStream::PUSH_TMP_VEC:
-        {
-          oss << "PUSH_TMP_VEC R" << reg(pc) << "\n";
-        }
-          break;
-        case BytecodeStream::MK_VEC:
-        {
-          oss << "MK_VEC R" << reg(pc) << "\n";
         }
           break;
       }
@@ -229,307 +250,337 @@ namespace MiniZinc {
   
   void
   Interpreter::run(void) {
-    GCLock lock; /// TODO: make stack part of GC root set
-  interpreter_start:
-    while (!_stack.empty()) {
-      BytecodeFrame& frame = _stack.back();
-      DBG_INTERPRETER("run frame " << _stack.size()-1 << "\n");
-      for (;;) {
-        DBG_INTERPRETER(frame.pc << " ");
-        switch (frame.bs->instr(frame.pc)) {
-          case BytecodeStream::ADDI:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, frame.reg[r1]() + frame.reg[r2]());
-            DBG_INTERPRETER("ADDI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::SUBI:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, frame.reg[r1]() - frame.reg[r2]());
-            DBG_INTERPRETER("SUBI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::MULI:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, frame.reg[r1]() * frame.reg[r2]());
-            DBG_INTERPRETER("MULI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::DIVI:
-          {
-            assert(false);
-          }
-            break;
-          case BytecodeStream::MODI:
-          {
-            assert(false);
-          }
-            break;
-          case BytecodeStream::INCI:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("INCI " << r1 << "\n");
-            frame.reg.assign(r1, frame.reg[r1]()+1);
-          }
-            break;
-          case BytecodeStream::DECI:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("DECI " << r1 << "\n");
-            frame.reg.assign(r1, frame.reg[r1]()-1);
-          }
-            break;
-          case BytecodeStream::IMMI:
-          {
-            IntVal i = frame.bs->intval(frame.pc);
-            int r1 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r1, i);
-            DBG_INTERPRETER("IMMI " << i << " " << r1 << "(" << frame.reg[r1]() << ")" << "\n");
-          }
-            break;
-          case BytecodeStream::LOAD_GLOBAL:
-          {
-            int i = frame.bs->reg(frame.pc);
-            int r1 = frame.bs->reg(frame.pc);
-            _stack[0].reg.cp(i, frame.reg, r1);
-            DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame.reg.i(r1) << ")" << "\n");
-          }
-            break;
-          case BytecodeStream::STORE_GLOBAL:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int i = frame.bs->reg(frame.pc);
-            frame.reg.cp(r1, _stack[0].reg, i);
-            DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame.reg.i(r1) << ")" << " " << i << "\n");
-          }
-            break;
-          case BytecodeStream::MOV:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("MOV " << r1 << " " << r2 << "\n");
-            frame.reg.cp(r1,r2);
-          }
-            break;
-          case BytecodeStream::JMP:
-          {
-            int i = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("JMP " << i  << "\n");
+    BytecodeFrame& frame = _stack.back();
+    for (;;) {
+      DBG_INTERPRETER(frame.pc << " ");
+      switch (frame.bs->instr(frame.pc)) {
+        case BytecodeStream::ADDI:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, frame.reg[r1]() + frame.reg[r2]());
+          DBG_INTERPRETER("ADDI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::SUBI:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, frame.reg[r1]() - frame.reg[r2]());
+          DBG_INTERPRETER("SUBI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::MULI:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, frame.reg[r1]() * frame.reg[r2]());
+          DBG_INTERPRETER("MULI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::DIVI:
+        {
+          assert(false);
+        }
+          break;
+        case BytecodeStream::MODI:
+        {
+          assert(false);
+        }
+          break;
+        case BytecodeStream::INCI:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("INCI " << r1 << "\n");
+          frame.reg.assign(r1, frame.reg[r1]()+1);
+        }
+          break;
+        case BytecodeStream::DECI:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("DECI " << r1 << "\n");
+          frame.reg.assign(r1, frame.reg[r1]()-1);
+        }
+          break;
+        case BytecodeStream::IMMI:
+        {
+          IntVal i = frame.bs->intval(frame.pc);
+          int r1 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r1, i);
+          DBG_INTERPRETER("IMMI " << i << " " << r1 << "(" << frame.reg[r1]() << ")" << "\n");
+        }
+          break;
+        case BytecodeStream::LOAD_GLOBAL:
+        {
+          int i = frame.bs->reg(frame.pc);
+          int r1 = frame.bs->reg(frame.pc);
+          _stack[0].reg.cp(i, frame.reg, r1);
+          DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame.reg.i(r1) << ")" << "\n");
+        }
+          break;
+        case BytecodeStream::STORE_GLOBAL:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int i = frame.bs->reg(frame.pc);
+          frame.reg.cp(r1, _stack[0].reg, i);
+          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame.reg.i(r1) << ")" << " " << i << "\n");
+        }
+          break;
+        case BytecodeStream::MOV:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("MOV " << r1 << " " << r2 << "\n");
+          frame.reg.cp(r1,r2);
+        }
+          break;
+        case BytecodeStream::JMP:
+        {
+          int i = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("JMP " << i  << "\n");
+          frame.pc = i;
+        }
+          break;
+        case BytecodeStream::JMPIF:
+        {
+          int r0 = frame.bs->reg(frame.pc);
+          int i = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("JMPIF " << r0 << "(" << frame.reg.i(r0) << ")" << " " << i << "\n");
+          if (frame.reg[r0]() != 0) {
             frame.pc = i;
           }
-            break;
-          case BytecodeStream::JMPIF:
-          {
-            int r0 = frame.bs->reg(frame.pc);
-            int i = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("JMPIF " << r0 << "(" << frame.reg.i(r0) << ")" << " " << i << "\n");
-            if (frame.reg[r0]() != 0) {
-              frame.pc = i;
-            }
+        }
+          break;
+        case BytecodeStream::JMPIFNOT:
+        {
+          int r0 = frame.bs->reg(frame.pc);
+          int i = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("JMPIFNOT " << r0 << " " << i << "\n");
+          if (frame.reg[r0]() == 0) {
+            frame.pc = i;
           }
-            break;
-          case BytecodeStream::JMPIFNOT:
-          {
-            int r0 = frame.bs->reg(frame.pc);
-            int i = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("JMPIFNOT " << r0 << " " << i << "\n");
-            if (frame.reg[r0]() == 0) {
-              frame.pc = i;
-            }
-          }
-            break;
-          case BytecodeStream::EQI:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, IntVal(frame.reg[r1]() == frame.reg[r2]()));
-            DBG_INTERPRETER("EQI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::LTI:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, IntVal(frame.reg[r1]() < frame.reg[r2]()));
-            DBG_INTERPRETER("LTI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::LEI:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, IntVal(frame.reg[r1]() <= frame.reg[r2]()));
-            DBG_INTERPRETER("LEI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::AND:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, IntVal(frame.reg[r1]()!=0 && frame.reg[r2]()!=0));
-            DBG_INTERPRETER("AND " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::OR:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, IntVal(frame.reg[r1]()!=0 || frame.reg[r2]()!=0));
-            DBG_INTERPRETER("OR " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::NOT:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("NOT " << r1 << " " << r2 << "\n");
-            frame.reg.assign(r2, IntVal(frame.reg[r1]()==0));
-          }
-            break;
-          case BytecodeStream::XOR:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            int r3 = frame.bs->reg(frame.pc);
-            frame.reg.assign(r3, IntVal( (frame.reg[r1]()!=0) ^ (frame.reg[r2]()!=0)));
-            DBG_INTERPRETER("XOR " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
-          }
-            break;
-          case BytecodeStream::ISPAR:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            int r2 = frame.bs->reg(frame.pc);
-            if (frame.reg[r1].isInt()) {
+        }
+          break;
+        case BytecodeStream::EQI:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, IntVal(frame.reg[r1]() == frame.reg[r2]()));
+          DBG_INTERPRETER("EQI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::LTI:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, IntVal(frame.reg[r1]() < frame.reg[r2]()));
+          DBG_INTERPRETER("LTI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::LEI:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, IntVal(frame.reg[r1]() <= frame.reg[r2]()));
+          DBG_INTERPRETER("LEI " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::AND:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, IntVal(frame.reg[r1]()!=0 && frame.reg[r2]()!=0));
+          DBG_INTERPRETER("AND " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::OR:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, IntVal(frame.reg[r1]()!=0 || frame.reg[r2]()!=0));
+          DBG_INTERPRETER("OR " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::NOT:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("NOT " << r1 << " " << r2 << "\n");
+          frame.reg.assign(r2, IntVal(frame.reg[r1]()==0));
+        }
+          break;
+        case BytecodeStream::XOR:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          int r3 = frame.bs->reg(frame.pc);
+          frame.reg.assign(r3, IntVal( (frame.reg[r1]()!=0) ^ (frame.reg[r2]()!=0)));
+          DBG_INTERPRETER("XOR " << r1  << "(" << frame.reg[r1]() << ")" << " " << r2  << "(" << frame.reg[r2]() << ")" << " " << r3 <<  "(" << frame.reg[r3]() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::ISPAR:
+        {
+          int r1 = frame.bs->reg(frame.pc);
+          int r2 = frame.bs->reg(frame.pc);
+          if (frame.reg[r1].isInt()) {
+            frame.reg.assign(r2, IntVal(1));
+          } else if (frame.reg[r1].isRef()) {
+            int r = frame.reg[r1].r()();
+            assert(r >= 0 && r < _defstack.size());
+            if (_defstack[r].domain.isInt()) {
+              frame.reg.assign(r1, _defstack[r].domain);
               frame.reg.assign(r2, IntVal(1));
-            } else if (frame.reg[r1].isRef()) {
-              int r = frame.reg[r1].r()();
-              assert(r >= 0 && r < _defstack.size());
-              if (_defstack[r].domain.isInt()) {
-                frame.reg.assign(r1, _defstack[r].domain);
-                frame.reg.assign(r2, IntVal(1));
-              } else {
-                frame.reg.assign(r2, IntVal(0));
-              }
             } else {
               frame.reg.assign(r2, IntVal(0));
             }
+          } else {
+            frame.reg.assign(r2, IntVal(0));
           }
-            break;
-          case BytecodeStream::RET:
-          {
-            int r = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("RET " << r << "\n");
-            // Invariant: if there is a frame below, its pc is on the return register
-            if (_stack.size() > 1) {
-              BytecodeFrame& caller = _stack[_stack.size()-2];
-              int ret_r = caller.bs->reg(caller.pc);
-              frame.reg.mov(r, caller.reg, ret_r);
-            }
-            _stack.pop_back();
-            goto interpreter_start;
-          }
-            break;
-          case BytecodeStream::CALL:
-          {
-            int code = frame.bs->reg(frame.pc);
-            assert(code >= 0);
-            assert(code < _procs.size());
-            if (_procs[code].size()==0) {
-              // this is a FlatZinc builtin
-              int n = frame.bs->reg(frame.pc);
-              std::vector<Val> args(n);
-              for (int i=0; i<n; i++) {
-                int r = frame.bs->reg(frame.pc);
-                args[i] = frame.reg[r];
-              }
-              _defstack.push_back(Definition(IntVal(0),code,Vec::a(args)));
-              int r_ret = frame.bs->reg(frame.pc);
-              frame.reg.assign(r_ret, Ref(_defstack.size()-1));
-            } else {
-              _stack.emplace_back(_procs[code]);
-              BytecodeFrame& oldFrame = _stack[_stack.size()-2];
-              BytecodeFrame& newFrame = _stack[_stack.size()-1];
-              int n = oldFrame.bs->reg(oldFrame.pc);
-              for (int i=0; i<n; i++) {
-                int r = oldFrame.bs->reg(oldFrame.pc);
-                oldFrame.reg.cp(r, newFrame.reg, i);
-              }
-              DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
-              goto interpreter_start;
-            }
-          }
-            break;
-          case BytecodeStream::TCALL:
-          {
-            int code = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("TCALL " << code  << "\n");
-            assert(code >= 0);
-            assert(code < _procs.size());
-            frame.bs = &_procs[code];
-            frame.pc = 0;
-          }
-            break;
-          case BytecodeStream::TRACE:
-          {
-            int r = frame.bs->reg(frame.pc);
-            DBG_INTERPRETER("TRACE " << r  << "\n");
-            std::cerr << frame.reg[r].toString() << "\n";
-//            std::cerr << frame.reg.e(r)->cast<StringLit>();
-//            std::cerr << *frame.reg.e(r) << "\n";
-          }
-            break;
-          case BytecodeStream::ABORT:
-          {
-            DBG_INTERPRETER("ABORT\n");
+        }
+          break;
+        case BytecodeStream::RET:
+        {
+          DBG_INTERPRETER("RET\n");
+          if (_stack.size()==1) {
+            // Always leave final frame on the stack
             return;
           }
-          case BytecodeStream::NEW_TMP_VEC:
-          {
-            DBG_INTERPRETER("NEW_TMP_VEC\n");
-            frame.tmp_vecs.push_back(std::vector<Val>());
-          }
-            break;
-          case BytecodeStream::DEL_TMP_VEC:
-          {
-            DBG_INTERPRETER("DEL_TMP_VEC\n");
-            assert(frame.tmp_vecs.size() > 0);
-            frame.tmp_vecs.pop_back();
-          }
-            break;
-          case BytecodeStream::PUSH_TMP_VEC:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            assert(frame.tmp_vecs.size() > 0);
-            frame.tmp_vecs.back().push_back(frame.reg[r1]);
-            DBG_INTERPRETER("PUSH_TMP_VEC " << r1 << "\n");
-          }
-            break;
-          case BytecodeStream::MK_VEC:
-          {
-            int r1 = frame.bs->reg(frame.pc);
-            assert(frame.tmp_vecs.size() > 0);
-            Vec* v = Vec::a(frame.tmp_vecs.back());
-            frame.reg.assign(r1, v);
-            DBG_INTERPRETER("MK_VEC " << r1 << "\n");
-          }
-            break;
+          _stack.pop_back();
+          frame = _stack.back();
         }
-        assert(!frame.bs->eos(frame.pc));
+          break;
+        case BytecodeStream::CALL:
+        {
+          int code = frame.bs->reg(frame.pc);
+          assert(code >= 0);
+          assert(code < _procs.size());
+          if (_procs[code].size()==0) {
+            // this is a FlatZinc builtin
+            int n = frame.bs->reg(frame.pc);
+            std::vector<Val> args(n);
+            for (int i=0; i<n; i++) {
+              int r = frame.bs->reg(frame.pc);
+              args[i] = frame.reg[r];
+            }
+            _defstack.push_back(Definition(IntVal(0),code,Vec::a(args)));
+            assert(!_agg.empty());
+            _agg.back().stack.push_back(Ref(_defstack.size()-1));
+          } else {
+            _stack.emplace_back(_procs[code]);
+            BytecodeFrame& oldFrame = _stack[_stack.size()-2];
+            BytecodeFrame& newFrame = _stack[_stack.size()-1];
+            int n = oldFrame.bs->reg(oldFrame.pc);
+            for (int i=0; i<n; i++) {
+              int r = oldFrame.bs->reg(oldFrame.pc);
+              oldFrame.reg.cp(r, newFrame.reg, i);
+            }
+            DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
+            frame = _stack.back();
+          }
+        }
+          break;
+        case BytecodeStream::TCALL:
+        {
+          int code = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("TCALL " << code  << "\n");
+          assert(code >= 0);
+          assert(code < _procs.size());
+          frame.bs = &_procs[code];
+          frame.pc = 0;
+        }
+          break;
+        case BytecodeStream::TRACE:
+        {
+          int r = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("TRACE " << r  << "\n");
+          std::cerr << frame.reg[r].toString() << "\n";
+          //            std::cerr << frame.reg.e(r)->cast<StringLit>();
+          //            std::cerr << *frame.reg.e(r) << "\n";
+        }
+          break;
+        case BytecodeStream::ABORT:
+        {
+          DBG_INTERPRETER("ABORT\n");
+          return;
+        }
+        case BytecodeStream::PUSH:
+        {
+          int r = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("PUSH " << r  << "\n");
+          assert(!_agg.empty());
+          _agg.back().stack.push_back(frame.reg[r]);
+        }
+          break;
+        case BytecodeStream::POP:
+        {
+          int r = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("POP " << r  << "\n");
+          assert(!_agg.empty());
+          assert(!_agg.back().stack.empty());
+          frame.reg.assign(r, _agg.back().stack.back());
+          _agg.back().stack.pop_back();
+        }
+          break;
+        case BytecodeStream::OPEN_AGGREGATION:
+        {
+          int r = frame.bs->reg(frame.pc);
+          DBG_INTERPRETER("OPEN_AGGREGATION " << r  << "\n");
+          assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
+          if (r==AggregationCtx::VCTX_OTHER || AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
+            // Push a new aggregation context
+            _agg.push_back(AggregationCtx(r));
+          } else {
+            // Increment depth counter for current aggregation context
+            _agg.back().n_symbols++;
+          }
+        }
+          break;
+        case BytecodeStream::CLOSE_AGGREGATION:
+        {
+          DBG_INTERPRETER("CLOSE_AGGREGATION\n");
+          assert(!_agg.empty());
+          // Decrement depth counter for current aggregation context
+          _agg.back().n_symbols--;
+          if (_agg.back().n_symbols==0) {
+            assert(_agg.size() >= 2);
+            switch (_agg.back().symbol) {
+              case AggregationCtx::VCTX_AND:
+                break;
+              case AggregationCtx::VCTX_OR:
+                break;
+              case AggregationCtx::VCTX_LIN:
+                break;
+              case AggregationCtx::VCTX_VEC:
+                assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
+                _agg[_agg.size()-2].stack.push_back(Vec::a(_agg.back().stack));
+                break;
+              case AggregationCtx::VCTX_OTHER:
+                // When closing a VCTX_OTHER context, it should contain at most one value
+                assert(_agg.back().stack.size()<=1);
+                if (_agg.back().stack.size()==1) {
+                  if (_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_LIN) {
+                    // add coefficient to surrounding linear context
+                    _agg[_agg.size()-2].stack.push_back(IntVal(1));
+                  }
+                  // push value onto surrounding context
+                  _agg[_agg.size()-2].stack.push_back(_agg.back().stack[0]);
+                }
+                break;
+            }
+            _agg.pop_back();
+          }
+        }
+          break;
       }
+      assert(!frame.bs->eos(frame.pc));
     }
   }
     
@@ -767,9 +818,8 @@ namespace MiniZinc {
         cur_code.addInstr(BytecodeStream::ISPAR);
         cur_code.addReg(r1);
         cur_code.addReg(r2);
-      } else if (instrR(line,"RET",r1)) {
+      } else if (line=="RET") {
         cur_code.addInstr(BytecodeStream::RET);
-        cur_code.addReg(r1);
       } else if (startsWith(line,"CALL ")) {
         size_t cur_pos = line.find(' ');
         std::string n = line.substr(cur_pos+1);
@@ -794,16 +844,6 @@ namespace MiniZinc {
         cur_code.addReg(r1);
       } else if (line=="ABORT") {
         cur_code.addInstr(BytecodeStream::ABORT);
-      } else if (line=="NEW_TMP_VEC") {
-        cur_code.addInstr(BytecodeStream::NEW_TMP_VEC);
-      } else if (line=="DEL_TMP_VEC") {
-        cur_code.addInstr(BytecodeStream::DEL_TMP_VEC);
-      } else if (instrR(line,"PUSH_TMP_VEC",r1)) {
-        cur_code.addInstr(BytecodeStream::PUSH_TMP_VEC);
-        cur_code.addReg(r1);
-      } else if (instrR(line,"MK_VEC",r1)) {
-        cur_code.addInstr(BytecodeStream::MK_VEC);
-        cur_code.addReg(r1);
       } else {
         throw Error("Error: illegal line\n"+line);
       }

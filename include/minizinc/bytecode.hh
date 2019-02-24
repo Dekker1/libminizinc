@@ -56,9 +56,10 @@ namespace MiniZinc {
       
       ISPAR,
       
-      PUSHB, // R: push R onto Boolean stack
+      OPEN_AGGREGATION, // i: Create a new aggregation context with symbol i
+      CLOSE_AGGREGATION,  // Close current aggregation context, put result onto context above
+      
       PUSH,  // R: push R onto value stack
-      POPB,  // R: pop from Boolean stack into R
       POP,   // R: pop from value stack into R
       
       RET, // return from call
@@ -68,10 +69,6 @@ namespace MiniZinc {
       TRACE, // R: output string representation of R
       ABORT, // abort execution
       
-      NEW_TMP_VEC, // allocate new temporary value vector
-      PUSH_TMP_VEC, // R: push R onto current temporary value vector
-      DEL_TMP_VEC, // delete current temporary value vector
-      MK_VEC, // R: Make vector from current temporary value vector, put into R
     };
     
     /// Get instruction at \a pc and increment \a pc
@@ -342,34 +339,24 @@ namespace MiniZinc {
     : domain(domain0), ann(ann0), call(CallVal(pred0,args0)) {}
   };
   
-  class BoolCtx {
+  class AggregationCtx {
   public:
     /// Type of function represented by this context
-    enum { BCTX_AND, BCTX_OR, BCTX_OTHER } symbol;
-    /// Nesting depth for this symbol (how many of these are open)
-    int n_symbols;
-    /// Definition stack depth when this context was first pushed
-    int def_depth;
-    /// Stack of Boolean values that need to be aggregated
-    std::vector<Val> stack;
-  };
-  
-  class ValCtx {
-  public:
-    /// Type of function represented by this context
-    enum { VCTX_LIN, VCTX_OTHER } symbol;
+    enum Symbol { VCTX_AND, VCTX_OR, VCTX_LIN, VCTX_VEC, VCTX_OTHER } symbol;
     /// Nesting depth for this symbol (how many of these are open)
     int n_symbols;
     /// Stack of values that need to be aggregated
     std::vector<Val> stack;
+    AggregationCtx(int s) : symbol(static_cast<Symbol>(s)), n_symbols(1) {
+      assert(s >= 0 && s <= VCTX_OTHER);
+    }
   };
   
   class Interpreter {
   protected:
     std::vector<BytecodeFrame> _stack;
     std::vector<Definition> _defstack;
-    std::vector<BoolCtx> _bool_agg;
-    std::vector<ValCtx> _int_agg;
+    std::vector<AggregationCtx> _agg;
     const std::vector<BytecodeStream>& _procs;
   public:
     Interpreter(const std::vector<BytecodeStream>& procs, const BytecodeFrame& f) : _procs(procs) {
