@@ -26,7 +26,12 @@ namespace MiniZinc {
   protected:
     /// The bytecode stream
     std::vector<char> _bs;
+    /// The largest register used by this code
+    int _max_reg;
   public:
+    /// Constructor
+    BytecodeStream(void) : _max_reg(0) {}
+    
     enum Instr {
       ADDI, // R1, R2 -> R3
       SUBI, // R1, R2 -> R3
@@ -101,6 +106,13 @@ namespace MiniZinc {
     
     void addInstr(const Instr& i) { _bs.push_back(i); }
     void addReg(int iv) {
+      _max_reg = std::max(_max_reg,iv);
+      const char* cp = reinterpret_cast<const char*>(&iv);
+      for (int i=0; i<sizeof(int); i++) {
+        _bs.push_back(cp[i]);
+      }
+    }
+    void addSmallInt(int iv) {
       const char* cp = reinterpret_cast<const char*>(&iv);
       for (int i=0; i<sizeof(int); i++) {
         _bs.push_back(cp[i]);
@@ -129,7 +141,7 @@ namespace MiniZinc {
     }
     
     std::string toString(const std::vector<BytecodeProc>& procs = std::vector<BytecodeProc>()) const;
-    
+    int maxRegister(void) const { return _max_reg; }
   };
 
   class Vec;
@@ -303,6 +315,7 @@ namespace MiniZinc {
   protected:
     std::vector<Val> _r;
   public:
+    RegisterFile(int n=0) : _r(n) {}
     const Val& operator [](int r) { assert(r < _r.size()); return _r[r]; }
     void assign(int r, const Val& v) {
       if (r >= _r.size()) {
@@ -334,7 +347,7 @@ namespace MiniZinc {
     RegisterFile reg;
     const BytecodeStream* bs;
     int pc;
-    BytecodeFrame(const BytecodeStream& bs0) : bs(&bs0), pc(0) {}
+    BytecodeFrame(const BytecodeStream& bs0) : reg(bs0.maxRegister()), bs(&bs0), pc(0) {}
   };
   
   class CallVal {

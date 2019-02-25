@@ -233,7 +233,7 @@ namespace MiniZinc {
         case BytecodeStream::OPEN_AGGREGATION:
         {
           oss << "OPEN_AGGREGATION ";
-          int p = reg(pc);
+          int p = chr(pc);
           switch (p) {
             case AggregationCtx::VCTX_AND:
               oss << "AND\n";
@@ -639,7 +639,7 @@ namespace MiniZinc {
           break;
         case BytecodeStream::OPEN_AGGREGATION:
         {
-          int r = frame->bs->reg(frame->pc);
+          int r = frame->bs->chr(frame->pc);
           DBG_INTERPRETER("OPEN_AGGREGATION " << r  << "\n");
           assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
           if (r==AggregationCtx::VCTX_OTHER || r==AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
@@ -1015,17 +1015,17 @@ namespace MiniZinc {
       } else if (instrS(line,"JMP",rs)) {
         cur_code.addInstr(BytecodeStream::JMP);
         cur_labels.push_back(std::make_pair(cur_code.size(),rs));
-        cur_code.addReg(0); // placeholder
+        cur_code.addSmallInt(0); // placeholder
       } else if (instrRS(line,"JMPIF",r1,rs)) {
         cur_code.addInstr(BytecodeStream::JMPIF);
         cur_code.addReg(r1);
         cur_labels.push_back(std::make_pair(cur_code.size(),rs));
-        cur_code.addReg(0); // placeholder
+        cur_code.addSmallInt(0); // placeholder
       } else if (instrRS(line,"JMPIFNOT",r1,rs)) {
         cur_code.addInstr(BytecodeStream::JMPIFNOT);
         cur_code.addReg(r1);
         cur_labels.push_back(std::make_pair(cur_code.size(),rs));
-        cur_code.addReg(0); // placeholder
+        cur_code.addSmallInt(0); // placeholder
       } else if (instrRRR(line,"EQI",r1,r2,r3)) {
         cur_code.addInstr(BytecodeStream::EQI);
         cur_code.addReg(r1);
@@ -1102,10 +1102,10 @@ namespace MiniZinc {
         std::string n0 = n.substr(n.find(' ')+1);
         std::string rs = n0.substr(0, n0.find(' '));
         cur_toPatch.push_back(std::make_pair(cur_code.size(),rs));
-        cur_code.addReg(0); // placeholder
+        cur_code.addSmallInt(0); // placeholder
         std::string n1 = n0.substr(n0.find(' ')+1);
         int n_args = std::stoi(n1.substr(0,n1.find(' ')));
-        cur_code.addReg(n_args);
+        cur_code.addSmallInt(n_args);
         for (int i=0; i<n_args; i++) {
           n1 = n1.substr(n1.find(" R")+2);
           int r = std::stoi(n1.substr(0,n1.find(' ')));
@@ -1134,22 +1134,22 @@ namespace MiniZinc {
         std::string n0 = n.substr(n.find(' ')+1);
         std::string rs = n0.substr(0, n0.find(' '));
         cur_toPatch.push_back(std::make_pair(cur_code.size(),rs));
-        cur_code.addReg(0); // placeholder
+        cur_code.addSmallInt(0); // placeholder
       } else if (instrR(line,"TRACE",r1)) {
         cur_code.addInstr(BytecodeStream::TRACE);
         cur_code.addReg(r1);
       } else if (instrS(line,"OPEN_AGGREGATION",rs)) {
         cur_code.addInstr(BytecodeStream::OPEN_AGGREGATION);
         if (rs=="AND") {
-          cur_code.addReg(AggregationCtx::VCTX_AND);
+          cur_code.addCharVal(AggregationCtx::VCTX_AND);
         } else if (rs=="OR") {
-          cur_code.addReg(AggregationCtx::VCTX_OR);
+          cur_code.addCharVal(AggregationCtx::VCTX_OR);
         } else if (rs=="LIN") {
-          cur_code.addReg(AggregationCtx::VCTX_LIN);
+          cur_code.addCharVal(AggregationCtx::VCTX_LIN);
         } else if (rs=="VEC") {
-          cur_code.addReg(AggregationCtx::VCTX_VEC);
+          cur_code.addCharVal(AggregationCtx::VCTX_VEC);
         } else if (rs=="OTHER") {
-          cur_code.addReg(AggregationCtx::VCTX_OTHER);
+          cur_code.addCharVal(AggregationCtx::VCTX_OTHER);
         } else {
           throw Error("Error: illegal context\n"+line);
         }
