@@ -57,15 +57,19 @@ int main(int argc, const char** argv) {
     if (verbose) {
       std::cerr << "Disassembled code:\n";
       for (auto& b : bs) {
-        std::cerr << ":" << b.name() << ":\n";
-        std::cerr << b.toString(bs);
+        for (int i=0; i<BytecodeProc::MAX_MODE; i++) {
+          if (b.mode[i].size()>0) {
+            std::cerr << ":" << b.name << ":" << BytecodeProc::mode_to_string[i] << "\n";
+            std::cerr << b.mode[i].toString(bs);
+          }
+        }
       }
       std::cerr << "\n";
     }
     // Built-in procedures
     std::vector<Interpreter::builtin> builtins;
     // The main procedure is the last one in the file
-    BytecodeFrame frame(bs.back());
+    BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT]);
     Interpreter interpreter(bs, builtins, frame);
     if (verbose) {
       std::cerr << "Run:\n";
@@ -75,7 +79,7 @@ int main(int argc, const char** argv) {
       std::cerr << "Done\n";
       for (unsigned int i=0; i<interpreter.defStack().size(); i++) {
         std::cerr << i << ":\t";
-        std::cerr << bs[interpreter.defStack()[i].call.pred].name() << " ";
+        std::cerr << bs[interpreter.defStack()[i].call.pred].name<< " ";
         std::cerr << interpreter.defStack()[i].call.args.toString() << "\n";
       }
     }

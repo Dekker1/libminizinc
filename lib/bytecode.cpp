@@ -23,6 +23,18 @@
 
 namespace MiniZinc {
 
+  PrimitiveMap::PrimitiveMap(void)
+  : _s({ {"clause",CLAUSE}, {"forall",FORALL}, {"lin_exp",LINEXP} }) {
+    _n.resize(_s.size());
+    for (auto& entry : _s) {
+      _n[entry.second] = entry.first;
+    }
+  }
+
+  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { CLAUSE, FORALL, LINEXP };
+  
+  const std::string BytecodeProc::mode_to_string[] = { "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
+  
   std::string
   Val::toString(void) const {
     std::ostringstream oss;
@@ -43,7 +55,7 @@ namespace MiniZinc {
   }
   
   std::string
-  BytecodeStream::toString(const std::vector<BytecodeStream>& procs) const {
+  BytecodeStream::toString(const std::vector<BytecodeProc>& procs) const {
     std::ostringstream oss;
     int pc = 0;
     while (pc < _bs.size()) {
@@ -180,11 +192,12 @@ namespace MiniZinc {
           break;
         case BytecodeStream::CALL:
         {
+          BytecodeProc::Mode m = static_cast<BytecodeProc::Mode>(chr(pc));
           int p = reg(pc);
           if (procs.empty()) {
-            oss << "CALL " << p << " ";
+            oss << "CALL " << BytecodeProc::mode_to_string[m] << " " << p << " ";
           } else {
-            oss << "CALL " << procs[p].name() << " ";
+            oss << "CALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << " ";
           }
           int n=reg(pc);
           oss << n;
@@ -207,11 +220,13 @@ namespace MiniZinc {
           break;
         case BytecodeStream::TCALL:
         {
+          BytecodeProc::Mode m = static_cast<BytecodeProc::Mode>(chr(pc));
           int p = reg(pc);
+          
           if (procs.empty()) {
-            oss << "TCALL " << p << "\n";
+            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << p << "\n";
           } else {
-            oss << "TCALL " << procs[p].name() << "\n";
+            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << "\n";
           }
         }
           break;
@@ -530,11 +545,15 @@ namespace MiniZinc {
           break;
         case BytecodeStream::CALL:
         {
+          char mode_c = frame->bs->chr(frame->pc);
           int code = frame->bs->reg(frame->pc);
           assert(code >= 0);
           assert(code < _procs.size());
+          assert(mode_c >= 0);
+          assert(mode_c <= BytecodeProc::MAX_MODE);
+          BytecodeProc::Mode mode = static_cast<BytecodeProc::Mode>(mode_c);
           int n = frame->bs->reg(frame->pc);
-          if (_procs[code].size()==0) {
+          if (_procs[code].mode[mode].size()==0) {
             DBG_INTERPRETER("CALL fzn builtin " << code  << " " << n << "\n");
             // this is a FlatZinc builtin
             std::vector<Val> args(n);
@@ -542,11 +561,11 @@ namespace MiniZinc {
               int r = frame->bs->reg(frame->pc);
               args[i] = frame->reg[r];
             }
-            _defstack.push_back(Definition(IntVal(0),code,Val(Vec::a(args))));
+            _defstack.push_back(Definition(IntVal(0),code,mode,Val(Vec::a(args))));
             push(Ref(_defstack.size()-1),-1);
           } else {
             DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
-            _stack.emplace_back(_procs[code]);
+            _stack.emplace_back(_procs[code].mode[mode]);
             BytecodeFrame* oldFrame = &_stack[_stack.size()-2];
             BytecodeFrame* newFrame = &_stack[_stack.size()-1];
             for (int i=0; i<n; i++) {
@@ -574,11 +593,15 @@ namespace MiniZinc {
           break;
         case BytecodeStream::TCALL:
         {
+          char mode_c = frame->bs->chr(frame->pc);
           int code = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("TCALL " << code  << "\n");
           assert(code >= 0);
           assert(code < _procs.size());
-          frame->bs = &_procs[code];
+          assert(mode_c >= 0);
+          assert(mode_c <= BytecodeProc::MAX_MODE);
+          BytecodeProc::Mode mode = static_cast<BytecodeProc::Mode>(mode_c);
+          frame->bs = &_procs[code].mode[mode];
           frame->pc = 0;
         }
           break;
@@ -661,7 +684,7 @@ namespace MiniZinc {
                   _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(!isFalse),-2);
                 } else {
-                  _defstack.push_back(Definition(IntVal(0),FORALL,Val(Vec::a(args))));
+                  _defstack.push_back(Definition(IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(args))));
                   push(Ref(_defstack.size()-1),-2);
                 }
               }
@@ -699,7 +722,7 @@ namespace MiniZinc {
                   _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(isTrue),-2);
                 } else {
-                  _defstack.push_back(Definition(IntVal(0),CLAUSE,Val(Vec::a({Val(Vec::a(pos)),Val(Vec::a(neg))}))));
+                  _defstack.push_back(Definition(IntVal(0),PrimitiveMap::CLAUSE,BytecodeProc::FUN,Val(Vec::a({Val(Vec::a(pos)),Val(Vec::a(neg))}))));
                   push(Ref(_defstack.size()-1),-2);
                 }
               }
@@ -843,14 +866,34 @@ namespace MiniZinc {
     return true;
   }
 
-  std::vector<BytecodeStream> parse(const std::string& s) {
-    std::vector<BytecodeStream> codes;
-    std::vector<std::vector<std::pair<int,std::string> > > toPatch;
-    
+  std::vector<BytecodeProc> parse(const std::string& s) {
+
+    std::vector<BytecodeProc> codes;
     std::unordered_map<std::string, int> procs;
     
+    struct Patch {
+      int code;
+      BytecodeProc::Mode mode;
+      std::vector<std::pair<int,std::string>> patch;
+      Patch(int code0, BytecodeProc::Mode mode0, const std::vector<std::pair<int,std::string>>& patch0)
+      : code(code0), mode(mode0), patch(patch0) {}
+    };
+    
+    std::vector<Patch> toPatch;
+
+    PrimitiveMap pm;
+    // Initialise first slots with
+    for (const PrimitiveMap::Primitive& p : PrimitiveMap::ALL) {
+      BytecodeProc bcp;
+      bcp.name = pm[p];
+      std::cerr << "add primitive " << bcp.name << " " << p << "\n";
+      codes.push_back(bcp);
+      procs.insert({bcp.name,p});
+    }
+
     std::istringstream iss(s);
     std::string cur_proc;
+    BytecodeProc::Mode cur_mode;
     BytecodeStream cur_code;
     std::vector<std::pair<int,std::string> > cur_toPatch;
     std::vector<std::pair<int,std::string> > cur_labels;
@@ -862,7 +905,6 @@ namespace MiniZinc {
       if (line[0]==':') {
         // this is the start of a new procedure
         if (!cur_proc.empty()) {
-          cur_code.name(cur_proc);
           // patch jumps with recorded labels
           for (auto& cl : cur_labels) {
             if (labels.find(cl.second)==labels.end())
@@ -872,15 +914,43 @@ namespace MiniZinc {
           labels.clear();
           cur_labels.clear();
 
-          if (procs.find(cur_proc) != procs.end())
-            throw Error("Error: procedure "+cur_proc+" already defined before\n");
-          procs[cur_proc] = codes.size();
-          codes.push_back(cur_code);
-          toPatch.push_back(cur_toPatch);
-          cur_code = BytecodeStream();
-          cur_toPatch.clear();
+          std::unordered_map<std::string, int>::iterator it = procs.find(cur_proc);
+          if (it != procs.end()) {
+            BytecodeProc& bcp = codes[it->second];
+            if (bcp.mode[cur_mode].size() > 0) {
+              throw Error("Error: procedure "+cur_proc+" already defined before with the same mode\n");
+            }
+            bcp.mode[cur_mode] = cur_code;
+            toPatch.push_back(Patch(it->second,cur_mode,cur_toPatch));
+          } else {
+            BytecodeProc bcp;
+            bcp.name = cur_proc;
+            bcp.mode[cur_mode] = cur_code;
+            procs[cur_proc] = codes.size();
+            toPatch.push_back(Patch(codes.size(),cur_mode,cur_toPatch));
+            codes.push_back(bcp);
+            cur_code = BytecodeStream();
+            cur_toPatch.clear();
+          }
         }
-        cur_proc = line.substr(1,line.find(':',1)-1);
+        size_t finalColon = line.find(':',1);
+        cur_proc = line.substr(1,finalColon-1);
+        std::string newMode = line.substr(finalColon+1);
+        if (newMode=="ROOT") {
+          cur_mode = BytecodeProc::ROOT;
+        } else if (newMode=="ROOT_NEG") {
+            cur_mode = BytecodeProc::ROOT_NEG;
+        } else if (newMode=="FUN") {
+          cur_mode = BytecodeProc::FUN;
+        } else if (newMode=="FUN_NEG") {
+          cur_mode = BytecodeProc::FUN_NEG;
+        } else if (newMode=="IMP") {
+          cur_mode = BytecodeProc::IMP;
+        } else if (newMode=="IMP_NEG") {
+          cur_mode = BytecodeProc::IMP_NEG;
+        } else {
+          cur_mode = BytecodeProc::FUN;
+        }
         continue;
       }
       
@@ -1012,11 +1082,28 @@ namespace MiniZinc {
       } else if (startsWith(line,"CALL ")) {
         size_t cur_pos = line.find(' ');
         std::string n = line.substr(cur_pos+1);
-        std::string rs = n.substr(0, n.find(' '));
+        std::string mode = n.substr(0, n.find(' '));
         cur_code.addInstr(BytecodeStream::CALL);
+        if (mode=="ROOT") {
+          cur_code.addCharVal(BytecodeProc::ROOT);
+        } else if (mode=="ROOT_NEG") {
+          cur_code.addCharVal(BytecodeProc::ROOT_NEG);
+        } else if (mode=="FUN") {
+          cur_code.addCharVal(BytecodeProc::FUN);
+        } else if (mode=="FUN_NEG") {
+          cur_code.addCharVal(BytecodeProc::FUN_NEG);
+        } else if (mode=="IMP") {
+          cur_code.addCharVal(BytecodeProc::IMP);
+        } else if (mode=="IMP_NEG") {
+          cur_code.addCharVal(BytecodeProc::IMP_NEG);
+        } else {
+          throw Error("Invalid mode:\n"+line+"\n");
+        }
+        std::string n0 = n.substr(n.find(' ')+1);
+        std::string rs = n0.substr(0, n0.find(' '));
         cur_toPatch.push_back(std::make_pair(cur_code.size(),rs));
         cur_code.addReg(0); // placeholder
-        std::string n1 = n.substr(n.find(' ')+1);
+        std::string n1 = n0.substr(n0.find(' ')+1);
         int n_args = std::stoi(n1.substr(0,n1.find(' ')));
         cur_code.addReg(n_args);
         for (int i=0; i<n_args; i++) {
@@ -1024,8 +1111,28 @@ namespace MiniZinc {
           int r = std::stoi(n1.substr(0,n1.find(' ')));
           cur_code.addReg(r);
         }
-      } else if (instrS(line,"TCALL",rs)) {
+      } else if (startsWith(line,"TCALL ")) {
         cur_code.addInstr(BytecodeStream::TCALL);
+        size_t cur_pos = line.find(' ');
+        std::string n = line.substr(cur_pos+1);
+        std::string mode = n.substr(0, n.find(' '));
+        if (mode=="ROOT") {
+          cur_code.addCharVal(BytecodeProc::ROOT);
+        } else if (mode=="ROOT_NEG") {
+          cur_code.addCharVal(BytecodeProc::ROOT_NEG);
+        } else if (mode=="FUN") {
+          cur_code.addCharVal(BytecodeProc::FUN);
+        } else if (mode=="FUN_NEG") {
+          cur_code.addCharVal(BytecodeProc::FUN_NEG);
+        } else if (mode=="IMP") {
+          cur_code.addCharVal(BytecodeProc::IMP);
+        } else if (mode=="IMP_NEG") {
+          cur_code.addCharVal(BytecodeProc::IMP_NEG);
+        } else {
+          throw Error("Invalid mode:\n"+line+"\n");
+        }
+        std::string n0 = n.substr(n.find(' ')+1);
+        std::string rs = n0.substr(0, n0.find(' '));
         cur_toPatch.push_back(std::make_pair(cur_code.size(),rs));
         cur_code.addReg(0); // placeholder
       } else if (instrR(line,"TRACE",r1)) {
@@ -1061,17 +1168,39 @@ namespace MiniZinc {
       }
     }
     if (!cur_proc.empty()) {
-      if (procs.find(cur_proc) != procs.end())
-        throw Error("Error: procedure "+cur_proc+" already defined before\n");
-      cur_code.name(cur_proc);
-      procs[cur_proc] = codes.size();
-      codes.push_back(cur_code);
-      toPatch.push_back(cur_toPatch);
+      // patch jumps with recorded labels
+      for (auto& cl : cur_labels) {
+        if (labels.find(cl.second)==labels.end())
+          throw Error("Error: label "+cl.second+" not found\n");
+        cur_code.patchAddress(cl.first, labels[cl.second]);
+      }
+      labels.clear();
+      cur_labels.clear();
+      
+      std::unordered_map<std::string, int>::iterator it = procs.find(cur_proc);
+      if (it != procs.end()) {
+        BytecodeProc& bcp = codes[it->second];
+        if (bcp.mode[cur_mode].size() > 0) {
+          throw Error("Error: procedure "+cur_proc+" already defined before with the same mode\n");
+        }
+        bcp.mode[cur_mode] = cur_code;
+      } else {
+        BytecodeProc bcp;
+        bcp.name = cur_proc;
+        bcp.mode[cur_mode] = cur_code;
+        procs[cur_proc] = codes.size();
+        toPatch.push_back(Patch(codes.size(),cur_mode,cur_toPatch));
+        codes.push_back(bcp);
+        cur_code = BytecodeStream();
+        cur_toPatch.clear();
+      }
     }
 
-    for (unsigned int i=0; i<codes.size(); i++) {
-      for (auto& patch : toPatch[i]) {
-        codes[i].patchAddress(patch.first,procs[patch.second]);
+    for (auto& p : toPatch) {
+      int code = p.code;
+      BytecodeProc::Mode mode = p.mode;
+      for (auto& patch : p.patch) {
+        codes[code].mode[mode].patchAddress(patch.first,procs[patch.second]);
       }
     }
     

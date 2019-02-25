@@ -20,12 +20,12 @@
 
 namespace MiniZinc {
 
+  class BytecodeProc;
+
   class BytecodeStream {
   protected:
     /// The bytecode stream
     std::vector<char> _bs;
-    /// The name of this procedure
-    std::string _name;
   public:
     enum Instr {
       ADDI, // R1, R2 -> R3
@@ -66,9 +66,9 @@ namespace MiniZinc {
       POP,   // R: pop from value stack into R
       
       RET, // return from call
-      CALL, // i, n, R1, ..., Rn: call code i
+      CALL, // m, i, n, R1, ..., Rn: call code i in mode m with n arguments
       BUILTIN, // i, n, R1, ..., Rn : call builtin function i
-      TCALL, // i : call code i (arguments are assumed to be in correct registers already)
+      TCALL, // m, i : call code i in mode m (arguments are assumed to be in correct registers already)
       
       TRACE, // R: output string representation of R
       ABORT, // abort execution
@@ -80,6 +80,7 @@ namespace MiniZinc {
     IntVal intval(int& pc) const { assert(pc < _bs.size()); const IntVal* iv = reinterpret_cast<const IntVal*>(&_bs[pc]); pc += sizeof(IntVal); return *iv; }
     Expression* expr(int& pc) { assert(pc < _bs.size()); Expression** e = reinterpret_cast<Expression**>(&_bs[pc]); pc += sizeof(Expression*); return *e; }
     int reg(int& pc) const { assert(pc < _bs.size()); const int* iv = reinterpret_cast<const int*>(&_bs[pc]); pc += sizeof(int); return *iv;}
+    char chr(int& pc) const { assert(pc < _bs.size()); return _bs[pc++]; }
     const char* str(int& pc) const {
       assert(pc < _bs.size());
       int n = reg(pc);
@@ -111,6 +112,9 @@ namespace MiniZinc {
         _bs.push_back(cp[i]);
       }
     }
+    void addCharVal(const char c) {
+      _bs.push_back(c);
+    }
     void addExpr(Expression* e) {
       const char* cp = reinterpret_cast<const char*>(e);
       for (int i=0; i<sizeof(Expression*); i++) {
@@ -123,11 +127,8 @@ namespace MiniZinc {
         _bs.push_back(c);
       _bs.push_back(0);
     }
-
-    std::string name(void) const { return _name; }
-    void name(const std::string& n) { _name = n; }
     
-    std::string toString(const std::vector<BytecodeStream>& procs = std::vector<BytecodeStream>()) const;
+    std::string toString(const std::vector<BytecodeProc>& procs = std::vector<BytecodeProc>()) const;
     
   };
 
@@ -339,8 +340,9 @@ namespace MiniZinc {
   class CallVal {
   public:
     int pred;
+    char mode;
     Val args;
-    CallVal(int pred0, Val args0) : pred(pred0), args(args0) {}
+    CallVal(int pred0, char mode0, Val args0) : pred(pred0), mode(mode0), args(args0) {}
   };
   
   class Definition {
@@ -348,9 +350,9 @@ namespace MiniZinc {
     Val domain;
     Val ann;
     CallVal call;
-    Definition(void) : domain(IntVal(0)), ann(IntVal(0)), call(CallVal(0,IntVal(0))) {}
-    Definition(Val domain0,int pred0,Val args0,Val ann0=IntVal(0))
-    : domain(domain0), ann(ann0), call(CallVal(pred0,args0)) {}
+    Definition(void) : domain(IntVal(0)), ann(IntVal(0)), call(CallVal(0,0,IntVal(0))) {}
+    Definition(Val domain0,int pred0,char mode0,Val args0,Val ann0=IntVal(0))
+    : domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)) {}
   };
   
   class AggregationCtx {
@@ -368,18 +370,45 @@ namespace MiniZinc {
     }
   };
   
+  class BytecodeProc {
+  public:
+    /// The name of this procedure
+    std::string name;
+    /// Modes
+    enum Mode { ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
+    static const std::string mode_to_string[MAX_MODE+1];
+    /// The code for different modes
+    BytecodeStream mode[MAX_MODE+1];
+  };
+
+  class PrimitiveMap {
+  public:
+    enum Primitive {
+      CLAUSE,
+      FORALL,
+      LINEXP
+    };
+    static const Primitive ALL[];
+  protected:
+    std::unordered_map<std::string,Primitive> _s;
+    std::vector<std::string> _n;
+  public:
+    PrimitiveMap(void);
+    Primitive operator [](const std::string& s) { return _s[s]; }
+    std::string operator [](Primitive p) { return _n[p]; }
+  };
+  
   class Interpreter {
   public:
     typedef void (*builtin) (Interpreter& i, std::vector<Val> args);
-    enum FlatZincBuiltins { CLAUSE=-1, FORALL=-2 };
   protected:
     std::vector<BytecodeFrame> _stack;
     std::vector<Definition> _defstack;
     std::vector<AggregationCtx> _agg;
-    const std::vector<BytecodeStream>& _procs;
+    const std::vector<BytecodeProc>& _procs;
     const std::vector<builtin>& _builtins;
   public:
-    Interpreter(const std::vector<BytecodeStream>& procs,
+    Interpreter(const std::vector<BytecodeProc>& procs,
                 const std::vector<builtin>& builtins,
                 const BytecodeFrame& f) : _procs(procs), _builtins(builtins) {
       _stack.push_back(f);
@@ -389,7 +418,7 @@ namespace MiniZinc {
     void push(const Val& v, int stackOffset);
   };
   
-  std::vector<BytecodeStream> parse(const std::string& s);
+  std::vector<BytecodeProc> parse(const std::string& s);
 
 }
 
