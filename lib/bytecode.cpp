@@ -76,6 +76,7 @@ namespace MiniZinc {
         nvec.reserve(nvec.size() + vv->size() + 1);
         nvec.emplace_back(Val(vv->size()));
         for (int i = 0; i < vv->size(); ++i) {
+          assert(not (*vv)[i].isVec());
           nvec.emplace_back((*vv)[i]);
         }
       } else {
@@ -103,6 +104,7 @@ namespace MiniZinc {
     auto it = _table.find(key);
     if (it != _table.end()) {
       // TODO: Convert depending on Mode!
+      assert(mode == it->second.first);
       Val v = it->second.second.to_val();
       DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << mode << " Value: " << v.toString() << "\n");
       return std::make_pair(v, true);
@@ -620,6 +622,7 @@ namespace MiniZinc {
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           int n = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
+          // TODO: See if args is created when not necessary
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
@@ -642,7 +645,7 @@ namespace MiniZinc {
               _stack.emplace_back(_procs[code].mode[mode], code, mode);
               BytecodeFrame* newFrame = &_stack[_stack.size()-1];
               newFrame->cse_key = std::move(cse_key);
-              newFrame->stack_size = _agg.back().stack.size(); //TODO: Is this correct?
+              newFrame->stack_size = _agg.back().stack.size();
               newFrame->reg.mov(args);
               frame = newFrame;
             }
