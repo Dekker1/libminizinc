@@ -96,11 +96,10 @@ namespace MiniZinc {
     return hash;
   }
 
-  std::pair<Val, bool> BytecodeProc::CSETable::lookup(const std::vector<Val>& args, const BytecodeProc::Mode& mode) {
+  std::pair<Val, bool> BytecodeProc::CSETable::lookup(const std::vector<WeakVal>& key, const BytecodeProc::Mode& mode) {
     if (mode == RAW) {
       return std::pair<Val, bool>(Val(), false);
     }
-    auto key = WeakVal::flat_vector(args);
     auto it = _table.find(key);
     if (it != _table.end()) {
       // TODO: Convert depending on Mode!
@@ -111,10 +110,13 @@ namespace MiniZinc {
     return std::pair<Val, bool>(Val(), false);
   }
 
-  void BytecodeProc::CSETable::insert(const std::vector<Val>& args, const BytecodeProc::Mode& mode, const Val& val) {
-    auto key = WeakVal::flat_vector(args);
+  void BytecodeProc::CSETable::insert(std::vector<WeakVal>& key, const BytecodeProc::Mode& mode, const Val& val) {
+    if (mode == RAW) {
+      return;
+    }
     DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << mode << " Value: " << val.toString() << "\n");
-    _table.insert({key, std::make_pair(mode, val)});
+    auto result = _table.emplace(std::move(key), std::make_pair(mode, val));
+    assert(result.second);
   }
 
   std::string
@@ -599,6 +601,10 @@ namespace MiniZinc {
             // Always leave final frame on the stack
             return;
           }
+          if (frame->stack_size == _agg.back().stack.size()-1) {
+            Val ret = _agg[_agg.size()-1].stack.back();
+            _procs[frame->proc_code].cse.insert(frame->cse_key, frame->proc_mode, ret);
+          }
           _stack.pop_back();
           frame = &_stack.back();
         }
@@ -613,34 +619,33 @@ namespace MiniZinc {
           assert(mode_c <= BytecodeProc::MAX_MODE);
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           int n = frame->bs->reg(frame->pc);
-          if (_procs[code].mode[mode].size()==0) {
-            DBG_INTERPRETER("CALL fzn builtin " << code  << " " << n << "\n");
-            // this is a FlatZinc builtin
-            std::vector<Val> args(n);
-            for (int i=0; i<n; i++) {
-              int r = frame->bs->reg(frame->pc);
-              args[i] = frame->reg[r];
-            }
-            // Lookup item in CSE
-            auto cse = _procs[code].cse.lookup(args, mode);
-            if (cse.second) {
-              push(cse.first, -1);
-            } else {
+          DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
+          std::vector<Val> args(n);
+          for (int i=0; i<n; i++) {
+            int r = frame->bs->reg(frame->pc);
+            args[i] = frame->reg[r];
+          }
+          std::vector<WeakVal> cse_key = std::move(WeakVal::flat_vector(args));
+          // Lookup item in CSE
+          auto cse = _procs[code].cse.lookup(cse_key, mode);
+          if (cse.second) {
+            push(cse.first, -1);
+          } else {
+            if (_procs[code].mode[mode].size()==0) {
+              DBG_INTERPRETER("--- FZN Builtin\n");
+              // this is a FlatZinc builtin
               _defstack.emplace_back(IntVal(0),code,mode,Val(Vec::a(args)));
               Val ret = Ref(_defstack.size()-1);
-              _procs[code].cse.insert(args, mode, ret);
+              _procs[code].cse.insert(cse_key, mode, ret);
               push(ret,-1);
+            } else {
+              _stack.emplace_back(_procs[code].mode[mode], code, mode);
+              BytecodeFrame* newFrame = &_stack[_stack.size()-1];
+              newFrame->cse_key = std::move(cse_key);
+              newFrame->stack_size = _agg.back().stack.size(); //TODO: Is this correct?
+              newFrame->reg.mov(args);
+              frame = newFrame;
             }
-          } else {
-            DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
-            _stack.emplace_back(_procs[code].mode[mode]);
-            BytecodeFrame* oldFrame = &_stack[_stack.size()-2];
-            BytecodeFrame* newFrame = &_stack[_stack.size()-1];
-            for (int i=0; i<n; i++) {
-              int r = oldFrame->bs->reg(oldFrame->pc);
-              oldFrame->reg.cp(r, newFrame->reg, i);
-            }
-            frame = newFrame;
           }
         }
           break;

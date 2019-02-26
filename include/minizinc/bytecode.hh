@@ -368,16 +368,11 @@ namespace MiniZinc {
       if (r2 >= rf._r.size()) rf._r.resize(r2+1);
       rf._r[r2] = std::move(_r[r1]);
     }
+    void mov(std::vector<Val>& args) {
+      _r = std::move(args);
+    }
   };
-  
-  class BytecodeFrame {
-  public:
-    RegisterFile reg;
-    const BytecodeStream* bs;
-    int pc;
-    BytecodeFrame(const BytecodeStream& bs0) : reg(bs0.maxRegister()), bs(&bs0), pc(0) {}
-  };
-  
+
   class CallVal {
   public:
     int pred;
@@ -428,12 +423,30 @@ namespace MiniZinc {
     /// CSE table: Saved results of historical executions
     class CSETable {
     public:
-      std::pair<Val, bool> lookup(const std::vector<Val>& args, const BytecodeProc::Mode& mode);
-      void insert(const std::vector<Val>& args, const BytecodeProc::Mode& mode, const Val& val);
+      typedef std::unordered_map<std::vector<WeakVal>, std::pair<Mode, WeakVal>, CSEHasher> hashtable;
+      typedef hashtable::iterator iterator;
+      std::pair<Val, bool> lookup(const std::vector<WeakVal>& key, const BytecodeProc::Mode& mode);
+      void insert(std::vector<WeakVal>& key, const BytecodeProc::Mode& mode, const Val& val);
     protected:
-      std::unordered_map<std::vector<WeakVal>, std::pair<Mode, WeakVal>, CSEHasher> _table;
+      hashtable _table;
     } cse;
   };
+
+  class BytecodeFrame {
+  public:
+    RegisterFile reg;
+    const BytecodeStream* bs;
+    int pc;
+    // Procedure information
+    int proc_code;
+    BytecodeProc::Mode proc_mode;
+    // CSE information for RET statement
+    std::vector<WeakVal> cse_key;
+    size_t stack_size;
+    BytecodeFrame(const BytecodeStream& bs0, int procedure, BytecodeProc::Mode mode)
+    : reg(bs0.maxRegister()), bs(&bs0), pc(0), proc_code(procedure), proc_mode(mode) {}
+  };
+
 
   class PrimitiveMap {
   public:
