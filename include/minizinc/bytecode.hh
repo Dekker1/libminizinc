@@ -145,6 +145,7 @@ namespace MiniZinc {
   };
 
   class Vec;
+  class WeakVal;
 
   class Ref {
   protected:
@@ -156,6 +157,7 @@ namespace MiniZinc {
   
   /// Value tagged union
   class Val {
+    friend class WeakVal;
   protected:
     /// The value
     // Bit 0,1: 0,X=int, 1,0=Ref, 1,1=Vec
@@ -170,6 +172,7 @@ namespace MiniZinc {
     bool isRef(void) const {
       return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(3)) == static_cast<ptrdiff_t>(1);
     }
+    bool operator==(const Val& rhs) const;
 
     /// Access value as Ref
     Ref r(void) const {
@@ -251,6 +254,31 @@ namespace MiniZinc {
         free(v);
       }
     }
+    inline bool operator==(const Vec& rhs) const {
+      if (_size != rhs._size) {
+        return false;
+      }
+      for (int i = 0; i < _size; ++i) {
+        if (not ((*this)[i] == rhs[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+  };
+
+  class WeakVal {
+  protected:
+    // Value of the Val
+    void* _v;
+  public:
+    WeakVal(const Val& val) : _v(val._v) {}
+    Val to_val() { Val v; v._v = _v; return v; }
+
+    size_t hash() const {std::hash<void*> h; return h(_v);}
+    inline bool operator==(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v); }
+
+    static std::vector<WeakVal> flat_vector(const std::vector<Val>& vec);
   };
   
   
@@ -382,16 +410,29 @@ namespace MiniZinc {
       assert(s >= 0 && s <= VCTX_OTHER);
     }
   };
+
+  struct CSEHasher {
+    size_t operator()(const std::vector<WeakVal>& v) const;
+  };
   
   class BytecodeProc {
   public:
     /// The name of this procedure
     std::string name;
     /// Modes
-    enum Mode { ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
+    enum Mode { RAW, ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
     static const std::string mode_to_string[MAX_MODE+1];
     /// The code for different modes
     BytecodeStream mode[MAX_MODE+1];
+
+    /// CSE table: Saved results of historical executions
+    class CSETable {
+    public:
+      std::pair<Val, bool> lookup(const std::vector<Val>& args, const BytecodeProc::Mode& mode);
+      void insert(const std::vector<Val>& args, const BytecodeProc::Mode& mode, const Val& val);
+    protected:
+      std::unordered_map<std::vector<WeakVal>, std::pair<Mode, WeakVal>, CSEHasher> _table;
+    } cse;
   };
 
   class PrimitiveMap {
@@ -418,10 +459,10 @@ namespace MiniZinc {
     std::vector<BytecodeFrame> _stack;
     std::vector<Definition> _defstack;
     std::vector<AggregationCtx> _agg;
-    const std::vector<BytecodeProc>& _procs;
+    std::vector<BytecodeProc>& _procs;
     const std::vector<builtin>& _builtins;
   public:
-    Interpreter(const std::vector<BytecodeProc>& procs,
+    Interpreter(std::vector<BytecodeProc>& procs,
                 const std::vector<builtin>& builtins,
                 const BytecodeFrame& f) : _procs(procs), _builtins(builtins) {
       _stack.push_back(f);

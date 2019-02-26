@@ -21,6 +21,9 @@
 #include <fstream>
 #include <streambuf>
 
+#define DBG_INTERPRETER(msg) std::cerr << msg
+//#define DBG_INTERPRETER(msg) do {} while(0)
+
 namespace MiniZinc {
 
   PrimitiveMap::PrimitiveMap(void)
@@ -33,7 +36,7 @@ namespace MiniZinc {
 
   const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { CLAUSE, FORALL, LINEXP };
   
-  const std::string BytecodeProc::mode_to_string[] = { "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
+  const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   
   std::string
   Val::toString(void) const {
@@ -53,7 +56,67 @@ namespace MiniZinc {
     }
     return oss.str();
   }
-  
+
+  bool Val::operator==(const Val &rhs) const {
+    if ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(3)) != (reinterpret_cast<ptrdiff_t>(rhs._v) & static_cast<ptrdiff_t>(3))) {
+      return false;
+    } else if (isVec()) {
+      return (*toVec()) == (*rhs.toVec());
+    } else {
+      return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v);
+    }
+  }
+
+  std::vector<WeakVal> WeakVal::flat_vector(const std::vector<Val> &vec) {
+    std::vector<WeakVal> nvec;
+    nvec.reserve(vec.size());
+    for (const auto& val : vec) {
+      if (val.isVec()) {
+        Vec* vv = val.toVec();
+        nvec.reserve(nvec.size() + vv->size() + 1);
+        nvec.emplace_back(Val(vv->size()));
+        for (int i = 0; i < vv->size(); ++i) {
+          nvec.emplace_back((*vv)[i]);
+        }
+      } else {
+        nvec.emplace_back(val);
+      }
+    }
+    return nvec;
+  }
+
+  void cmb_hash(size_t& incumbent, const size_t h) {
+    incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2);
+  }
+  size_t CSEHasher::operator()(const std::vector<WeakVal> &vec) const {
+    size_t hash = 0;
+    for(const auto& val : vec) {
+      cmb_hash(hash, val.hash());
+    }
+    return hash;
+  }
+
+  std::pair<Val, bool> BytecodeProc::CSETable::lookup(const std::vector<Val>& args, const BytecodeProc::Mode& mode) {
+    if (mode == RAW) {
+      return std::pair<Val, bool>(Val(), false);
+    }
+    auto key = WeakVal::flat_vector(args);
+    auto it = _table.find(key);
+    if (it != _table.end()) {
+      // TODO: Convert depending on Mode!
+      Val v = it->second.second.to_val();
+      DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << mode << " Value: " << v.toString() << "\n");
+      return std::make_pair(v, true);
+    }
+    return std::pair<Val, bool>(Val(), false);
+  }
+
+  void BytecodeProc::CSETable::insert(const std::vector<Val>& args, const BytecodeProc::Mode& mode, const Val& val) {
+    auto key = WeakVal::flat_vector(args);
+    DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << mode << " Value: " << val.toString() << "\n");
+    _table.insert({key, std::make_pair(mode, val)});
+  }
+
   std::string
   BytecodeStream::toString(const std::vector<BytecodeProc>& procs) const {
     std::ostringstream oss;
@@ -286,9 +349,6 @@ namespace MiniZinc {
     }
     return oss.str();
   }
-  
-#define DBG_INTERPRETER(msg) std::cerr << msg
-//#define DBG_INTERPRETER(msg) do {} while(0)
   
   void
   Interpreter::push(const Val& v, int stackOffset) {
@@ -551,7 +611,7 @@ namespace MiniZinc {
           assert(code < _procs.size());
           assert(mode_c >= 0);
           assert(mode_c <= BytecodeProc::MAX_MODE);
-          BytecodeProc::Mode mode = static_cast<BytecodeProc::Mode>(mode_c);
+          auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           int n = frame->bs->reg(frame->pc);
           if (_procs[code].mode[mode].size()==0) {
             DBG_INTERPRETER("CALL fzn builtin " << code  << " " << n << "\n");
@@ -561,8 +621,16 @@ namespace MiniZinc {
               int r = frame->bs->reg(frame->pc);
               args[i] = frame->reg[r];
             }
-            _defstack.push_back(Definition(IntVal(0),code,mode,Val(Vec::a(args))));
-            push(Ref(_defstack.size()-1),-1);
+            // Lookup item in CSE
+            auto cse = _procs[code].cse.lookup(args, mode);
+            if (cse.second) {
+              push(cse.first, -1);
+            } else {
+              _defstack.emplace_back(IntVal(0),code,mode,Val(Vec::a(args)));
+              Val ret = Ref(_defstack.size()-1);
+              _procs[code].cse.insert(args, mode, ret);
+              push(ret,-1);
+            }
           } else {
             DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
             _stack.emplace_back(_procs[code].mode[mode]);
@@ -936,10 +1004,12 @@ namespace MiniZinc {
         size_t finalColon = line.find(':',1);
         cur_proc = line.substr(1,finalColon-1);
         std::string newMode = line.substr(finalColon+1);
-        if (newMode=="ROOT") {
+        if (newMode=="RAW") {
+          cur_mode = BytecodeProc::RAW;
+        } else if (newMode=="ROOT") {
           cur_mode = BytecodeProc::ROOT;
         } else if (newMode=="ROOT_NEG") {
-            cur_mode = BytecodeProc::ROOT_NEG;
+          cur_mode = BytecodeProc::ROOT_NEG;
         } else if (newMode=="FUN") {
           cur_mode = BytecodeProc::FUN;
         } else if (newMode=="FUN_NEG") {
@@ -1084,7 +1154,9 @@ namespace MiniZinc {
         std::string n = line.substr(cur_pos+1);
         std::string mode = n.substr(0, n.find(' '));
         cur_code.addInstr(BytecodeStream::CALL);
-        if (mode=="ROOT") {
+        if (mode=="RAW") {
+          cur_code.addCharVal(BytecodeProc::RAW);
+        } else if (mode=="ROOT") {
           cur_code.addCharVal(BytecodeProc::ROOT);
         } else if (mode=="ROOT_NEG") {
           cur_code.addCharVal(BytecodeProc::ROOT_NEG);
