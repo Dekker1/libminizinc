@@ -360,10 +360,10 @@ namespace MiniZinc {
     assert(_agg.size()+stackOffset >= 0);
     if (_agg[_agg.size()+stackOffset].symbol==AggregationCtx::VCTX_LIN) {
       // add coefficient to surrounding linear context
-      _agg[_agg.size()+stackOffset].stack.push_back(IntVal(1));
+      _agg[_agg.size()+stackOffset].push(IntVal(1));
     }
     // push value onto surrounding context
-    _agg[_agg.size()+stackOffset].stack.push_back(v);
+    _agg[_agg.size()+stackOffset].push(v);
   }
   
   void
@@ -603,10 +603,11 @@ namespace MiniZinc {
             // Always leave final frame on the stack
             return;
           }
-          if (frame->stack_size == _agg.back().stack.size()-1) {
-            Val ret = _agg[_agg.size()-1].stack.back();
+          if (frame->stack_size == _agg.back().size()-1) {
+            Val ret = _agg[_agg.size()-1].back();
             _procs[frame->proc_code].cse.insert(frame->cse_key, frame->proc_mode, ret);
           }
+          _stack.back().destroy();
           _stack.pop_back();
           frame = &_stack.back();
         }
@@ -628,7 +629,7 @@ namespace MiniZinc {
             int r = frame->bs->reg(frame->pc);
             args[i] = frame->reg[r];
           }
-          std::vector<WeakVal> cse_key = std::move(WeakVal::flat_vector(args));
+          std::vector<WeakVal> cse_key = WeakVal::flat_vector(args);
           // Lookup item in CSE
           auto cse = _procs[code].cse.lookup(cse_key, mode);
           if (cse.second) {
@@ -645,7 +646,7 @@ namespace MiniZinc {
               _stack.emplace_back(_procs[code].mode[mode], code, mode);
               BytecodeFrame* newFrame = &_stack[_stack.size()-1];
               newFrame->cse_key = std::move(cse_key);
-              newFrame->stack_size = _agg.back().stack.size();
+              newFrame->stack_size = _agg.back().size();
               newFrame->reg.mov(args);
               frame = newFrame;
             }
@@ -662,7 +663,7 @@ namespace MiniZinc {
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
-            args[i] = frame->reg[r];
+            args[i].assign(frame->reg[r]);
           }
           _builtins[code](*this, args);
         }
@@ -700,17 +701,17 @@ namespace MiniZinc {
           int r = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("PUSH R" << r << " (" << frame->reg[r].toString() << ")\n");
           assert(!_agg.empty());
-          _agg.back().stack.push_back(frame->reg[r]);
+          _agg.back().push(frame->reg[r]);
         }
           break;
         case BytecodeStream::POP:
         {
           int r = frame->bs->reg(frame->pc);
           assert(!_agg.empty());
-          assert(!_agg.back().stack.empty());
-          frame->reg.assign(r, _agg.back().stack.back());
+          assert(!_agg.back().empty());
+          frame->reg.assign(r, _agg.back().back());
           DBG_INTERPRETER("POP R" << r << " (" << frame->reg[r].toString() << ")\n");
-          _agg.back().stack.pop_back();
+          _agg.back().pop();
         }
           break;
         case BytecodeStream::OPEN_AGGREGATION:
@@ -740,10 +741,10 @@ namespace MiniZinc {
               {
                 // Create a conjunction on the definition stack
                 std::vector<Val> args;
-                args.reserve(_agg.back().stack.size());
+                args.reserve(_agg.back().size());
                 bool isFalse = false;
-                for (unsigned int i=0; i<_agg.back().stack.size(); i++) {
-                  Val& v = _agg.back().stack[i];
+                for (unsigned int i=0; i<_agg.back().size(); i++) {
+                  const Val& v = _agg.back()[i];
                   if (v.isInt()) {
                     if ( v()==0 ) {
                       // Disjunction is constant false
@@ -757,6 +758,9 @@ namespace MiniZinc {
                 if (isFalse || args.empty()) {
                   // Conjunction is constant true or false
                   // Remove all elements from definition stack
+                  for (unsigned int i=_agg.back().def_stack_depth; i<_defstack.size(); i++) {
+                    _defstack[i].destroy();
+                  }
                   _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(!isFalse),-2);
                 } else {
@@ -771,13 +775,13 @@ namespace MiniZinc {
                 // to it onto the aggregation stack
                 
                 std::vector<Val> pos;
-                pos.reserve(_agg.back().stack.size());
+                pos.reserve(_agg.back().size());
                 std::vector<Val> neg;
-                neg.reserve(_agg.back().stack.size());
+                neg.reserve(_agg.back().size());
                 bool isTrue = false;
-                for (unsigned int i=0; i<_agg.back().stack.size(); i+=2) {
-                  IntVal sign = _agg.back().stack[i]();
-                  Val& v = _agg.back().stack[i+1];
+                for (unsigned int i=0; i<_agg.back().size(); i+=2) {
+                  IntVal sign = _agg.back()[i]();
+                  const Val& v = _agg.back()[i+1];
                   if (v.isInt()) {
                     if ( (sign==0 && v()==0) || (sign!=0 && v()!=0) ) {
                       // Disjunction is constant true
@@ -795,6 +799,9 @@ namespace MiniZinc {
                 if (isTrue || (pos.empty() && neg.empty())) {
                   // Disjunction is constant true or false
                   // Remove all elements from definition stack
+                  for (unsigned int i=_agg.back().def_stack_depth; i<_defstack.size(); i++) {
+                    _defstack[i].destroy();
+                  }
                   _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(isTrue),-2);
                 } else {
@@ -809,15 +816,15 @@ namespace MiniZinc {
                 // This will leave the coefficient vector, the variable vector, and a constant
                 // in the surrounding context
                 assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
-                assert(_agg.back().stack.size() % 2 == 0);
+                assert(_agg.back().size() % 2 == 0);
                 std::vector<Val> coeffs;
-                coeffs.reserve(_agg.back().stack.size());
+                coeffs.reserve(_agg.back().size());
                 std::vector<Val> vars;
-                vars.reserve(_agg.back().stack.size());
+                vars.reserve(_agg.back().size());
                 IntVal d = 0;
-                for (unsigned int i=0; i<_agg.back().stack.size(); i+=2) {
-                  Val& ci = _agg.back().stack[i];
-                  Val& vi = _agg.back().stack[i+1];
+                for (unsigned int i=0; i<_agg.back().size(); i+=2) {
+                  const Val& ci = _agg.back()[i];
+                  const Val& vi = _agg.back()[i+1];
                   if (ci() != 0) {
                     if (vi.isInt()) {
                       d += ci()*vi();
@@ -827,29 +834,30 @@ namespace MiniZinc {
                     }
                   }
                 }
-                _agg[_agg.size()-2].stack.push_back(Val(Vec::a(coeffs)));
-                _agg[_agg.size()-2].stack.push_back(Val(Vec::a(vars)));
-                _agg[_agg.size()-2].stack.push_back(d);
+                _agg[_agg.size()-2].push(Val(Vec::a(coeffs)));
+                _agg[_agg.size()-2].push(Val(Vec::a(vars)));
+                _agg[_agg.size()-2].push(d);
               }
                 break;
               case AggregationCtx::VCTX_VEC:
                 // Create a vector on the aggregation stack
                 assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
-                _agg[_agg.size()-2].stack.push_back(Val(Vec::a(_agg.back().stack)));
+                _agg[_agg.size()-2].push(_agg.back().toVec());
                 break;
               case AggregationCtx::VCTX_OTHER:
                 // When closing a VCTX_OTHER context, it should contain at most one value
-                assert(_agg.back().stack.size()<=1);
-                if (_agg.back().stack.size()==1) {
+                assert(_agg.back().size()<=1);
+                if (_agg.back().size()==1) {
                   if (_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_LIN) {
                     // add coefficient to surrounding linear context
-                    _agg[_agg.size()-2].stack.push_back(IntVal(1));
+                    _agg[_agg.size()-2].push(IntVal(1));
                   }
                   // push value onto surrounding context
-                  _agg[_agg.size()-2].stack.push_back(_agg.back().stack[0]);
+                  _agg[_agg.size()-2].push(_agg.back()[0]);
                 }
                 break;
             }
+            _agg.back().destroy();
             _agg.pop_back();
           }
         }

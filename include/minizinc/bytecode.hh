@@ -191,6 +191,9 @@ namespace MiniZinc {
       }
     }
 
+    void destroy(void);
+    void construct(void);
+
     /// Access value as vector, return element \a i
     const Val& operator [](int i) const;
     /// Access value as vector, return size
@@ -200,8 +203,6 @@ namespace MiniZinc {
       assert(isVec());
       return reinterpret_cast<Vec*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(3));
     }
-    void destroy(void);
-    void construct(void);
   public:
     explicit Val(Vec* v);
     Val(const IntVal& i=IntVal(0)) {
@@ -224,6 +225,8 @@ namespace MiniZinc {
     Val(Val&& v);
     Val& operator =(const Val& v);
     Val& operator =(Val&& v);
+    void assign(const Val& v);
+    void assign(Val&& v);
     std::string toString(void) const;
   };
   
@@ -235,8 +238,10 @@ namespace MiniZinc {
     Vec(const std::vector<Val>& v) : _size(v.size()), _ref_count(0) {
       for (unsigned int i=0; i<v.size(); i++) {
         new (&_data[i]) Val(v[i]);
+        _data[i].construct();
       }
     }
+    ~Vec(void) = delete;
   public:
     size_t size(void) const { return _size; }
     const Val& operator [](int i) const { assert(i >= 0 && i<_size); return _data[i]; }
@@ -249,7 +254,7 @@ namespace MiniZinc {
     static void dec(Vec* v) {
       if ( v && (--v->_ref_count)==0 ) {
         for (unsigned int i=0; i<v->size(); i++) {
-          (*v)[i].~Val();
+          v->_data[i].destroy();
         }
         free(v);
       }
@@ -286,7 +291,6 @@ namespace MiniZinc {
   Val::Val(Vec* v) {
     assert(v != NULL);
     _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(v) | static_cast<ptrdiff_t>(3));
-    v->inc();
   }
   inline
   void Val::construct() {
@@ -301,30 +305,38 @@ namespace MiniZinc {
     }
   }
   inline
-  Val::~Val(void) { destroy(); }
+  Val::~Val(void) { }
   inline
-  Val::Val(const Val& v) : _v(v._v) { construct(); }
+  Val::Val(const Val& v) : _v(v._v) { }
+  inline
+  Val& Val::operator =(const Val& v) {
+    _v = v._v;
+    return *this;
+  }
+  inline
+  Val& Val::operator =(Val&& v) {
+    _v = v._v;
+    v._v = nullptr;
+    return *this;
+  }
   inline
   Val::Val(Val&& v) : _v(v._v) { v._v = nullptr; }
   inline
-  Val& Val::operator =(const Val& v) {
+  void Val::assign(const Val& v) {
     if (this != &v) {
       destroy();
       _v = v._v;
       construct();
     }
-    return *this;
   }
   inline
-  Val& Val::operator =(Val&& v) {
+  void Val::assign(Val&& v) {
     if (this != &v) {
       destroy();
       _v = v._v;
       v._v = nullptr;
     }
-    return *this;
   }
-
   
   inline
   const Val& Val::operator [](int i) const {
@@ -350,26 +362,32 @@ namespace MiniZinc {
         _r.resize(r+1);
         assert(_r.size()==r+1);
       }
-      _r[r] = v;
+      _r[r].assign(v);
     }
     
     void cp(int r1, int r2) {
       assert(r1 < _r.size());
       if (r2 >= _r.size()) _r.resize(r2+1);
-      _r[r2] = _r[r1];
+      _r[r2].assign(_r[r1]);
     }
     void cp(int r1, RegisterFile& rf, int r2) {
       assert(r1 < _r.size());
       if (r2 >= rf._r.size()) rf._r.resize(r2+1);
-      rf._r[r2] = _r[r1];
+      rf._r[r2].assign(_r[r1]);
     }
     void mov(int r1, RegisterFile& rf, int r2) {
       assert(r1 < _r.size());
       if (r2 >= rf._r.size()) rf._r.resize(r2+1);
-      rf._r[r2] = std::move(_r[r1]);
+      rf._r[r2].assign(std::move(_r[r1]));
     }
     void mov(std::vector<Val>& args) {
       _r = std::move(args);
+    }
+    /// Destroy this register file
+    void destroy(void) {
+      for (auto& v : _r) {
+        v.destroy();
+      }
     }
   };
 
@@ -388,21 +406,57 @@ namespace MiniZinc {
     CallVal call;
     Definition(void) : domain(IntVal(0)), ann(IntVal(0)), call(CallVal(0,0,IntVal(0))) {}
     Definition(Val domain0,int pred0,char mode0,Val args0,Val ann0=IntVal(0))
-    : domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)) {}
+    : domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)) {
+      domain.construct();
+      ann.construct();
+      call.args.construct();
+    }
+    /// Destroy this definition
+    void destroy(void) {
+      domain.destroy();
+      ann.destroy();
+      call.args.destroy();
+    }
   };
   
   class AggregationCtx {
+  protected:
+    /// Stack of values that need to be aggregated
+    std::vector<Val> stack;
   public:
     /// Type of function represented by this context
     enum Symbol { VCTX_AND, VCTX_OR, VCTX_LIN, VCTX_VEC, VCTX_OTHER } symbol;
     /// Nesting depth for this symbol (how many of these are open)
     int n_symbols;
-    /// Stack of values that need to be aggregated
-    std::vector<Val> stack;
     /// Depth of definition stack when this frame was created
     int def_stack_depth;
+    /// Constructor
     AggregationCtx(int s, int d) : symbol(static_cast<Symbol>(s)), n_symbols(1), def_stack_depth(d) {
       assert(s >= 0 && s <= VCTX_OTHER);
+    }
+    /// Push value onto aggregation stack
+    void push(const Val& v) {
+      stack.push_back(v);
+      stack.back().construct();
+    }
+    void pop(void) {
+      stack.back().destroy();
+      stack.pop_back();
+    }
+    const Val& back(void) const {
+      return stack.back();
+    }
+    const Val& operator [](int i) const { return stack[i]; }
+    int size(void) const { return stack.size(); }
+    bool empty(void) const { return stack.empty(); }
+    Val toVec(void) const {
+      return Val(Vec::a(stack));
+    }
+    /// Close this context
+    void destroy(void) {
+      for (auto& v : stack) {
+        v.destroy();
+      }
     }
   };
 
@@ -445,6 +499,9 @@ namespace MiniZinc {
     size_t stack_size;
     BytecodeFrame(const BytecodeStream& bs0, int procedure, BytecodeProc::Mode mode)
     : reg(bs0.maxRegister()), bs(&bs0), pc(0), proc_code(procedure), proc_mode(mode) {}
+    void destroy(void) {
+      reg.destroy();
+    }
   };
 
 
