@@ -259,7 +259,7 @@ namespace MiniZinc {
         return false;
       }
       for (int i = 0; i < _size; ++i) {
-        if (not ((*this)[i] == rhs[i])) {
+        if (!((*this)[i] == rhs[i])) {
           return false;
         }
       }
