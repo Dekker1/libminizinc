@@ -377,7 +377,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, frame->reg[r1]() + frame->reg[r2]());
+          frame->reg.assign(this, r3, frame->reg[r1]() + frame->reg[r2]());
           DBG_INTERPRETER("ADDI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -386,7 +386,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, frame->reg[r1]() - frame->reg[r2]());
+          frame->reg.assign(this, r3, frame->reg[r1]() - frame->reg[r2]());
           DBG_INTERPRETER("SUBI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -395,7 +395,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, frame->reg[r1]() * frame->reg[r2]());
+          frame->reg.assign(this, r3, frame->reg[r1]() * frame->reg[r2]());
           DBG_INTERPRETER("MULI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -413,21 +413,21 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("INCI " << r1 << "\n");
-          frame->reg.assign(r1, frame->reg[r1]()+1);
+          frame->reg.assign(this, r1, frame->reg[r1]()+1);
         }
           break;
         case BytecodeStream::DECI:
         {
           int r1 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("DECI " << r1 << "\n");
-          frame->reg.assign(r1, frame->reg[r1]()-1);
+          frame->reg.assign(this, r1, frame->reg[r1]()-1);
         }
           break;
         case BytecodeStream::IMMI:
         {
           IntVal i = frame->bs->intval(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r1, i);
+          frame->reg.assign(this, r1, i);
           DBG_INTERPRETER("IMMI " << i << " " << r1 << "(" << frame->reg[r1]() << ")" << "\n");
         }
           break;
@@ -435,7 +435,7 @@ namespace MiniZinc {
         {
           int i = frame->bs->reg(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
-          _stack[0].reg.cp(i, frame->reg, r1);
+          _stack[0].reg.cp(this, i, frame->reg, r1);
           DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame->reg[r1]() << ")" << "\n");
         }
           break;
@@ -443,7 +443,7 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int i = frame->bs->reg(frame->pc);
-          frame->reg.cp(r1, _stack[0].reg, i);
+          frame->reg.cp(this, r1, _stack[0].reg, i);
           DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame->reg[r1]() << ")" << " " << i << "\n");
         }
           break;
@@ -452,7 +452,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("MOV " << r1 << " " << r2 << "\n");
-          frame->reg.cp(r1,r2);
+          frame->reg.cp(this, r1,r2);
         }
           break;
         case BytecodeStream::JMP:
@@ -487,7 +487,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, IntVal(frame->reg[r1]() == frame->reg[r2]()));
+          frame->reg.assign(this, r3, IntVal(frame->reg[r1]() == frame->reg[r2]()));
           DBG_INTERPRETER("EQI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -496,7 +496,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, IntVal(frame->reg[r1]() < frame->reg[r2]()));
+          frame->reg.assign(this, r3, IntVal(frame->reg[r1]() < frame->reg[r2]()));
           DBG_INTERPRETER("LTI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -505,7 +505,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, IntVal(frame->reg[r1]() <= frame->reg[r2]()));
+          frame->reg.assign(this, r3, IntVal(frame->reg[r1]() <= frame->reg[r2]()));
           DBG_INTERPRETER("LEI " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -514,7 +514,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, IntVal(frame->reg[r1]()!=0 && frame->reg[r2]()!=0));
+          frame->reg.assign(this, r3, IntVal(frame->reg[r1]()!=0 && frame->reg[r2]()!=0));
           DBG_INTERPRETER("AND " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -523,7 +523,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, IntVal(frame->reg[r1]()!=0 || frame->reg[r2]()!=0));
+          frame->reg.assign(this, r3, IntVal(frame->reg[r1]()!=0 || frame->reg[r2]()!=0));
           DBG_INTERPRETER("OR " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -532,7 +532,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("NOT " << r1 << " " << r2 << "\n");
-          frame->reg.assign(r2, IntVal(frame->reg[r1]()==0));
+          frame->reg.assign(this, r2, IntVal(frame->reg[r1]()==0));
         }
           break;
         case BytecodeStream::XOR:
@@ -540,7 +540,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          frame->reg.assign(r3, IntVal( (frame->reg[r1]()!=0) ^ (frame->reg[r2]()!=0)));
+          frame->reg.assign(this, r3, IntVal( (frame->reg[r1]()!=0) ^ (frame->reg[r2]()!=0)));
           DBG_INTERPRETER("XOR " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
@@ -549,18 +549,18 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           if (frame->reg[r1].isInt()) {
-            frame->reg.assign(r2, IntVal(1));
+            frame->reg.assign(this, r2, IntVal(1));
           } else if (frame->reg[r1].isRef()) {
             int r = frame->reg[r1].r()();
             assert(r >= 0 && r < _defstack.size());
             if (_defstack[r].domain.isInt()) {
-              frame->reg.assign(r1, _defstack[r].domain);
-              frame->reg.assign(r2, IntVal(1));
+              frame->reg.assign(this, r1, _defstack[r].domain);
+              frame->reg.assign(this, r2, IntVal(1));
             } else {
-              frame->reg.assign(r2, IntVal(0));
+              frame->reg.assign(this, r2, IntVal(0));
             }
           } else {
-            frame->reg.assign(r2, IntVal(0));
+            frame->reg.assign(this, r2, IntVal(0));
           }
           DBG_INTERPRETER("ISPAR " << r1  << "(" << frame->reg[r1]() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
@@ -570,7 +570,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           assert(frame->reg[r1].isVec());
-          frame->reg.assign(r2, IntVal(frame->reg[r1].size()==0));
+          frame->reg.assign(this, r2, IntVal(frame->reg[r1].size()==0));
           DBG_INTERPRETER("ISEMPTY " << r1  << "(" << frame->reg[r1].toString() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
@@ -579,7 +579,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           assert(frame->reg[r1].isVec());
-          frame->reg.assign(r2, IntVal(frame->reg[r1].size()));
+          frame->reg.assign(this, r2, IntVal(frame->reg[r1].size()));
           DBG_INTERPRETER("LENGTH " << r1  << "(" << frame->reg[r1].toString() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
@@ -592,7 +592,7 @@ namespace MiniZinc {
           assert(frame->reg[r2].isInt());
           assert(frame->reg[r2]() < frame->reg[r1].size());
           DBG_INTERPRETER("GET_VEC " << r1  << "(" << frame->reg[r1].toString() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(r3, frame->reg[r1][frame->reg[r2]().toInt()]);
+          frame->reg.assign(this, r3, frame->reg[r1][frame->reg[r2]().toInt()]);
           DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
@@ -607,7 +607,7 @@ namespace MiniZinc {
             Val ret = _agg[_agg.size()-1].back();
             _procs[frame->proc_code].cse.insert(frame->cse_key, frame->proc_mode, ret);
           }
-          _stack.back().destroy();
+          _stack.back().destroy(this);
           _stack.pop_back();
           frame = &_stack.back();
         }
@@ -663,7 +663,7 @@ namespace MiniZinc {
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
-            args[i].assign(frame->reg[r]);
+            args[i].assign(this, frame->reg[r]);
           }
           _builtins[code](*this, args);
         }
@@ -709,9 +709,9 @@ namespace MiniZinc {
           int r = frame->bs->reg(frame->pc);
           assert(!_agg.empty());
           assert(!_agg.back().empty());
-          frame->reg.assign(r, _agg.back().back());
+          frame->reg.assign(this, r, _agg.back().back());
           DBG_INTERPRETER("POP R" << r << " (" << frame->reg[r].toString() << ")\n");
-          _agg.back().pop();
+          _agg.back().pop(this);
         }
           break;
         case BytecodeStream::OPEN_AGGREGATION:
@@ -759,7 +759,7 @@ namespace MiniZinc {
                   // Conjunction is constant true or false
                   // Remove all elements from definition stack
                   for (unsigned int i=_agg.back().def_stack_depth; i<_defstack.size(); i++) {
-                    _defstack[i].destroy();
+                    _defstack[i].destroy(this);
                   }
                   _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(!isFalse),-2);
@@ -800,7 +800,7 @@ namespace MiniZinc {
                   // Disjunction is constant true or false
                   // Remove all elements from definition stack
                   for (unsigned int i=_agg.back().def_stack_depth; i<_defstack.size(); i++) {
-                    _defstack[i].destroy();
+                    _defstack[i].destroy(this);
                   }
                   _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(isTrue),-2);
@@ -857,7 +857,7 @@ namespace MiniZinc {
                 }
                 break;
             }
-            _agg.back().destroy();
+            _agg.back().destroy(this);
             _agg.pop_back();
           }
         }

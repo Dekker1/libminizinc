@@ -21,6 +21,7 @@
 namespace MiniZinc {
 
   class BytecodeProc;
+  class Interpreter;
 
   class BytecodeStream {
   protected:
@@ -191,7 +192,7 @@ namespace MiniZinc {
       }
     }
 
-    void destroy(void);
+    void destroy(Interpreter* interpreter);
     void construct(void);
 
     /// Access value as vector, return element \a i
@@ -225,17 +226,18 @@ namespace MiniZinc {
     Val(Val&& v);
     Val& operator =(const Val& v);
     Val& operator =(Val&& v);
-    void assign(const Val& v);
-    void assign(Val&& v);
+    void assign(Interpreter* interpreter, const Val& v);
+    void assign(Interpreter* interpreter, Val&& v);
     std::string toString(void) const;
   };
   
   class Vec {
   protected:
-    size_t _size;
-    int _ref_count;
+    int _size;
+    unsigned int _ref_count : 31;
+    unsigned int _in_cse : 1;
     Val _data[1];
-    Vec(const std::vector<Val>& v) : _size(v.size()), _ref_count(0) {
+    Vec(const std::vector<Val>& v) : _size(v.size()), _ref_count(0), _in_cse(0) {
       for (unsigned int i=0; i<v.size(); i++) {
         new (&_data[i]) Val(v[i]);
         _data[i].construct();
@@ -243,7 +245,9 @@ namespace MiniZinc {
     }
     ~Vec(void) = delete;
   public:
-    size_t size(void) const { return _size; }
+    int size(void) const { return _size; }
+    bool isInCSE(void) const { return _in_cse; }
+    void addToCSE(void) { _in_cse = 1; }
     const Val& operator [](int i) const { assert(i >= 0 && i<_size); return _data[i]; }
     static Vec* a(const std::vector<Val>& v) {
       Vec* nv = static_cast<Vec*>(::malloc(sizeof(Vec)+sizeof(Val)*(v.size()-1)));
@@ -251,10 +255,10 @@ namespace MiniZinc {
       return nv;
     }
     void inc(void) { _ref_count++; }
-    static void dec(Vec* v) {
+    static void dec(Interpreter* interpreter, Vec* v) {
       if ( v && (--v->_ref_count)==0 ) {
         for (unsigned int i=0; i<v->size(); i++) {
-          v->_data[i].destroy();
+          v->_data[i].destroy(interpreter);
         }
         free(v);
       }
@@ -299,9 +303,9 @@ namespace MiniZinc {
     }
   }
   inline
-  void Val::destroy() {
+  void Val::destroy(Interpreter* interpreter) {
     if (isVec()) {
-      Vec::dec(toVec());
+      Vec::dec(interpreter,toVec());
     }
   }
   inline
@@ -322,17 +326,17 @@ namespace MiniZinc {
   inline
   Val::Val(Val&& v) : _v(v._v) { v._v = nullptr; }
   inline
-  void Val::assign(const Val& v) {
+  void Val::assign(Interpreter* interpreter, const Val& v) {
     if (this != &v) {
-      destroy();
+      destroy(interpreter);
       _v = v._v;
       construct();
     }
   }
   inline
-  void Val::assign(Val&& v) {
+  void Val::assign(Interpreter* interpreter, Val&& v) {
     if (this != &v) {
-      destroy();
+      destroy(interpreter);
       _v = v._v;
       v._v = nullptr;
     }
@@ -357,36 +361,36 @@ namespace MiniZinc {
   public:
     RegisterFile(int n=0) : _r(n) {}
     const Val& operator [](int r) { assert(r < _r.size()); return _r[r]; }
-    void assign(int r, const Val& v) {
+    void assign(Interpreter* interpreter, int r, const Val& v) {
       if (r >= _r.size()) {
         _r.resize(r+1);
         assert(_r.size()==r+1);
       }
-      _r[r].assign(v);
+      _r[r].assign(interpreter,v);
     }
     
-    void cp(int r1, int r2) {
+    void cp(Interpreter* interpreter, int r1, int r2) {
       assert(r1 < _r.size());
       if (r2 >= _r.size()) _r.resize(r2+1);
-      _r[r2].assign(_r[r1]);
+      _r[r2].assign(interpreter,_r[r1]);
     }
-    void cp(int r1, RegisterFile& rf, int r2) {
+    void cp(Interpreter* interpreter, int r1, RegisterFile& rf, int r2) {
       assert(r1 < _r.size());
       if (r2 >= rf._r.size()) rf._r.resize(r2+1);
-      rf._r[r2].assign(_r[r1]);
+      rf._r[r2].assign(interpreter,_r[r1]);
     }
-    void mov(int r1, RegisterFile& rf, int r2) {
+    void mov(Interpreter* interpreter, int r1, RegisterFile& rf, int r2) {
       assert(r1 < _r.size());
       if (r2 >= rf._r.size()) rf._r.resize(r2+1);
-      rf._r[r2].assign(std::move(_r[r1]));
+      rf._r[r2].assign(interpreter,std::move(_r[r1]));
     }
     void mov(std::vector<Val>& args) {
       _r = std::move(args);
     }
     /// Destroy this register file
-    void destroy(void) {
+    void destroy(Interpreter* interpreter) {
       for (auto& v : _r) {
-        v.destroy();
+        v.destroy(interpreter);
       }
     }
   };
@@ -412,10 +416,10 @@ namespace MiniZinc {
       call.args.construct();
     }
     /// Destroy this definition
-    void destroy(void) {
-      domain.destroy();
-      ann.destroy();
-      call.args.destroy();
+    void destroy(Interpreter* interpreter) {
+      domain.destroy(interpreter);
+      ann.destroy(interpreter);
+      call.args.destroy(interpreter);
     }
   };
   
@@ -439,8 +443,8 @@ namespace MiniZinc {
       stack.push_back(v);
       stack.back().construct();
     }
-    void pop(void) {
-      stack.back().destroy();
+    void pop(Interpreter* interpreter) {
+      stack.back().destroy(interpreter);
       stack.pop_back();
     }
     const Val& back(void) const {
@@ -453,9 +457,9 @@ namespace MiniZinc {
       return Val(Vec::a(stack));
     }
     /// Close this context
-    void destroy(void) {
+    void destroy(Interpreter* interpreter) {
       for (auto& v : stack) {
-        v.destroy();
+        v.destroy(interpreter);
       }
     }
   };
@@ -499,8 +503,8 @@ namespace MiniZinc {
     size_t stack_size;
     BytecodeFrame(const BytecodeStream& bs0, int procedure, BytecodeProc::Mode mode)
     : reg(bs0.maxRegister()), bs(&bs0), pc(0), proc_code(procedure), proc_mode(mode) {}
-    void destroy(void) {
-      reg.destroy();
+    void destroy(Interpreter* interpreter) {
+      reg.destroy(interpreter);
     }
   };
 
@@ -541,7 +545,7 @@ namespace MiniZinc {
     const std::vector<Definition>& defStack(void) const { return _defstack; }
     void push(const Val& v, int stackOffset);
   };
-  
+
   std::vector<BytecodeProc> parse(const std::string& s);
 
 }
