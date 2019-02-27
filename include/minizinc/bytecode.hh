@@ -193,7 +193,7 @@ namespace MiniZinc {
     }
 
     void destroy(Interpreter* interpreter);
-    void construct(void);
+    void construct(Interpreter* interpreter);
 
     /// Access value as vector, return element \a i
     const Val& operator [](int i) const;
@@ -237,10 +237,10 @@ namespace MiniZinc {
     unsigned int _ref_count : 31;
     unsigned int _in_cse : 1;
     Val _data[1];
-    Vec(const std::vector<Val>& v) : _size(v.size()), _ref_count(0), _in_cse(0) {
+    Vec(Interpreter* interpreter, const std::vector<Val>& v) : _size(v.size()), _ref_count(0), _in_cse(0) {
       for (unsigned int i=0; i<v.size(); i++) {
         new (&_data[i]) Val(v[i]);
-        _data[i].construct();
+        _data[i].construct(interpreter);
       }
     }
     ~Vec(void) = delete;
@@ -249,9 +249,9 @@ namespace MiniZinc {
     bool isInCSE(void) const { return _in_cse; }
     void addToCSE(void) { _in_cse = 1; }
     const Val& operator [](int i) const { assert(i >= 0 && i<_size); return _data[i]; }
-    static Vec* a(const std::vector<Val>& v) {
+    static Vec* a(Interpreter* interpreter, const std::vector<Val>& v) {
       Vec* nv = static_cast<Vec*>(::malloc(sizeof(Vec)+sizeof(Val)*(v.size()-1)));
-      new (nv) Vec(v);
+      new (nv) Vec(interpreter,v);
       return nv;
     }
     void inc(void) { _ref_count++; }
@@ -297,7 +297,7 @@ namespace MiniZinc {
     _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(v) | static_cast<ptrdiff_t>(3));
   }
   inline
-  void Val::construct() {
+  void Val::construct(Interpreter* interpreter) {
     if (isVec()) {
       toVec()->inc();
     }
@@ -330,7 +330,7 @@ namespace MiniZinc {
     if (this != &v) {
       destroy(interpreter);
       _v = v._v;
-      construct();
+      construct(interpreter);
     }
   }
   inline
@@ -409,11 +409,11 @@ namespace MiniZinc {
     Val ann;
     CallVal call;
     Definition(void) : domain(IntVal(0)), ann(IntVal(0)), call(CallVal(0,0,IntVal(0))) {}
-    Definition(Val domain0,int pred0,char mode0,Val args0,Val ann0=IntVal(0))
+    Definition(Interpreter* interpreter, Val domain0,int pred0,char mode0,Val args0,Val ann0=IntVal(0))
     : domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)) {
-      domain.construct();
-      ann.construct();
-      call.args.construct();
+      domain.construct(interpreter);
+      ann.construct(interpreter);
+      call.args.construct(interpreter);
     }
     /// Destroy this definition
     void destroy(Interpreter* interpreter) {
@@ -439,9 +439,9 @@ namespace MiniZinc {
       assert(s >= 0 && s <= VCTX_OTHER);
     }
     /// Push value onto aggregation stack
-    void push(const Val& v) {
+    void push(Interpreter* interpreter, const Val& v) {
       stack.push_back(v);
-      stack.back().construct();
+      stack.back().construct(interpreter);
     }
     void pop(Interpreter* interpreter) {
       stack.back().destroy(interpreter);
@@ -453,8 +453,8 @@ namespace MiniZinc {
     const Val& operator [](int i) const { return stack[i]; }
     int size(void) const { return stack.size(); }
     bool empty(void) const { return stack.empty(); }
-    Val toVec(void) const {
-      return Val(Vec::a(stack));
+    Val toVec(Interpreter* interpreter) const {
+      return Val(Vec::a(interpreter,stack));
     }
     /// Close this context
     void destroy(Interpreter* interpreter) {

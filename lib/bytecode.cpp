@@ -360,10 +360,10 @@ namespace MiniZinc {
     assert(_agg.size()+stackOffset >= 0);
     if (_agg[_agg.size()+stackOffset].symbol==AggregationCtx::VCTX_LIN) {
       // add coefficient to surrounding linear context
-      _agg[_agg.size()+stackOffset].push(IntVal(1));
+      _agg[_agg.size()+stackOffset].push(this,IntVal(1));
     }
     // push value onto surrounding context
-    _agg[_agg.size()+stackOffset].push(v);
+    _agg[_agg.size()+stackOffset].push(this,v);
   }
   
   void
@@ -638,7 +638,7 @@ namespace MiniZinc {
             if (_procs[code].mode[mode].size()==0) {
               DBG_INTERPRETER("--- FZN Builtin\n");
               // this is a FlatZinc builtin
-              _defstack.emplace_back(IntVal(0),code,mode,Val(Vec::a(args)));
+              _defstack.emplace_back(this,IntVal(0),code,mode,Val(Vec::a(this,args)));
               Val ret = Ref(_defstack.size()-1);
               _procs[code].cse.insert(cse_key, mode, ret);
               push(ret,-1);
@@ -701,7 +701,7 @@ namespace MiniZinc {
           int r = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("PUSH R" << r << " (" << frame->reg[r].toString() << ")\n");
           assert(!_agg.empty());
-          _agg.back().push(frame->reg[r]);
+          _agg.back().push(this,frame->reg[r]);
         }
           break;
         case BytecodeStream::POP:
@@ -764,7 +764,7 @@ namespace MiniZinc {
                   _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(!isFalse),-2);
                 } else {
-                  _defstack.push_back(Definition(IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(args))));
+                  _defstack.push_back(Definition(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(this,args))));
                   push(Ref(_defstack.size()-1),-2);
                 }
               }
@@ -805,7 +805,7 @@ namespace MiniZinc {
                   _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(isTrue),-2);
                 } else {
-                  _defstack.push_back(Definition(IntVal(0),PrimitiveMap::CLAUSE,BytecodeProc::FUN,Val(Vec::a({Val(Vec::a(pos)),Val(Vec::a(neg))}))));
+                  _defstack.push_back(Definition(this,IntVal(0),PrimitiveMap::CLAUSE,BytecodeProc::FUN,Val(Vec::a(this,{Val(Vec::a(this,pos)),Val(Vec::a(this,neg))}))));
                   push(Ref(_defstack.size()-1),-2);
                 }
               }
@@ -834,15 +834,15 @@ namespace MiniZinc {
                     }
                   }
                 }
-                _agg[_agg.size()-2].push(Val(Vec::a(coeffs)));
-                _agg[_agg.size()-2].push(Val(Vec::a(vars)));
-                _agg[_agg.size()-2].push(d);
+                _agg[_agg.size()-2].push(this,Val(Vec::a(this,coeffs)));
+                _agg[_agg.size()-2].push(this,Val(Vec::a(this,vars)));
+                _agg[_agg.size()-2].push(this,d);
               }
                 break;
               case AggregationCtx::VCTX_VEC:
                 // Create a vector on the aggregation stack
                 assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
-                _agg[_agg.size()-2].push(_agg.back().toVec());
+                _agg[_agg.size()-2].push(this,_agg.back().toVec(this));
                 break;
               case AggregationCtx::VCTX_OTHER:
                 // When closing a VCTX_OTHER context, it should contain at most one value
@@ -850,10 +850,10 @@ namespace MiniZinc {
                 if (_agg.back().size()==1) {
                   if (_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_LIN) {
                     // add coefficient to surrounding linear context
-                    _agg[_agg.size()-2].push(IntVal(1));
+                    _agg[_agg.size()-2].push(this,IntVal(1));
                   }
                   // push value onto surrounding context
-                  _agg[_agg.size()-2].push(_agg.back()[0]);
+                  _agg[_agg.size()-2].push(this,_agg.back()[0]);
                 }
                 break;
             }
