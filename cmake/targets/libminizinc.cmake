@@ -125,7 +125,6 @@ add_library(minizinc_compiler
   lib/model.cpp
   lib/prettyprinter.cpp
   lib/pathfileprinter.cpp
-  lib/reader.cpp
   lib/type.cpp
   lib/typecheck.cpp
   lib/flatten.cpp
@@ -185,7 +184,6 @@ add_library(minizinc_compiler
   include/minizinc/parser.hh
   include/minizinc/prettyprinter.hh
   include/minizinc/pathfileprinter.hh
-  include/minizinc/reader.hh
   include/minizinc/statistics.hh
   include/minizinc/timer.hh
   include/minizinc/type.hh

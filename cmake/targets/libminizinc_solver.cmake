@@ -5,12 +5,14 @@ add_library(minizinc_solver
   lib/flattener.cpp
   lib/passes/compile_pass.cpp
   lib/process.cpp
+  lib/reader.cpp
   lib/solns2out.cpp
   lib/solver.cpp
   lib/solver_config.cpp
   include/minizinc/flattener.hh
   include/minizinc/passes/compile_pass.hh
   include/minizinc/process.hh
+  include/minizinc/reader.hh
   include/minizinc/solns2out.hh
   include/minizinc/solver.hh
   include/minizinc/solver_config.hh
