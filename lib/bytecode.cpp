@@ -76,7 +76,7 @@ namespace MiniZinc {
         nvec.reserve(nvec.size() + vv->size() + 1);
         nvec.emplace_back(Val(vv->size()));
         for (int i = 0; i < vv->size(); ++i) {
-          assert(not (*vv)[i].isVec());
+          assert(!(*vv)[i].isVec());
           nvec.emplace_back((*vv)[i]);
         }
       } else {
