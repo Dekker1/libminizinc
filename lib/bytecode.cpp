@@ -621,7 +621,7 @@ namespace MiniZinc {
           assert(mode_c <= BytecodeProc::MAX_MODE);
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           int n = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("CALL " << code  << " " << n << "\n");
+          DBG_INTERPRETER("CALL " << code << "(" << _procs[code].name << ")" << " " << n << "\n");
           // TODO: See if args is created when not necessary
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
@@ -647,7 +647,7 @@ namespace MiniZinc {
               BytecodeFrame* newFrame = &_stack[_stack.size()-1];
               newFrame->cse_key = std::move(cse_key);
               newFrame->stack_size = _agg.back().size();
-              newFrame->reg.mov(args);
+              newFrame->reg.mov(this,args);
               frame = newFrame;
             }
           }

@@ -365,7 +365,10 @@ namespace MiniZinc {
       if (r2 >= rf._r.size()) rf._r.resize(r2+1);
       rf._r[r2].assign(interpreter,std::move(_r[r1]));
     }
-    void mov(std::vector<Val>& args) {
+    void mov(Interpreter* interpreter, std::vector<Val>& args) {
+      for (auto& v : args) {
+        v.construct(interpreter);
+      }
       _r = std::move(args);
     }
     /// Destroy this register file
