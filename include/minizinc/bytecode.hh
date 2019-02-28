@@ -146,16 +146,9 @@ namespace MiniZinc {
   };
 
   class Vec;
+  class Definition;
   class WeakVal;
 
-  class Ref {
-  protected:
-    int _r;
-  public:
-    explicit Ref(int r) : _r(r) {}
-    int operator ()(void) const { return _r; }
-  };
-  
   /// Value tagged union
   class Val {
     friend class WeakVal;
@@ -170,15 +163,15 @@ namespace MiniZinc {
     bool isInt(void) const {
       return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == 0;
     }
-    bool isRef(void) const {
+    bool isDef(void) const {
       return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(3)) == static_cast<ptrdiff_t>(1);
     }
     bool operator==(const Val& rhs) const;
 
-    /// Access value as Ref
-    Ref r(void) const {
-      assert(isRef());
-      return Ref(reinterpret_cast<ptrdiff_t>(_v) >> 2);
+    /// Access value as Definition
+    Definition* toDef(void) const {
+      assert(isDef());
+      return reinterpret_cast<Definition*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(1));
     }
     /// Access value as IntVal
     IntVal operator() (void) const {
@@ -217,9 +210,9 @@ namespace MiniZinc {
         ubi_p = ubi_p | static_cast<ptrdiff_t>(2);
       _v = reinterpret_cast<void*>(ubi_p);
     }
-    Val(const Ref& r) {
-      ptrdiff_t ubi_p = (static_cast<ptrdiff_t>(r()) << 2) | static_cast<ptrdiff_t>(1);
-      _v = reinterpret_cast<void*>(ubi_p);
+    explicit Val(Definition* d) {
+      assert(d != NULL);
+      _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(d) | static_cast<ptrdiff_t>(1));
     }
     ~Val(void);
     Val(const Val& v);
@@ -295,18 +288,6 @@ namespace MiniZinc {
   Val::Val(Vec* v) {
     assert(v != NULL);
     _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(v) | static_cast<ptrdiff_t>(3));
-  }
-  inline
-  void Val::construct(Interpreter* interpreter) {
-    if (isVec()) {
-      toVec()->inc();
-    }
-  }
-  inline
-  void Val::destroy(Interpreter* interpreter) {
-    if (isVec()) {
-      Vec::dec(interpreter,toVec());
-    }
   }
   inline
   Val::~Val(void) { }
@@ -404,23 +385,47 @@ namespace MiniZinc {
   };
   
   class Definition {
+  protected:
+    Definition* _prev;
+    Definition* _next;
+    unsigned int _ref_count : 31;
+    unsigned int _in_cse : 1;
   public:
     Val domain;
     Val ann;
     CallVal call;
-    Definition(void) : domain(IntVal(0)), ann(IntVal(0)), call(CallVal(0,0,IntVal(0))) {}
     Definition(Interpreter* interpreter, Val domain0,int pred0,char mode0,Val args0,Val ann0=IntVal(0))
-    : domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)) {
+    : _prev(this), _next(this), _ref_count(0), _in_cse(0),
+      domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)) {
       domain.construct(interpreter);
       ann.construct(interpreter);
       call.args.construct(interpreter);
     }
-    /// Destroy this definition
+    /// Destroy and unlink this definition
     void destroy(Interpreter* interpreter) {
       domain.destroy(interpreter);
       ann.destroy(interpreter);
       call.args.destroy(interpreter);
+      _prev->_next = _next;
+      _next->_prev = _prev;
     }
+    void insertBefore(Definition* d) {
+      _prev = d->_prev;
+      _next = d;
+      d->_prev->_next = this;
+      d->_prev = this;
+    }
+    void inc(Interpreter* interpreter) { _ref_count++; }
+    static void dec(Interpreter* interpreter, Definition* d) {
+      if (--d->_ref_count==0) {
+        d->destroy(interpreter);
+        delete d;
+      }
+    }
+    Definition* prev(void) const { return _prev; }
+    Definition* next(void) const { return _next; }
+    bool isInCSE(void) const { return _in_cse; }
+    void addToCSE(void) { _in_cse = 1; }
   };
   
   class AggregationCtx {
@@ -433,10 +438,11 @@ namespace MiniZinc {
     /// Nesting depth for this symbol (how many of these are open)
     int n_symbols;
     /// Depth of definition stack when this frame was created
-    int def_stack_depth;
+    Definition* def_stack_top;
     /// Constructor
-    AggregationCtx(int s, int d) : symbol(static_cast<Symbol>(s)), n_symbols(1), def_stack_depth(d) {
+    AggregationCtx(Interpreter* interpreter, int s, Definition* t) : symbol(static_cast<Symbol>(s)), n_symbols(1), def_stack_top(t) {
       assert(s >= 0 && s <= VCTX_OTHER);
+      def_stack_top->inc(interpreter);
     }
     /// Push value onto aggregation stack
     void push(Interpreter* interpreter, const Val& v) {
@@ -461,6 +467,7 @@ namespace MiniZinc {
       for (auto& v : stack) {
         v.destroy(interpreter);
       }
+      Definition::dec(interpreter,def_stack_top);
     }
   };
 
@@ -531,20 +538,39 @@ namespace MiniZinc {
     typedef void (*builtin) (Interpreter& i, std::vector<Val> args);
   protected:
     std::vector<BytecodeFrame> _stack;
-    std::vector<Definition> _defstack;
+    Definition _defstack;
     std::vector<AggregationCtx> _agg;
     std::vector<BytecodeProc>& _procs;
     const std::vector<builtin>& _builtins;
   public:
     Interpreter(std::vector<BytecodeProc>& procs,
                 const std::vector<builtin>& builtins,
-                const BytecodeFrame& f) : _procs(procs), _builtins(builtins) {
+                const BytecodeFrame& f) : _defstack(this,IntVal(0),0,0,IntVal(0)), _procs(procs), _builtins(builtins) {
       _stack.push_back(f);
+      _defstack.inc(this);
     }
+    ~Interpreter(void);
     void run(void);
-    const std::vector<Definition>& defStack(void) const { return _defstack; }
     void push(const Val& v, int stackOffset);
+    const Definition* def_stack_head(void) const { return &_defstack; }
   };
+
+  inline
+  void Val::construct(Interpreter* interpreter) {
+    if (isVec()) {
+      toVec()->inc();
+    } else if (isDef()) {
+      toDef()->inc(interpreter);
+    }
+  }
+  inline
+  void Val::destroy(Interpreter* interpreter) {
+    if (isVec()) {
+      Vec::dec(interpreter,toVec());
+    } else if (isDef()) {
+      Definition::dec(interpreter,toDef());
+    }
+  }
 
   std::vector<BytecodeProc> parse(const std::string& s);
 

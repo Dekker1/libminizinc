@@ -43,8 +43,8 @@ namespace MiniZinc {
     std::ostringstream oss;
     if (isInt()) {
       oss << (*this)();
-    } else if (isRef()) {
-      oss << "X" << r()();
+    } else if (isDef()) {
+      oss << "X" << toDef();
     } else {
       oss << "[";
       for (unsigned int i=0; i<size(); i++) {
@@ -550,11 +550,10 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           if (frame->reg[r1].isInt()) {
             frame->reg.assign(this, r2, IntVal(1));
-          } else if (frame->reg[r1].isRef()) {
-            int r = frame->reg[r1].r()();
-            assert(r >= 0 && r < _defstack.size());
-            if (_defstack[r].domain.isInt()) {
-              frame->reg.assign(this, r1, _defstack[r].domain);
+          } else if (frame->reg[r1].isDef()) {
+            Definition* def = frame->reg[r1].toDef();
+            if (def->domain.isInt()) {
+              frame->reg.assign(this, r1, def->domain);
               frame->reg.assign(this, r2, IntVal(1));
             } else {
               frame->reg.assign(this, r2, IntVal(0));
@@ -638,8 +637,9 @@ namespace MiniZinc {
             if (_procs[code].mode[mode].size()==0) {
               DBG_INTERPRETER("--- FZN Builtin\n");
               // this is a FlatZinc builtin
-              _defstack.emplace_back(this,IntVal(0),code,mode,Val(Vec::a(this,args)));
-              Val ret = Ref(_defstack.size()-1);
+              Definition* def = new Definition(this,IntVal(0),code,mode,Val(Vec::a(this,args)));
+              def->insertBefore(&_defstack);
+              Val ret(def);
               _procs[code].cse.insert(cse_key, mode, ret);
               push(ret,-1);
             } else {
@@ -721,7 +721,7 @@ namespace MiniZinc {
           assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
           if (r==AggregationCtx::VCTX_OTHER || r==AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
             // Push a new aggregation context
-            _agg.push_back(AggregationCtx(r, _defstack.size()));
+            _agg.push_back(AggregationCtx(this, r, _defstack.prev()));
           } else {
             // Increment depth counter for current aggregation context
             _agg.back().n_symbols++;
@@ -758,14 +758,16 @@ namespace MiniZinc {
                 if (isFalse || args.empty()) {
                   // Conjunction is constant true or false
                   // Remove all elements from definition stack
-                  for (unsigned int i=_agg.back().def_stack_depth; i<_defstack.size(); i++) {
-                    _defstack[i].destroy(this);
+                  for (Definition* d = _agg.back().def_stack_top; d != &_defstack; d = d->next()) {
+                    d->destroy(this);
+                    if (!d->isInCSE())
+                      delete d;
                   }
-                  _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(!isFalse),-2);
                 } else {
-                  _defstack.push_back(Definition(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(this,args))));
-                  push(Ref(_defstack.size()-1),-2);
+                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(this,args)));
+                  d->insertBefore(&_defstack);
+                  push(Val(d),-2);
                 }
               }
                 break;
@@ -799,14 +801,16 @@ namespace MiniZinc {
                 if (isTrue || (pos.empty() && neg.empty())) {
                   // Disjunction is constant true or false
                   // Remove all elements from definition stack
-                  for (unsigned int i=_agg.back().def_stack_depth; i<_defstack.size(); i++) {
-                    _defstack[i].destroy(this);
+                  for (Definition* d = _agg.back().def_stack_top; d != &_defstack; d = d->next()) {
+                    d->destroy(this);
+                    if (!d->isInCSE())
+                      delete d;
                   }
-                  _defstack.resize(_agg.back().def_stack_depth);
                   push(IntVal(isTrue),-2);
                 } else {
-                  _defstack.push_back(Definition(this,IntVal(0),PrimitiveMap::CLAUSE,BytecodeProc::FUN,Val(Vec::a(this,{Val(Vec::a(this,pos)),Val(Vec::a(this,neg))}))));
-                  push(Ref(_defstack.size()-1),-2);
+                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::CLAUSE,BytecodeProc::FUN,Val(Vec::a(this,{Val(Vec::a(this,pos)),Val(Vec::a(this,neg))})));
+                  d->insertBefore(&_defstack);
+                  push(Val(d),-2);
                 }
               }
                 break;
@@ -1294,5 +1298,18 @@ namespace MiniZinc {
     
     return codes;
   }
-  
+
+  Interpreter::~Interpreter(void) {
+    for (auto& f : _stack) {
+      f.destroy(this);
+    }
+    for (auto& a : _agg) {
+      a.destroy(this);
+    }
+    for (Definition* d = _defstack.next(); d != &_defstack; d = d->next()) {
+      d->destroy(this);
+      delete d;
+    }
+    
+  }
 }

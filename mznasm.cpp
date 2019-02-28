@@ -77,10 +77,12 @@ int main(int argc, const char** argv) {
     interpreter.run();
     if (verbose) {
       std::cerr << "Done\n";
-      for (unsigned int i=0; i<interpreter.defStack().size(); i++) {
-        std::cerr << i << ":\t";
-        std::cerr << bs[interpreter.defStack()[i].call.pred].name<< " ";
-        std::cerr << interpreter.defStack()[i].call.args.toString() << "\n";
+      for (Definition* d = interpreter.def_stack_head()->next();
+           d != interpreter.def_stack_head();
+           d = d->next()) {
+        std::cerr << d << ":\t";
+        std::cerr << bs[d->call.pred].name << " ";
+        std::cerr << d->call.args.toString() << "\n";
       }
     }
   } catch (Error& e) {
