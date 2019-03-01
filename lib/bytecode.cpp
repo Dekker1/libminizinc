@@ -634,9 +634,11 @@ namespace MiniZinc {
             // Always leave final frame on the stack
             return;
           }
-          if (frame->stack_size == _agg.back().size()-1) {
-            Val ret = _agg[_agg.size()-1].back();
-            _procs[frame->proc_code].cse.insert(frame->cse_key, frame->proc_mode, ret);
+          for (auto& entry : frame->cse_info) {
+            if (std::get<3>(entry) == _agg.back().size()-1) {
+              Val ret = _agg[_agg.size()-1].back();
+              _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), ret);
+            }
           }
           _stack.back().destroy(this);
           _stack.pop_back();
@@ -673,13 +675,12 @@ namespace MiniZinc {
               def->insertBefore(&_defstack);
               Val ret(def);
               _procs[code].cse.insert(cse_key, mode, ret);
-              push(ret,-1);
+              push(ret, -1);
             } else {
-              _stack.emplace_back(_procs[code].mode[mode], code, mode);
+              _stack.emplace_back(_procs[code].mode[mode]);
               BytecodeFrame* newFrame = &_stack[_stack.size()-1];
-              newFrame->cse_key = std::move(cse_key);
-              newFrame->stack_size = _agg.back().size();
-              newFrame->reg.mov(this,args);
+              frame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
+              newFrame->reg.mov(this, args);
               frame = newFrame;
             }
           }
@@ -704,14 +705,38 @@ namespace MiniZinc {
         {
           char mode_c = frame->bs->chr(frame->pc);
           int code = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("TCALL " << code  << "\n");
           assert(code >= 0);
           assert(code < _procs.size());
           assert(mode_c >= 0);
           assert(mode_c <= BytecodeProc::MAX_MODE);
-          BytecodeProc::Mode mode = static_cast<BytecodeProc::Mode>(mode_c);
-          frame->bs = &_procs[code].mode[mode];
-          frame->pc = 0;
+          auto mode = static_cast<BytecodeProc::Mode>(mode_c);
+          DBG_INTERPRETER("TCALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
+          // TODO: Avoid creating the args vector
+          std::vector<Val> args(_procs[mode].nargs);
+          for (int i = 0; i < args.size(); ++i) {
+            args[i] = frame->reg[i];
+          }
+          auto cse_key = WeakVal::flat_vector(args);
+          bool found;
+          Val ret;
+          std::tie(ret, found) = _procs[code].cse.lookup(*this, cse_key, mode);
+          if (found) {
+            // RET with CSE found value
+            push(ret, -1);
+            for (auto& entry : frame->cse_info) {
+              if (std::get<3>(entry) == _agg.back().size()-1) {
+                _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), ret);
+              }
+            }
+            _stack.back().destroy(this);
+            _stack.pop_back();
+            frame = &_stack.back();
+          } else {
+            // Replace frame with new procedure
+            frame->bs = &_procs[code].mode[mode];
+            frame->cse_info.emplace_back(code, mode, std::move(cse_key));
+            frame->pc = 0;
+          }
         }
           break;
         case BytecodeStream::TRACE:
