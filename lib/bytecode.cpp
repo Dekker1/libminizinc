@@ -27,14 +27,14 @@
 namespace MiniZinc {
 
   PrimitiveMap::PrimitiveMap(void)
-  : _s({ {"clause",CLAUSE}, {"forall",FORALL}, {"lin_exp",LINEXP} }) {
+  : _s({ {"bool_not", BOOLNOT}, {"clause",CLAUSE}, {"forall",FORALL}, {"lin_exp",LINEXP} }) {
     _n.resize(_s.size());
     for (auto& entry : _s) {
       _n[entry.second] = entry.first;
     }
   }
 
-  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { CLAUSE, FORALL, LINEXP };
+  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { BOOLNOT, CLAUSE, FORALL, LINEXP };
   
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   
@@ -97,17 +97,53 @@ namespace MiniZinc {
     return hash;
   }
 
-  std::pair<Val, bool> BytecodeProc::CSETable::lookup(const std::vector<WeakVal>& key, const BytecodeProc::Mode& mode) {
+  std::pair<Val, bool> BytecodeProc::CSETable::lookup(Interpreter& interpreter, const std::vector<WeakVal>& key, const BytecodeProc::Mode& mode) {
     if (mode == RAW) {
       return std::pair<Val, bool>(Val(), false);
     }
     auto it = _table.find(key);
     if (it != _table.end()) {
-      // TODO: Convert depending on Mode!
-      assert(mode == it->second.first);
-      Val v = it->second.second.to_val();
-      DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << mode << " Value: " << v.toString() << "\n");
-      return std::make_pair(v, true);
+      Val val = it->second.second.to_val();
+      Mode val_m = it->second.first;
+      DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << val_m << " Value: " << val.toString() << "\n");
+      auto convert = [&interpreter, val_m, mode](Val v) {
+        assert(!v.isVec());
+        if (is_neg(mode) != is_neg(val_m)) {
+          Val new_val;
+          if (v.isInt()) {
+            assert(v().toInt() == 0 || v().toInt() == 1);
+            new_val = Val(1 - v().toInt());
+          } else {
+            auto nkey = WeakVal::flat_vector({v});
+            bool found;
+            std::tie(new_val, found) = interpreter._procs[PrimitiveMap::BOOLNOT].cse.lookup(interpreter, nkey, BytecodeProc::FUN);
+            if (!found) {
+              auto d = new Definition(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, v);
+              d->insertBefore(&interpreter._defstack);
+              new_val = Val(d);
+              interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(nkey, BytecodeProc::FUN, new_val);
+            }
+          }
+          return new_val;
+        }
+        return v;
+      };
+      if (mode == val_m){
+        return std::make_pair(val, true);
+      // Assumption: 'val' must be of boolean type, otherwise mode is always FUN (or RAW)
+      } else if (val_m == ROOT || val_m == ROOT_NEG) {
+        return std::make_pair(convert(val), true);
+      } else if (mode == ROOT || mode == ROOT_NEG) {
+        // TODO: Replace all occurences of val by true / false
+        return std::make_pair(Val(1), true);
+      } else if (val_m == IMP || val_m == IMP_NEG) {
+        // TODO: Replace with full reification
+        // nval = (val_m == IMP_NEG) ? neg_reification() : pos_reification();
+        // Replace usage of val with nval
+        // return std::make_pair(convert(nval), true);
+      } else {
+        return std::make_pair(convert(val), true);
+      }
     }
     return std::pair<Val, bool>(Val(), false);
   }
@@ -621,7 +657,7 @@ namespace MiniZinc {
           assert(mode_c <= BytecodeProc::MAX_MODE);
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           int n = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("CALL " << code << "(" << _procs[code].name << ")" << " " << n << "\n");
+          DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")"  << " " << n << "\n");
           // TODO: See if args is created when not necessary
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
@@ -630,7 +666,7 @@ namespace MiniZinc {
           }
           std::vector<WeakVal> cse_key = WeakVal::flat_vector(args);
           // Lookup item in CSE
-          auto cse = _procs[code].cse.lookup(cse_key, mode);
+          auto cse = _procs[code].cse.lookup(*this, cse_key, mode);
           if (cse.second) {
             push(cse.first, -1);
           } else {

@@ -485,6 +485,7 @@ namespace MiniZinc {
     /// Modes
     enum Mode { RAW, ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
     static const std::string mode_to_string[MAX_MODE+1];
+    static const bool is_neg(const Mode& mode) { return mode == ROOT_NEG || mode == FUN_NEG || mode == IMP_NEG; }
     /// The code for different modes
     BytecodeStream mode[MAX_MODE+1];
 
@@ -493,7 +494,7 @@ namespace MiniZinc {
     public:
       typedef std::unordered_map<std::vector<WeakVal>, std::pair<Mode, WeakVal>, CSEHasher> hashtable;
       typedef hashtable::iterator iterator;
-      std::pair<Val, bool> lookup(const std::vector<WeakVal>& key, const BytecodeProc::Mode& mode);
+      std::pair<Val, bool> lookup(Interpreter& interpreter, const std::vector<WeakVal>& key, const BytecodeProc::Mode& mode);
       void insert(std::vector<WeakVal>& key, const BytecodeProc::Mode& mode, const Val& val);
     protected:
       hashtable _table;
@@ -522,6 +523,7 @@ namespace MiniZinc {
   class PrimitiveMap {
   public:
     enum Primitive {
+      BOOLNOT,
       CLAUSE,
       FORALL,
       LINEXP
@@ -537,6 +539,7 @@ namespace MiniZinc {
   };
   
   class Interpreter {
+    friend class BytecodeProc::CSETable;
   public:
     typedef void (*builtin) (Interpreter& i, std::vector<Val> args);
   protected:
