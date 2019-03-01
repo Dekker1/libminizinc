@@ -976,7 +976,7 @@ namespace MiniZinc {
       bcp.name = pm[p];
       std::cerr << "add primitive " << bcp.name << " " << p << "\n";
       codes.push_back(bcp);
-      procs.insert({bcp.name,p});
+      procs.emplace(bcp.name, p);
     }
 
     std::istringstream iss(s);
@@ -987,7 +987,7 @@ namespace MiniZinc {
     std::vector<std::pair<int,std::string> > cur_labels;
     std::unordered_map<std::string, int> labels;
     for (std::string line; std::getline(iss,line); ) {
-      if (line.size() == 0 || line[0]=='%')
+      if (line.empty() || line[0]=='%')
         continue;
       
       if (line[0]==':') {
@@ -1002,20 +1002,22 @@ namespace MiniZinc {
           labels.clear();
           cur_labels.clear();
 
-          std::unordered_map<std::string, int>::iterator it = procs.find(cur_proc);
+          auto it = procs.find(cur_proc);
           if (it != procs.end()) {
             BytecodeProc& bcp = codes[it->second];
             if (bcp.mode[cur_mode].size() > 0) {
               throw Error("Error: procedure "+cur_proc+" already defined before with the same mode\n");
             }
             bcp.mode[cur_mode] = cur_code;
-            toPatch.push_back(Patch(it->second,cur_mode,cur_toPatch));
+            toPatch.emplace_back(it->second, cur_mode, cur_toPatch);
+            cur_code = BytecodeStream();
+            cur_toPatch.clear();
           } else {
             BytecodeProc bcp;
             bcp.name = cur_proc;
             bcp.mode[cur_mode] = cur_code;
             procs[cur_proc] = codes.size();
-            toPatch.push_back(Patch(codes.size(),cur_mode,cur_toPatch));
+            toPatch.emplace_back(codes.size(), cur_mode, cur_toPatch);
             codes.push_back(bcp);
             cur_code = BytecodeStream();
             cur_toPatch.clear();
@@ -1104,17 +1106,17 @@ namespace MiniZinc {
         cur_code.addReg(r2);
       } else if (instrS(line,"JMP",rs)) {
         cur_code.addInstr(BytecodeStream::JMP);
-        cur_labels.push_back(std::make_pair(cur_code.size(),rs));
+        cur_labels.emplace_back(cur_code.size(), rs);
         cur_code.addSmallInt(0); // placeholder
       } else if (instrRS(line,"JMPIF",r1,rs)) {
         cur_code.addInstr(BytecodeStream::JMPIF);
         cur_code.addReg(r1);
-        cur_labels.push_back(std::make_pair(cur_code.size(),rs));
+        cur_labels.emplace_back(cur_code.size(), rs);
         cur_code.addSmallInt(0); // placeholder
       } else if (instrRS(line,"JMPIFNOT",r1,rs)) {
         cur_code.addInstr(BytecodeStream::JMPIFNOT);
         cur_code.addReg(r1);
-        cur_labels.push_back(std::make_pair(cur_code.size(),rs));
+        cur_labels.emplace_back(cur_code.size(), rs);
         cur_code.addSmallInt(0); // placeholder
       } else if (instrRRR(line,"EQI",r1,r2,r3)) {
         cur_code.addInstr(BytecodeStream::EQI);
@@ -1193,7 +1195,7 @@ namespace MiniZinc {
         }
         std::string n0 = n.substr(n.find(' ')+1);
         std::string rs = n0.substr(0, n0.find(' '));
-        cur_toPatch.push_back(std::make_pair(cur_code.size(),rs));
+        cur_toPatch.emplace_back(cur_code.size(), rs);
         cur_code.addSmallInt(0); // placeholder
         std::string n1 = n0.substr(n0.find(' ')+1);
         int n_args = std::stoi(n1.substr(0,n1.find(' ')));
@@ -1225,7 +1227,7 @@ namespace MiniZinc {
         }
         std::string n0 = n.substr(n.find(' ')+1);
         std::string rs = n0.substr(0, n0.find(' '));
-        cur_toPatch.push_back(std::make_pair(cur_code.size(),rs));
+        cur_toPatch.emplace_back(cur_code.size(), rs);
         cur_code.addSmallInt(0); // placeholder
       } else if (instrR(line,"TRACE",r1)) {
         cur_code.addInstr(BytecodeStream::TRACE);
@@ -1268,20 +1270,22 @@ namespace MiniZinc {
       }
       labels.clear();
       cur_labels.clear();
-      
-      std::unordered_map<std::string, int>::iterator it = procs.find(cur_proc);
+
+      auto it = procs.find(cur_proc);
       if (it != procs.end()) {
         BytecodeProc& bcp = codes[it->second];
         if (bcp.mode[cur_mode].size() > 0) {
           throw Error("Error: procedure "+cur_proc+" already defined before with the same mode\n");
         }
         bcp.mode[cur_mode] = cur_code;
+        cur_code = BytecodeStream();
+        cur_toPatch.clear();
       } else {
         BytecodeProc bcp;
         bcp.name = cur_proc;
         bcp.mode[cur_mode] = cur_code;
         procs[cur_proc] = codes.size();
-        toPatch.push_back(Patch(codes.size(),cur_mode,cur_toPatch));
+        toPatch.emplace_back(codes.size(), cur_mode, cur_toPatch);
         codes.push_back(bcp);
         cur_code = BytecodeStream();
         cur_toPatch.clear();
