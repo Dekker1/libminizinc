@@ -482,6 +482,8 @@ namespace MiniZinc {
   public:
     /// The name of this procedure
     std::string name;
+    /// Number of arguments
+    int nargs;
     /// Modes
     enum Mode { RAW, ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
     static const std::string mode_to_string[MAX_MODE+1];

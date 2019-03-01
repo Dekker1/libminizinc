@@ -295,16 +295,12 @@ namespace MiniZinc {
           break;
         case BytecodeStream::CALL:
         {
-          BytecodeProc::Mode m = static_cast<BytecodeProc::Mode>(chr(pc));
+          auto m = static_cast<BytecodeProc::Mode>(chr(pc));
           int p = reg(pc);
-          if (procs.empty()) {
-            oss << "CALL " << BytecodeProc::mode_to_string[m] << " " << p << " ";
-          } else {
-            oss << "CALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << " ";
-          }
-          int n=reg(pc);
-          oss << n;
-          for (int i=0; i<n; i++) {
+          assert(!procs.empty());
+          oss << "CALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << " ";
+          oss << procs[p].nargs;
+          for (int i=0; i<procs[p].nargs; i++) {
             oss << " R" << reg(pc);
           }
           oss << "\n";
@@ -656,8 +652,8 @@ namespace MiniZinc {
           assert(mode_c >= 0);
           assert(mode_c <= BytecodeProc::MAX_MODE);
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
-          int n = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")"  << " " << n << "\n");
+          int n = _procs[code].nargs;
+          DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
           // TODO: See if args is created when not necessary
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
@@ -1019,6 +1015,7 @@ namespace MiniZinc {
     std::string cur_proc;
     BytecodeProc::Mode cur_mode;
     BytecodeStream cur_code;
+    int cur_proc_nargs;
     std::vector<std::pair<int,std::string> > cur_toPatch;
     std::vector<std::pair<int,std::string> > cur_labels;
     std::unordered_map<std::string, int> labels;
@@ -1052,6 +1049,7 @@ namespace MiniZinc {
             BytecodeProc bcp;
             bcp.name = cur_proc;
             bcp.mode[cur_mode] = cur_code;
+            bcp.nargs = cur_proc_nargs;
             procs[cur_proc] = codes.size();
             toPatch.emplace_back(codes.size(), cur_mode, cur_toPatch);
             codes.push_back(bcp);
@@ -1061,7 +1059,8 @@ namespace MiniZinc {
         }
         size_t finalColon = line.find(':',1);
         cur_proc = line.substr(1,finalColon-1);
-        std::string newMode = line.substr(finalColon+1);
+        size_t space = line.find(' ');
+        std::string newMode = line.substr(finalColon+1, space-(finalColon+1));
         if (newMode=="RAW") {
           cur_mode = BytecodeProc::RAW;
         } else if (newMode=="ROOT") {
@@ -1079,6 +1078,7 @@ namespace MiniZinc {
         } else {
           cur_mode = BytecodeProc::FUN;
         }
+        cur_proc_nargs = std::stoi(line.substr(space+1));
         continue;
       }
       
@@ -1229,17 +1229,21 @@ namespace MiniZinc {
         } else {
           throw Error("Invalid mode:\n"+line+"\n");
         }
-        std::string n0 = n.substr(n.find(' ')+1);
-        std::string rs = n0.substr(0, n0.find(' '));
+        n = n.substr(n.find(' ')+1);
+        std::string rs = n.substr(0, n.find(' '));
         cur_toPatch.emplace_back(cur_code.size(), rs);
         cur_code.addSmallInt(0); // placeholder
-        std::string n1 = n0.substr(n0.find(' ')+1);
-        int n_args = std::stoi(n1.substr(0,n1.find(' ')));
-        cur_code.addSmallInt(n_args);
-        for (int i=0; i<n_args; i++) {
-          n1 = n1.substr(n1.find(" R")+2);
-          int r = std::stoi(n1.substr(0,n1.find(' ')));
-          cur_code.addReg(r);
+        n = n.substr(n.find(' '));
+        int n_args = 0;
+        std::vector<int> args;
+        size_t pos = n.find(" R");
+        while (pos != std::string::npos) {
+          n = n.substr(pos+2);
+          args.push_back(std::stoi(n.substr(0,n.find(' '))));
+          pos = n.find(" R");
+        }
+        for(auto arg : args) {
+          cur_code.addReg(arg);
         }
       } else if (startsWith(line,"TCALL ")) {
         cur_code.addInstr(BytecodeStream::TCALL);
@@ -1320,6 +1324,7 @@ namespace MiniZinc {
         BytecodeProc bcp;
         bcp.name = cur_proc;
         bcp.mode[cur_mode] = cur_code;
+        bcp.nargs = cur_proc_nargs;
         procs[cur_proc] = codes.size();
         toPatch.emplace_back(codes.size(), cur_mode, cur_toPatch);
         codes.push_back(bcp);
