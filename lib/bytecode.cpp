@@ -635,7 +635,9 @@ namespace MiniZinc {
             return;
           }
           for (auto& entry : frame->cse_info) {
-            if (std::get<3>(entry) == _agg.back().size()-1) {
+            if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
+              _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), Val(1));
+            } else if (std::get<3>(entry) == _agg.back().size()-1) {
               Val ret = _agg[_agg.size()-1].back();
               _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), ret);
             }
@@ -666,9 +668,17 @@ namespace MiniZinc {
           // Lookup item in CSE
           auto cse = _procs[code].cse.lookup(*this, cse_key, mode);
           if (cse.second) {
-            push(cse.first, -1);
+            if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+              assert(cse.first.isInt());
+              if (cse.first().toInt() != 1) {
+                // TODO: The model is inconsistent!
+                throw Error("Error: Model Inconsistent!");
+              }
+            } else {
+              push(cse.first, -1);
+            }
           } else {
-            if (_procs[code].mode[mode].size()==0) {
+            if (_procs[code].mode[mode].size() == 0) {
               DBG_INTERPRETER("--- FZN Builtin\n");
               // this is a FlatZinc builtin
               Definition* def = new Definition(this,IntVal(0),code,mode,Val(Vec::a(this,args)));
@@ -679,7 +689,7 @@ namespace MiniZinc {
             } else {
               _stack.emplace_back(_procs[code].mode[mode]);
               BytecodeFrame* newFrame = &_stack[_stack.size()-1];
-              frame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
+              newFrame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
               newFrame->reg.mov(this, args);
               frame = newFrame;
             }
