@@ -77,13 +77,7 @@ int main(int argc, const char** argv) {
     interpreter.run();
     if (verbose) {
       std::cerr << "Done\n";
-      for (Definition* d = interpreter.def_stack_head()->next();
-           d != interpreter.def_stack_head();
-           d = d->next()) {
-        std::cerr << d << ":\t";
-        std::cerr << bs[d->call.pred].name << " ";
-        std::cerr << d->call.args.toString() << "\n";
-      }
+      Definition::dump(frame.def_stack, bs, std::cerr, true);
     }
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";

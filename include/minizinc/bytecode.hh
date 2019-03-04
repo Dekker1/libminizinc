@@ -393,13 +393,15 @@ namespace MiniZinc {
     Definition* _next;
     unsigned int _ref_count : 31;
     unsigned int _in_cse : 1;
+    const int _ident;
   public:
     Val domain;
     Val ann;
     CallVal call;
-    Definition(Interpreter* interpreter, Val domain0,int pred0,char mode0,Val args0,Val ann0=IntVal(0))
-    : _prev(this), _next(this), _ref_count(0), _in_cse(0),
-      domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)) {
+    Definition* defs;
+    Definition(Interpreter* interpreter, Val domain0,int pred0,char mode0,Val args0,int ident,Val ann0=IntVal(0))
+    : _prev(this), _next(this), _ref_count(0), _in_cse(0), _ident(ident),
+      domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)), defs(nullptr) {
       domain.construct(interpreter);
       ann.construct(interpreter);
       call.args.construct(interpreter);
@@ -412,11 +414,27 @@ namespace MiniZinc {
       _prev->_next = _next;
       _next->_prev = _prev;
     }
+    /// Insert singleton element into list before \a d
     void insertBefore(Definition* d) {
+      assert(_prev==_next);
       _prev = d->_prev;
       _next = d;
       d->_prev->_next = this;
       d->_prev = this;
+    }
+    /// Append list to other list before \a d
+    void appendBefore(Definition* d) {
+      Definition* e = d->_prev;      
+      d->_prev = this;
+      _next = d;
+      e->_next = this;
+      _prev = e;
+    }
+    void unlink(void) {
+      _prev->_next = _next;
+      _next->_prev = _prev;
+      _next = this;
+      _prev = this;
     }
     void inc(Interpreter* interpreter) { _ref_count++; }
     static void dec(Interpreter* interpreter, Definition* d) {
@@ -429,6 +447,17 @@ namespace MiniZinc {
     Definition* next(void) const { return _next; }
     bool isInCSE(void) const { return _in_cse; }
     void addToCSE(void) { _in_cse = 1; }
+    int ident(void) const { return _ident; }
+    int listSize(void) const {
+      int i=1;
+      if (_next != this) {
+        for (Definition* d = _next; d != this; d = d->next()) {
+          i++;
+        }
+      }
+      return i;
+    }
+    static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead=true);
   };
   
   class AggregationCtx {
@@ -508,15 +537,19 @@ namespace MiniZinc {
     RegisterFile reg;
     const BytecodeStream* bs;
     int pc;
-
+    Definition* def_stack;
+    
     // CSE information for RET statement
     // <proc, mode, cse_key, stack size>
     typedef std::tuple<int,BytecodeProc::Mode, std::vector<WeakVal>, size_t> CSEInfo;
     std::vector<CSEInfo> cse_info;
 
-    BytecodeFrame(const BytecodeStream& bs0) : reg(bs0.maxRegister()), bs(&bs0), pc(0) {}
+    BytecodeFrame(const BytecodeStream& bs0) : reg(bs0.maxRegister()), bs(&bs0), pc(0), def_stack(new Definition(nullptr,IntVal(0),0,0,IntVal(0),-1)) {
+      def_stack->inc(nullptr);
+    }
     void destroy(Interpreter* interpreter) {
       reg.destroy(interpreter);
+      Definition::dec(interpreter, def_stack);
     }
   };
 
@@ -545,21 +578,23 @@ namespace MiniZinc {
     typedef void (*builtin) (Interpreter& i, std::vector<Val> args);
   protected:
     std::vector<BytecodeFrame> _stack;
-    Definition _defstack;
     std::vector<AggregationCtx> _agg;
     std::vector<BytecodeProc>& _procs;
     const std::vector<builtin>& _builtins;
+    int _identCount;
   public:
     Interpreter(std::vector<BytecodeProc>& procs,
                 const std::vector<builtin>& builtins,
-                const BytecodeFrame& f) : _defstack(this,IntVal(0),0,0,IntVal(0)), _procs(procs), _builtins(builtins) {
+                const BytecodeFrame& f) : _procs(procs), _builtins(builtins), _identCount(0)
+    {
       _stack.push_back(f);
-      _defstack.inc(this);
     }
     ~Interpreter(void);
     void run(void);
-    void push(const Val& v, int stackOffset);
-    const Definition* def_stack_head(void) const { return &_defstack; }
+    void pushAgg(const Val& v, int stackOffset);
+    void pushDef(BytecodeFrame* frame, Definition* d);
+    int newIdent(void) { return _identCount++; }
+    int currentIdent(void) const { return _identCount; }
   };
 
   inline

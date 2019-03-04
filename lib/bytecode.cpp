@@ -26,6 +26,40 @@
 
 namespace MiniZinc {
 
+  void
+  Definition::dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead) {
+    std::vector<std::tuple<Definition*,int,bool>> defstack;
+    defstack.push_back(std::make_tuple(d,0,ignoreHead));
+    while (!defstack.empty()) {
+      Definition* head;
+      int indent;
+      bool ignore;
+      std::tie(head,indent,ignore) = defstack.back();
+      defstack.pop_back();
+      if (head) {
+        Definition* d = ignore ? head->next() : head;
+        do {
+          for (unsigned int i=0; i<indent; i++)
+            os << "  ";
+          if (d->ident() >=0) {
+            os << d->ident() << "(";
+          }
+          os << d;
+          if (d->ident() >=0) {
+            os << ")";
+          }
+          os << ":\t";
+          os << bs[d->call.pred].name << " ";
+          os << d->call.args.toString() << "\n";
+          d = d->next();
+          if (d->defs)
+            defstack.push_back(std::make_tuple(d->defs,indent+2,false));
+        } while (d != head);
+      }
+    }
+  }
+
+  
   PrimitiveMap::PrimitiveMap(void)
   : _s({ {"bool_not", BOOLNOT}, {"clause",CLAUSE}, {"forall",FORALL}, {"lin_exp",LINEXP} }) {
     _n.resize(_s.size());
@@ -44,7 +78,13 @@ namespace MiniZinc {
     if (isInt()) {
       oss << (*this)();
     } else if (isDef()) {
-      oss << "X" << toDef();
+      if (toDef()->ident() >= 0) {
+        oss << "X" << toDef()->ident() << "(";
+      }
+      oss << toDef();
+      if (toDef()->ident() >= 0) {
+        oss << ")";
+      }
     } else {
       oss << "[";
       for (unsigned int i=0; i<size(); i++) {
@@ -118,8 +158,8 @@ namespace MiniZinc {
             bool found;
             std::tie(new_val, found) = interpreter._procs[PrimitiveMap::BOOLNOT].cse.lookup(interpreter, nkey, BytecodeProc::FUN);
             if (!found) {
-              auto d = new Definition(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, v);
-              d->insertBefore(&interpreter._defstack);
+              auto d = new Definition(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, v, interpreter.newIdent());
+              interpreter.pushDef(&interpreter._stack.back(),d);
               new_val = Val(d);
               interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(nkey, BytecodeProc::FUN, new_val);
             }
@@ -387,7 +427,7 @@ namespace MiniZinc {
   }
   
   void
-  Interpreter::push(const Val& v, int stackOffset) {
+  Interpreter::pushAgg(const Val& v, int stackOffset) {
     assert(stackOffset < 0);
     assert(_agg.size()+stackOffset >= 0);
     if (_agg[_agg.size()+stackOffset].symbol==AggregationCtx::VCTX_LIN) {
@@ -396,6 +436,11 @@ namespace MiniZinc {
     }
     // push value onto surrounding context
     _agg[_agg.size()+stackOffset].push(this,v);
+  }
+  
+  void
+  Interpreter::pushDef(BytecodeFrame* frame, Definition* d) {
+    d->insertBefore(frame->def_stack);
   }
   
   void
@@ -634,6 +679,61 @@ namespace MiniZinc {
             // Always leave final frame on the stack
             return;
           }
+          assert(!frame->cse_info.empty());
+          
+          // Definitions to be promoted to parent frame
+          Definition* defs = nullptr;
+          
+          if (std::get<3>(frame->cse_info.back()) == _agg.back().size()-1) {
+            // Call returns exactly one value, so attach its definitions to that value
+            if (frame->def_stack->next() != frame->def_stack) {
+              bool foundDef = false;
+              if (_agg.back().back().isDef()) {
+                // Call actually produced some definitions, unlink them from the frame's head
+                // and add them to the return value
+                Definition* rest = frame->def_stack->next();
+                for (Definition* d = frame->def_stack->next(); d != frame->def_stack; d = d->next()) {
+                  if (d == _agg.back().back().toDef()) {
+                    foundDef = true;
+                    if (d == rest) {
+                      // point defs to next element or null
+                      if (rest->next()==frame->def_stack) {
+                        rest = nullptr;
+                      } else {
+                        rest = rest->next();
+                      }
+                    }
+                    d->unlink();
+                    d->defs = rest;
+                    defs = d;
+                    break;
+                  }
+                }
+                frame->def_stack->unlink(); // unlinks definitions from frame
+              }
+              if (!foundDef) {
+                // Call produced definitions, but is returning something else,
+                // so we can remove all definitions
+                for (Definition* d = frame->def_stack->next(); d != frame->def_stack; d = d->next()) {
+                  d->destroy(this);
+                  if (!d->isInCSE())
+                    delete d;
+                }
+              }
+            }
+          } else {
+            // call returns multiple values, add its definitions to parent
+            if (frame->def_stack->next() != frame->def_stack) {
+              defs = frame->def_stack->next();
+              frame->def_stack->unlink();
+            }
+          }
+          
+          if (defs) {
+            // Move d to parent frame
+            defs->appendBefore(_stack[_stack.size()-2].def_stack);
+          }
+          
           for (auto& entry : frame->cse_info) {
             if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
               _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), Val(1));
@@ -675,17 +775,26 @@ namespace MiniZinc {
                 throw Error("Error: Model Inconsistent!");
               }
             } else {
-              push(cse.first, -1);
+              pushAgg(cse.first, -1);
             }
           } else {
             if (_procs[code].mode[mode].size() == 0) {
               DBG_INTERPRETER("--- FZN Builtin\n");
               // this is a FlatZinc builtin
-              Definition* def = new Definition(this,IntVal(0),code,mode,Val(Vec::a(this,args)));
-              def->insertBefore(&_defstack);
-              Val ret(def);
-              _procs[code].cse.insert(cse_key, mode, ret);
-              push(ret, -1);
+              int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
+              Definition* def = new Definition(this,IntVal(0),code,mode,Val(Vec::a(this,args)),ident);
+              pushDef(frame,def);
+              switch (mode) {
+                case BytecodeProc::ROOT:
+                  _procs[code].cse.insert(cse_key, mode, IntVal(1));
+                  break;
+                case BytecodeProc::ROOT_NEG:
+                  _procs[code].cse.insert(cse_key, mode, IntVal(0));
+                  break;
+                default:
+                  _procs[code].cse.insert(cse_key, mode, Val(def));
+                  pushAgg(Val(def), -1);
+              }
             } else {
               _stack.emplace_back(_procs[code].mode[mode]);
               BytecodeFrame* newFrame = &_stack[_stack.size()-1];
@@ -739,7 +848,7 @@ namespace MiniZinc {
                 throw Error("Error: Model Inconsistent!");
               }
             } else {
-              push(ret, -1);
+              pushAgg(ret, -1);
             }
             for (auto& entry : frame->cse_info) {
               if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
@@ -798,7 +907,7 @@ namespace MiniZinc {
           assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
           if (r==AggregationCtx::VCTX_OTHER || r==AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
             // Push a new aggregation context
-            _agg.push_back(AggregationCtx(this, r, _defstack.prev()));
+            _agg.push_back(AggregationCtx(this, r, frame->def_stack->prev()));
           } else {
             // Increment depth counter for current aggregation context
             _agg.back().n_symbols++;
@@ -835,16 +944,16 @@ namespace MiniZinc {
                 if (isFalse || args.empty()) {
                   // Conjunction is constant true or false
                   // Remove all elements from definition stack
-                  for (Definition* d = _agg.back().def_stack_top; d != &_defstack; d = d->next()) {
+                  for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
                     d->destroy(this);
                     if (!d->isInCSE())
                       delete d;
                   }
-                  push(IntVal(!isFalse),-2);
+                  pushAgg(IntVal(!isFalse),-2);
                 } else {
-                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(this,args)));
-                  d->insertBefore(&_defstack);
-                  push(Val(d),-2);
+                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(this,args)),newIdent());
+                  pushDef(frame,d);
+                  pushAgg(Val(d),-2);
                 }
               }
                 break;
@@ -878,16 +987,18 @@ namespace MiniZinc {
                 if (isTrue || (pos.empty() && neg.empty())) {
                   // Disjunction is constant true or false
                   // Remove all elements from definition stack
-                  for (Definition* d = _agg.back().def_stack_top; d != &_defstack; d = d->next()) {
+                  for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
                     d->destroy(this);
                     if (!d->isInCSE())
                       delete d;
                   }
-                  push(IntVal(isTrue),-2);
+                  pushAgg(IntVal(isTrue),-2);
                 } else {
-                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::CLAUSE,BytecodeProc::FUN,Val(Vec::a(this,{Val(Vec::a(this,pos)),Val(Vec::a(this,neg))})));
-                  d->insertBefore(&_defstack);
-                  push(Val(d),-2);
+                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::CLAUSE,
+                                                 BytecodeProc::FUN,Val(Vec::a(this,{Val(Vec::a(this,pos)),Val(Vec::a(this,neg))})),
+                                                 newIdent());
+                  pushDef(frame,d);
+                  pushAgg(Val(d),-2);
                 }
               }
                 break;
@@ -1051,7 +1162,7 @@ namespace MiniZinc {
     for (const PrimitiveMap::Primitive& p : PrimitiveMap::ALL) {
       BytecodeProc bcp;
       bcp.name = pm[p];
-      std::cerr << "add primitive " << bcp.name << " " << p << "\n";
+      DBG_INTERPRETER("add primitive " << bcp.name << " " << p << "\n");
       codes.push_back(bcp);
       procs.emplace(bcp.name, p);
     }
@@ -1396,10 +1507,5 @@ namespace MiniZinc {
     for (auto& a : _agg) {
       a.destroy(this);
     }
-    for (Definition* d = _defstack.next(); d != &_defstack; d = d->next()) {
-      d->destroy(this);
-      delete d;
-    }
-    
   }
 }
