@@ -732,9 +732,19 @@ namespace MiniZinc {
           std::tie(ret, found) = _procs[code].cse.lookup(*this, cse_key, mode);
           if (found) {
             // RET with CSE found value
-            push(ret, -1);
+            if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+              assert(ret.isInt());
+              if (ret().toInt() != 1) {
+                // TODO: The model is inconsistent!
+                throw Error("Error: Model Inconsistent!");
+              }
+            } else {
+              push(ret, -1);
+            }
             for (auto& entry : frame->cse_info) {
-              if (std::get<3>(entry) == _agg.back().size()-1) {
+              if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
+                _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), Val(1));
+              } else if (std::get<3>(entry) == _agg.back().size()-1) {
                 _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), ret);
               }
             }
