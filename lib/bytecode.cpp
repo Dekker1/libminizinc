@@ -754,7 +754,7 @@ namespace MiniZinc {
           } else {
             // Replace frame with new procedure
             frame->bs = &_procs[code].mode[mode];
-            frame->cse_info.emplace_back(code, mode, std::move(cse_key));
+            frame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
             frame->pc = 0;
           }
         }
