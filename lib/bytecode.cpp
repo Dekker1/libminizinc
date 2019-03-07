@@ -27,36 +27,26 @@
 namespace MiniZinc {
 
   void
-  Definition::dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead) {
-    std::vector<std::tuple<Definition*,int,bool>> defstack;
-    defstack.push_back(std::make_tuple(d,0,ignoreHead));
-    while (!defstack.empty()) {
-      Definition* head;
-      int indent;
-      bool ignore;
-      std::tie(head,indent,ignore) = defstack.back();
-      defstack.pop_back();
-      if (head) {
-        Definition* d = ignore ? head->next() : head;
-        do {
-          for (unsigned int i=0; i<indent; i++)
-            os << "  ";
-          if (d->ident() >=0) {
-            os << d->ident() << "(";
-          }
-          os << d;
-          if (d->ident() >=0) {
-            os << ")";
-          }
-          os << ":\t";
-          os << bs[d->call.pred].name << " ";
-          os << d->call.args.toString() << "\n";
-          d = d->next();
-          if (d->defs)
-            defstack.push_back(std::make_tuple(d->defs,indent+2,false));
-        } while (d != head);
+  Definition::dump(Definition* head, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead, int indent) {
+    Definition* d = ignoreHead ? head->next() : head;
+    do {
+      assert(d->call.pred != 0);
+      for (unsigned int i=0; i<indent; i++)
+        os << "  ";
+      if (d->ident() >=0) {
+        os << d->ident() << "(";
       }
-    }
+      os << d << "." << d->_ref_count;
+      if (d->ident() >=0) {
+        os << ")";
+      }
+      os << ":\t";
+      os << bs[d->call.pred].name << " ";
+      os << d->call.args.toString() << "\n";
+      if (d->defs)
+        dump(d->defs,bs,os,false,indent+2);
+      d = d->next();
+    } while (d != head);
   }
 
   
@@ -681,51 +671,37 @@ namespace MiniZinc {
           }
           assert(!frame->cse_info.empty());
           
+          // First remove all references to new definitions that
+          // may still be stored in registers
+          _stack.back().destroyRegisters(this);
+
           // Definitions to be promoted to parent frame
           Definition* defs = nullptr;
           
-          if (std::get<3>(frame->cse_info.back()) == _agg.back().size()-1) {
-            // Call returns exactly one value, so attach its definitions to that value
-            if (frame->def_stack->next() != frame->def_stack) {
-              bool foundDef = false;
-              if (_agg.back().back().isDef()) {
-                // Call actually produced some definitions, unlink them from the frame's head
-                // and add them to the return value
-                Definition* rest = frame->def_stack->next();
-                for (Definition* d = frame->def_stack->next(); d != frame->def_stack; d = d->next()) {
-                  if (d == _agg.back().back().toDef()) {
-                    foundDef = true;
-                    if (d == rest) {
-                      // point defs to next element or null
-                      if (rest->next()==frame->def_stack) {
-                        rest = nullptr;
-                      } else {
-                        rest = rest->next();
-                      }
-                    }
-                    d->unlink();
-                    d->defs = rest;
-                    defs = d;
-                    break;
-                  }
-                }
-                frame->def_stack->unlink(); // unlinks definitions from frame
-              }
-              if (!foundDef) {
-                // Call produced definitions, but is returning something else,
-                // so we can remove all definitions
-                for (Definition* d = frame->def_stack->next(); d != frame->def_stack; d = d->next()) {
-                  d->destroy(this);
-                  if (!d->isInCSE())
-                    delete d;
+          // get definitions that were added during this call
+          if (frame->def_stack->next() != frame->def_stack) {
+            defs = frame->def_stack->next();
+            // unlink definitions from frame, to get rid of dummy head element
+            frame->def_stack->unlink();
+          }
+
+          if (defs && std::get<3>(frame->cse_info.back()) == _agg.back().size()-1 && _agg.back().back().isDef()) {
+            // Call produced constraints and exactly one return value, which is a definition
+            Definition* ret = _agg.back().back().toDef();
+            if (ret->ident() >= frame->def_ident_start) {
+              // the definition was produced by the current frame, so
+              // attach all other defs to it
+              if (ret == defs) {
+                if (defs->next()==defs) {
+                  defs = nullptr;
+                } else {
+                  defs = defs->next();
                 }
               }
-            }
-          } else {
-            // call returns multiple values, add its definitions to parent
-            if (frame->def_stack->next() != frame->def_stack) {
-              defs = frame->def_stack->next();
-              frame->def_stack->unlink();
+              ret->unlink();
+              ret->makeUniqueReference();
+              ret->defs = defs;
+              defs = ret;
             }
           }
           
@@ -742,7 +718,7 @@ namespace MiniZinc {
               _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), ret);
             }
           }
-          _stack.back().destroy(this);
+          _stack.back().destroyDefs(this);
           _stack.pop_back();
           frame = &_stack.back();
         }
@@ -796,7 +772,7 @@ namespace MiniZinc {
                   pushAgg(Val(def), -1);
               }
             } else {
-              _stack.emplace_back(_procs[code].mode[mode]);
+              _stack.emplace_back(_procs[code].mode[mode], currentIdent());
               BytecodeFrame* newFrame = &_stack[_stack.size()-1];
               newFrame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
               newFrame->reg.mov(this, args);
@@ -1501,6 +1477,7 @@ namespace MiniZinc {
   }
 
   Interpreter::~Interpreter(void) {
+    int fc = 0;
     for (auto& f : _stack) {
       f.destroy(this);
     }

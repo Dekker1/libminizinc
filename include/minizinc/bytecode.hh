@@ -377,6 +377,11 @@ namespace MiniZinc {
         v.destroy(interpreter);
       }
     }
+    void dump(std::ostream& os) {
+      for (unsigned int i=0; i<_r.size(); i++) {
+        os << "  R" << i << " = " << _r[i].toString() << "\n";
+      }
+    }
   };
 
   class CallVal {
@@ -411,6 +416,25 @@ namespace MiniZinc {
       domain.destroy(interpreter);
       ann.destroy(interpreter);
       call.args.destroy(interpreter);
+      _ref_count = (1u<<31u)-1u;
+      if (defs) {
+        // destroy all linked definitions
+        Definition* d = defs;
+        bool finished = false;
+        while (!finished) {
+          Definition* cur = d;
+          d = d->next();
+          finished = (cur == d);
+          if (cur->_ref_count > 0) {
+            // promote cur to parent level
+            cur->unlink();
+            cur->insertBefore(this->next());
+          } else {
+            cur->destroy(interpreter);
+            delete cur;
+          }
+        }
+      }
       _prev->_next = _next;
       _next->_prev = _prev;
     }
@@ -424,7 +448,7 @@ namespace MiniZinc {
     }
     /// Append list to other list before \a d
     void appendBefore(Definition* d) {
-      Definition* e = d->_prev;      
+      Definition* e = d->_prev;
       d->_prev = this;
       _next = d;
       e->_next = this;
@@ -443,6 +467,8 @@ namespace MiniZinc {
         delete d;
       }
     }
+    /// Set the reference count to 1
+    void makeUniqueReference(void) { _ref_count = 1; }
     Definition* prev(void) const { return _prev; }
     Definition* next(void) const { return _next; }
     bool isInCSE(void) const { return _in_cse; }
@@ -457,7 +483,7 @@ namespace MiniZinc {
       }
       return i;
     }
-    static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead=true);
+    static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead=true, int indent=0);
   };
   
   class AggregationCtx {
@@ -538,18 +564,31 @@ namespace MiniZinc {
     const BytecodeStream* bs;
     int pc;
     Definition* def_stack;
+    int def_ident_start;
     
     // CSE information for RET statement
     // <proc, mode, cse_key, stack size>
     typedef std::tuple<int,BytecodeProc::Mode, std::vector<WeakVal>, size_t> CSEInfo;
     std::vector<CSEInfo> cse_info;
 
-    BytecodeFrame(const BytecodeStream& bs0) : reg(bs0.maxRegister()), bs(&bs0), pc(0), def_stack(new Definition(nullptr,IntVal(0),0,0,IntVal(0),-1)) {
+    BytecodeFrame(const BytecodeStream& bs0, int def_ident_start0=0) :
+    reg(bs0.maxRegister()), bs(&bs0),
+    pc(0), def_stack(new Definition(nullptr,IntVal(0),0,0,IntVal(0),-1)),
+    def_ident_start(def_ident_start0) {
       def_stack->inc(nullptr);
     }
-    void destroy(Interpreter* interpreter) {
+    void destroyRegisters(Interpreter* interpreter) {
       reg.destroy(interpreter);
+    }
+    void destroyDefs(Interpreter* interpreter) {
       Definition::dec(interpreter, def_stack);
+    }
+    void destroy(Interpreter* interpreter) {
+      destroyRegisters(interpreter);
+      destroyDefs(interpreter);
+    }
+    void dump(std::ostream& os) {
+      reg.dump(os);
     }
   };
 
