@@ -97,45 +97,50 @@ namespace MiniZinc {
     }
   }
 
-  std::vector<WeakVal> WeakVal::flat_vector(const std::vector<Val> &vec) {
-    std::vector<WeakVal> nvec;
-    nvec.reserve(vec.size());
+  std::pair<size_t, WeakVal*> WeakVal::cse_key(const std::vector<Val> &vec) {
+    size_t size = vec.size();
+    for (const auto& val : vec) {
+      if (val.isVec()) {
+        size += val.toVec()->size() + 1;
+      }
+    }
+    auto nvec = (WeakVal*) malloc(size*sizeof(WeakVal));
+    size_t i = 0;
     for (const auto& val : vec) {
       if (val.isVec()) {
         Vec* vv = val.toVec();
-        nvec.reserve(nvec.size() + vv->size() + 1);
-        nvec.emplace_back(Val(vv->size()));
-        for (int i = 0; i < vv->size(); ++i) {
-          assert(!(*vv)[i].isVec());
-          nvec.emplace_back((*vv)[i]);
+        nvec[i++] = WeakVal(Val(vv->size()));
+        for (int j = 0; j < vv->size(); ++j) {
+          assert(!(*vv)[j].isVec());
+          nvec[i++] = WeakVal((*vv)[j]);
         }
       } else {
-        nvec.emplace_back(val);
+        nvec[i++] = WeakVal(val);
       }
     }
-    return nvec;
+    return std::make_pair(size, nvec);
   }
 
   void cmb_hash(size_t& incumbent, const size_t h) {
     incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2);
   }
-  size_t CSEHasher::operator()(const std::vector<WeakVal> &vec) const {
+  size_t CSEHasher::operator()(const CSEKey& vec) const {
     size_t hash = 0;
-    for(const auto& val : vec) {
-      cmb_hash(hash, val.hash());
+    for (int i = 0; i < vec.first; ++i) {
+      cmb_hash(hash, vec.second[i].hash());
     }
     return hash;
   }
 
-  std::pair<Val, bool> BytecodeProc::CSETable::lookup(Interpreter& interpreter, const std::vector<WeakVal>& key, const BytecodeProc::Mode& mode) {
+  std::pair<Val, bool> BytecodeProc::CSETable::lookup(Interpreter& interpreter, const CSEKey& key, BytecodeProc::Mode& mode) {
     if (mode == RAW) {
       return std::pair<Val, bool>(Val(), false);
     }
     auto it = _table.find(key);
     if (it != _table.end()) {
-      Val val = it->second.second.to_val();
+      Val val = it->second.second;
       Mode val_m = it->second.first;
-      DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << val_m << " Value: " << val.toString() << "\n");
+      DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << mode_to_string[val_m] << " Value: " << val.toString() << "\n");
       auto convert = [&interpreter, val_m, mode](Val v) {
         assert(!v.isVec());
         if (is_neg(mode) != is_neg(val_m)) {
@@ -144,14 +149,17 @@ namespace MiniZinc {
             assert(v().toInt() == 0 || v().toInt() == 1);
             new_val = Val(1 - v().toInt());
           } else {
-            auto nkey = WeakVal::flat_vector({v});
+            auto ptr = (WeakVal*) malloc(sizeof(WeakVal));
+            *ptr = WeakVal(v);
+            auto nkey = CSEKey({1, ptr});
             bool found;
-            std::tie(new_val, found) = interpreter._procs[PrimitiveMap::BOOLNOT].cse.lookup(interpreter, nkey, BytecodeProc::FUN);
+            auto mode = BytecodeProc::FUN;
+            std::tie(new_val, found) = interpreter._procs[PrimitiveMap::BOOLNOT].cse.lookup(interpreter, nkey, mode);
             if (!found) {
               auto d = Definition::a(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter.newIdent());
               interpreter.pushDef(&interpreter._stack.back(),d);
               new_val = Val(d);
-              interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(nkey, BytecodeProc::FUN, new_val);
+              interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(nkey, mode, new_val);
             }
           }
           return new_val;
@@ -164,13 +172,12 @@ namespace MiniZinc {
       } else if (val_m == ROOT || val_m == ROOT_NEG) {
         return std::make_pair(convert(val), true);
       } else if (mode == ROOT || mode == ROOT_NEG) {
-        // TODO: Replace all occurences of val by true / false
-        return std::make_pair(Val(1), true);
+        DBG_INTERPRETER("--- Run call in " + mode_to_string[mode] + " context\n");
+        return std::make_pair(Val(), false);
       } else if (val_m == IMP || val_m == IMP_NEG) {
-        // TODO: Replace with full reification
-        // nval = (val_m == IMP_NEG) ? neg_reification() : pos_reification();
-        // Replace usage of val with nval
-        // return std::make_pair(convert(nval), true);
+        mode = is_neg(mode) ? FUN_NEG : FUN;
+        DBG_INTERPRETER("--- Run call in " + mode_to_string[mode] + " context\n");
+        return std::make_pair(Val(), false);
       } else {
         return std::make_pair(convert(val), true);
       }
@@ -178,13 +185,30 @@ namespace MiniZinc {
     return std::pair<Val, bool>(Val(), false);
   }
 
-  void BytecodeProc::CSETable::insert(std::vector<WeakVal>& key, const BytecodeProc::Mode& mode, const Val& val) {
+  void BytecodeProc::CSETable::insert(const CSEKey& key, const BytecodeProc::Mode& mode, const Val& val) {
     if (mode == RAW) {
       return;
     }
     DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << mode << " Value: " << val.toString() << "\n");
-    auto result = _table.emplace(std::move(key), std::make_pair(mode, val));
-    assert(result.second);
+    // If value is reference counted, flag that it's in CSE
+    if (val.isDef()) {
+      val.toDef()->addToCSE();
+    }
+    auto insertion = _table.emplace(key, std::make_pair(mode, val));
+    if (!insertion.second) {
+      CSETable::iterator& it = insertion.first;
+      // We are replacing another entry within the CSE table.
+      assert(it->first == key && it->second.first != mode);
+      if (it->second.second.isDef()) {
+        it->second.second.toDef()->removeFromCSE();
+      }
+      if (mode == ROOT || mode == ROOT_NEG) {
+        // TODO: Replace all occurences of previous value by true / false
+      } else if (mode == FUN || mode == FUN_NEG) {
+        // TODO: Replace all occurences of previous value by val / ~val
+      }
+      it->second = std::make_pair(mode, val);
+    }
   }
 
   std::string
@@ -740,7 +764,7 @@ namespace MiniZinc {
             int r = frame->bs->reg(frame->pc);
             args[i] = frame->reg[r];
           }
-          std::vector<WeakVal> cse_key = WeakVal::flat_vector(args);
+          CSEKey cse_key = WeakVal::cse_key(args);
           // Lookup item in CSE
           auto cse = _procs[code].cse.lookup(*this, cse_key, mode);
           if (cse.second) {
@@ -811,7 +835,7 @@ namespace MiniZinc {
           for (int i = 0; i < args.size(); ++i) {
             args[i] = frame->reg[i];
           }
-          auto cse_key = WeakVal::flat_vector(args);
+          auto cse_key = WeakVal::cse_key(args);
           bool found;
           Val ret;
           std::tie(ret, found) = _procs[code].cse.lookup(*this, cse_key, mode);

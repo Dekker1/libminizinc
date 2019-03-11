@@ -12,6 +12,7 @@
 #ifndef __MINIZINC_BYTECODE_HH__
 #define __MINIZINC_BYTECODE_HH__
 
+#include <map>
 #include <vector>
 #include <iostream>
 
@@ -279,21 +280,6 @@ namespace MiniZinc {
       return true;
     }
   };
-
-  class WeakVal {
-  protected:
-    // Value of the Val
-    void* _v;
-  public:
-    WeakVal(const Val& val) : _v(val._v) {}
-    Val to_val() { Val v; v._v = _v; return v; }
-
-    size_t hash() const {std::hash<void*> h; return h(_v);}
-    inline bool operator==(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v); }
-
-    static std::vector<WeakVal> flat_vector(const std::vector<Val>& vec);
-  };
-  
   
   inline
   Val::Val(Vec* v) {
@@ -513,7 +499,29 @@ namespace MiniZinc {
     }
     static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead=true, int indent=0);
   };
-  
+
+  class WeakVal {
+  protected:
+    // Value of the Val
+    void* _v;
+  public:
+    WeakVal(const Val& val) {
+      if(val.isDef()) {
+        _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(val.toDef()->ident()) | static_cast<ptrdiff_t>(1));
+      } else {
+        _v = val._v;
+      }
+    }
+    Val to_val() { Val v; v._v = _v; return v; }
+
+    size_t hash() const {std::hash<void*> h; return h(_v);}
+    inline bool operator==(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v); }
+    inline bool operator!=(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) != reinterpret_cast<ptrdiff_t>(rhs._v); }
+    inline bool operator<(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) < reinterpret_cast<ptrdiff_t>(rhs._v); }
+
+    static std::pair<size_t, WeakVal*> cse_key(const std::vector<Val>& vec);
+  };
+
   class AggregationCtx {
   protected:
     /// Stack of values that need to be aggregated
@@ -557,8 +565,39 @@ namespace MiniZinc {
     }
   };
 
+  typedef std::pair<size_t, WeakVal*> CSEKey;
+  // TODO: Currently not used. Was used for CSE as an Hashtable
   struct CSEHasher {
-    size_t operator()(const std::vector<WeakVal>& v) const;
+    size_t operator()(const CSEKey& v) const;
+  };
+  // TODO: Currently not used. Was used for CSE as an Hashtable
+  struct CSEEquals {
+    bool operator()(const CSEKey& lhs, const CSEKey& rhs) const {
+      if (lhs.first != rhs.first) {
+        return false;
+      }
+      for (int i = 0; i < lhs.first; ++i) {
+        if (lhs.second[i] != rhs.second[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
+  };
+
+  struct CSECompare {
+    bool operator()(const CSEKey& lhs, const CSEKey& rhs) const {
+      if (lhs.first != rhs.first) {
+        return lhs.first < rhs.first;
+      } else {
+        for (int i = 0; i < lhs.first; ++i) {
+          if (lhs.second[i] != rhs.second[i]) {
+            return lhs.second[i] < rhs.second[i];
+          }
+        }
+        return false;
+      }
+    }
   };
   
   class BytecodeProc {
@@ -577,12 +616,15 @@ namespace MiniZinc {
     /// CSE table: Saved results of historical executions
     class CSETable {
     public:
-      typedef std::unordered_map<std::vector<WeakVal>, std::pair<Mode, WeakVal>, CSEHasher> hashtable;
-      typedef hashtable::iterator iterator;
-      std::pair<Val, bool> lookup(Interpreter& interpreter, const std::vector<WeakVal>& key, const BytecodeProc::Mode& mode);
-      void insert(std::vector<WeakVal>& key, const BytecodeProc::Mode& mode, const Val& val);
+//      typedef std::unordered_map<CSEKey, std::pair<Mode, Val>, CSEHasher, CSEEquals> impl;
+      typedef std::map<CSEKey, std::pair<Mode, Val>, CSECompare> impl;
+      typedef impl::iterator iterator;
+      std::pair<Val, bool> lookup(Interpreter& interpreter, const CSEKey& key, BytecodeProc::Mode& mode);
+      void insert(const CSEKey& key, const BytecodeProc::Mode& mode, const Val& val);
     protected:
-      hashtable _table;
+      impl _table;
+    public:
+      ~CSETable() { for(const auto &item : _table ) { free(item.first.second); }}
     } cse;
   };
 
@@ -596,7 +638,7 @@ namespace MiniZinc {
     
     // CSE information for RET statement
     // <proc, mode, cse_key, stack size>
-    typedef std::tuple<int,BytecodeProc::Mode, std::vector<WeakVal>, size_t> CSEInfo;
+    typedef std::tuple<int,BytecodeProc::Mode, CSEKey, size_t> CSEInfo;
     std::vector<CSEInfo> cse_info;
 
     BytecodeFrame(const BytecodeStream& bs0, int def_ident_start0=0) :
