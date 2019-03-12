@@ -100,24 +100,24 @@ namespace MiniZinc {
   std::pair<size_t, WeakVal*> WeakVal::cse_key(const std::vector<Val> &vec) {
     size_t size = vec.size();
     for (const auto& val : vec) {
-      if (val.isVec()) {
-        size += val.toVec()->size() + 1;
+      if (val.isVec() && val.size() <= 3) {
+        size += val.toVec()->size();
       }
     }
     auto nvec = (WeakVal*) malloc(size*sizeof(WeakVal));
     size_t i = 0;
     for (const auto& val : vec) {
-      if (val.isVec()) {
-        Vec* vv = val.toVec();
-        nvec[i++] = WeakVal(Val(vv->size()));
-        for (int j = 0; j < vv->size(); ++j) {
-          assert(!(*vv)[j].isVec());
-          nvec[i++] = WeakVal((*vv)[j]);
+      if (val.isVec() && val.size() <= 3) {
+        nvec[i++] = WeakVal(Val(val.size()));
+        for (int j = 0; j < val.size(); ++j) {
+          assert(!val[j].isVec());
+          nvec[i++] = WeakVal(val[j]);
         }
       } else {
         nvec[i++] = WeakVal(val);
       }
     }
+    assert(i == size);
     return std::make_pair(size, nvec);
   }
 
@@ -133,13 +133,15 @@ namespace MiniZinc {
   }
 
   std::pair<Val, bool> BytecodeProc::CSETable::lookup(Interpreter& interpreter, const CSEKey& key, BytecodeProc::Mode& mode) {
-    if (mode == RAW) {
-      return std::pair<Val, bool>(Val(), false);
-    }
+    assert(mode != RAW);
     auto it = _table.find(key);
     if (it != _table.end()) {
       Val val = it->second.second;
       Mode val_m = it->second.first;
+      if (!val.exists()) {
+        this->_table.erase(it);
+        return {Val(), false};
+      }
       DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << mode_to_string[val_m] << " Value: " << val.toString() << "\n");
       auto convert = [&interpreter, val_m, mode](Val v) {
         assert(!v.isVec());
@@ -159,7 +161,7 @@ namespace MiniZinc {
               auto d = Definition::a(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter.newIdent());
               interpreter.pushDef(&interpreter._stack.back(),d);
               new_val = Val(d);
-              interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(nkey, mode, new_val);
+              interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(interpreter, nkey, mode, new_val);
             }
           }
           return new_val;
@@ -170,38 +172,32 @@ namespace MiniZinc {
         return std::make_pair(val, true);
       // Assumption: 'val' must be of boolean type, otherwise mode is always FUN (or RAW)
       } else if (val_m == ROOT || val_m == ROOT_NEG) {
-        return std::make_pair(convert(val), true);
+        return {convert(val), true};
       } else if (mode == ROOT || mode == ROOT_NEG) {
         DBG_INTERPRETER("--- Run call in " + mode_to_string[mode] + " context\n");
-        return std::make_pair(Val(), false);
+        return {Val(), false};
       } else if (val_m == IMP || val_m == IMP_NEG) {
         mode = is_neg(mode) ? FUN_NEG : FUN;
         DBG_INTERPRETER("--- Run call in " + mode_to_string[mode] + " context\n");
-        return std::make_pair(Val(), false);
+        return {Val(), false};
       } else {
-        return std::make_pair(convert(val), true);
+        return {convert(val), true};
       }
     }
-    return std::pair<Val, bool>(Val(), false);
+    return {Val(), false};
   }
 
-  void BytecodeProc::CSETable::insert(const CSEKey& key, const BytecodeProc::Mode& mode, const Val& val) {
-    if (mode == RAW) {
-      return;
-    }
-    DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << mode << " Value: " << val.toString() << "\n");
+  void BytecodeProc::CSETable::insert(Interpreter& interpreter, const CSEKey& key, const BytecodeProc::Mode& mode, Val& val) {
+    assert(mode != RAW);
+    DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << mode_to_string[mode] << " Value: " << val.toString() << "\n");
     // If value is reference counted, flag that it's in CSE
-    if (val.isDef()) {
-      val.toDef()->addToCSE();
-    }
+    val.addToCSE(&interpreter);
     auto insertion = _table.emplace(key, std::make_pair(mode, val));
     if (!insertion.second) {
       CSETable::iterator& it = insertion.first;
       // We are replacing another entry within the CSE table.
       assert(it->first == key && it->second.first != mode);
-      if (it->second.second.isDef()) {
-        it->second.second.toDef()->removeFromCSE();
-      }
+      it->second.second.removeFromCSE(&interpreter);
       if (mode == ROOT || mode == ROOT_NEG) {
         // TODO: Replace all occurences of previous value by true / false
       } else if (mode == FUN || mode == FUN_NEG) {
@@ -735,11 +731,14 @@ namespace MiniZinc {
           }
           
           for (auto& entry : frame->cse_info) {
-            if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
-              _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), Val(1));
-            } else if (std::get<3>(entry) == _agg.back().size()-1) {
-              Val ret = _agg[_agg.size()-1].back();
-              _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), ret);
+            if (std::get<2>(entry).first != 0) {
+              if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
+                Val v = Val(1);
+                _procs[std::get<0>(entry)].cse.insert(*this, std::get<2>(entry), std::get<1>(entry), v);
+              } else if (std::get<3>(entry) == _agg.back().size()-1) {
+                Val ret = _agg[_agg.size()-1].back();
+                _procs[std::get<0>(entry)].cse.insert(*this, std::get<2>(entry), std::get<1>(entry), ret);
+              }
             }
           }
           _stack.back().destroyDefs(this);
@@ -760,48 +759,45 @@ namespace MiniZinc {
           DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
           // TODO: See if args is created when not necessary
           std::vector<Val> args(n);
+          bool cse_suited = n < 5 && mode != BytecodeProc::RAW;
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
             args[i] = frame->reg[r];
           }
-          CSEKey cse_key = WeakVal::cse_key(args);
-          // Lookup item in CSE
-          auto cse = _procs[code].cse.lookup(*this, cse_key, mode);
-          if (cse.second) {
-            if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-              assert(cse.first.isInt());
-              if (cse.first().toInt() != 1) {
-                // TODO: The model is inconsistent!
-                throw Error("Error: Model Inconsistent!");
+          CSEKey cse_key = {0, nullptr};
+          if (cse_suited) {
+            cse_key = WeakVal::cse_key(args);
+            // Lookup item in CSE
+            auto cse = _procs[code].cse.lookup(*this, cse_key, mode);
+            if (cse.second) {
+              if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+                assert(cse.first.isInt());
+                if (cse.first().toInt() != 1) {
+                  // TODO: The model is inconsistent!
+                  throw Error("Error: Model Inconsistent!");
+                }
+              } else {
+                pushAgg(cse.first, -1);
               }
-            } else {
-              pushAgg(cse.first, -1);
+              break;
+            }
+          }
+          if (_procs[code].mode[mode].size() == 0) {
+            DBG_INTERPRETER("--- FZN Builtin\n");
+            // this is a FlatZinc builtin
+            int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
+            Definition* def = Definition::a(this,IntVal(0),code,mode,args,ident);
+            pushDef(frame,def);
+            if (cse_suited) {
+              Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
+              _procs[code].cse.insert(*this, cse_key, mode, v);
             }
           } else {
-            if (_procs[code].mode[mode].size() == 0) {
-              DBG_INTERPRETER("--- FZN Builtin\n");
-              // this is a FlatZinc builtin
-              int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-              Definition* def = Definition::a(this,IntVal(0),code,mode,args,ident);
-              pushDef(frame,def);
-              switch (mode) {
-                case BytecodeProc::ROOT:
-                  _procs[code].cse.insert(cse_key, mode, IntVal(1));
-                  break;
-                case BytecodeProc::ROOT_NEG:
-                  _procs[code].cse.insert(cse_key, mode, IntVal(0));
-                  break;
-                default:
-                  _procs[code].cse.insert(cse_key, mode, Val(def));
-                  pushAgg(Val(def), -1);
-              }
-            } else {
-              _stack.emplace_back(_procs[code].mode[mode], currentIdent());
-              BytecodeFrame* newFrame = &_stack[_stack.size()-1];
-              newFrame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
-              newFrame->reg.mov(this, args);
-              frame = newFrame;
-            }
+            _stack.emplace_back(_procs[code].mode[mode], currentIdent());
+            BytecodeFrame* newFrame = &_stack[_stack.size()-1];
+            newFrame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
+            newFrame->reg.mov(this, args);
+            frame = newFrame;
           }
         }
           break;
@@ -832,40 +828,48 @@ namespace MiniZinc {
           DBG_INTERPRETER("TCALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
           // TODO: Avoid creating the args vector
           std::vector<Val> args(_procs[mode].nargs);
+          bool cse_suited = _procs[mode].nargs < 5 && mode != BytecodeProc::RAW;
           for (int i = 0; i < args.size(); ++i) {
             args[i] = frame->reg[i];
           }
-          auto cse_key = WeakVal::cse_key(args);
-          bool found;
-          Val ret;
-          std::tie(ret, found) = _procs[code].cse.lookup(*this, cse_key, mode);
-          if (found) {
-            // RET with CSE found value
-            if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-              assert(ret.isInt());
-              if (ret().toInt() != 1) {
-                // TODO: The model is inconsistent!
-                throw Error("Error: Model Inconsistent!");
+          CSEKey cse_key = {0, nullptr};
+          if (cse_suited) {
+            cse_key = WeakVal::cse_key(args);
+            bool found;
+            Val ret;
+            std::tie(ret, found) = _procs[code].cse.lookup(*this, cse_key, mode);
+            if (found) {
+              // RET with CSE found value
+              if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+                assert(ret.isInt());
+                if (ret().toInt() != 1) {
+                  // TODO: The model is inconsistent!
+                  throw Error("Error: Model Inconsistent!");
+                }
+              } else {
+                pushAgg(ret, -1);
               }
-            } else {
-              pushAgg(ret, -1);
-            }
-            for (auto& entry : frame->cse_info) {
-              if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
-                _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), Val(1));
-              } else if (std::get<3>(entry) == _agg.back().size()-1) {
-                _procs[std::get<0>(entry)].cse.insert(std::get<2>(entry), std::get<1>(entry), ret);
+              for (auto& entry : frame->cse_info) {
+                if (std::get<2>(entry).first != 0) {
+                  if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
+                    Val v = Val(1);
+                    _procs[std::get<0>(entry)].cse.insert(*this, std::get<2>(entry), std::get<1>(entry), v);
+                  } else if (std::get<3>(entry) == _agg.back().size()-1) {
+                    Val ret = _agg[_agg.size()-1].back();
+                    _procs[std::get<0>(entry)].cse.insert(*this, std::get<2>(entry), std::get<1>(entry), ret);
+                  }
+                }
               }
+              _stack.back().destroy(this);
+              _stack.pop_back();
+              frame = &_stack.back();
+              break;
             }
-            _stack.back().destroy(this);
-            _stack.pop_back();
-            frame = &_stack.back();
-          } else {
-            // Replace frame with new procedure
-            frame->bs = &_procs[code].mode[mode];
-            frame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
-            frame->pc = 0;
           }
+          // Replace frame with new procedure
+          frame->bs = &_procs[code].mode[mode];
+          frame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
+          frame->pc = 0;
         }
           break;
         case BytecodeStream::TRACE:
@@ -946,7 +950,7 @@ namespace MiniZinc {
                   // Remove all elements from definition stack
                   for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
                     d->destroy(this);
-                    if (true /*TODO: !d->isInCSE()*/)
+                    if (!d->inCSE())
                       free(d);
                   }
                   pushAgg(IntVal(!isFalse),-2);
@@ -989,7 +993,7 @@ namespace MiniZinc {
                   // Remove all elements from definition stack
                   for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
                     d->destroy(this);
-                    if (true /*TODO: !d->isInCSE()*/)
+                    if (!d->inCSE())
                       free(d);
                   }
                   pushAgg(IntVal(isTrue),-2);
