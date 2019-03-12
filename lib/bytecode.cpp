@@ -30,7 +30,7 @@ namespace MiniZinc {
   Definition::dump(Definition* head, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead, int indent) {
     Definition* d = ignoreHead ? head->next() : head;
     do {
-      assert(d->call.pred != 0);
+      assert(d->pred() != 0);
       for (unsigned int i=0; i<indent; i++)
         os << "  ";
       if (d->ident() >=0) {
@@ -41,10 +41,10 @@ namespace MiniZinc {
         os << ")";
       }
       os << ":\t";
-      os << bs[d->call.pred].name << " ";
-      os << d->call.args.toString() << "\n";
-      if (d->defs)
-        dump(d->defs,bs,os,false,indent+2);
+      os << bs[d->pred()].name << " ";
+//      os << d->call.args.toString() << "\n";
+      if (d->defs())
+        dump(d->defs(),bs,os,false,indent+2);
       d = d->next();
     } while (d != head);
   }
@@ -148,7 +148,7 @@ namespace MiniZinc {
             bool found;
             std::tie(new_val, found) = interpreter._procs[PrimitiveMap::BOOLNOT].cse.lookup(interpreter, nkey, BytecodeProc::FUN);
             if (!found) {
-              auto d = new Definition(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, v, interpreter.newIdent());
+              auto d = Definition::a(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter.newIdent());
               interpreter.pushDef(&interpreter._stack.back(),d);
               new_val = Val(d);
               interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(nkey, BytecodeProc::FUN, new_val);
@@ -619,8 +619,8 @@ namespace MiniZinc {
             frame->reg.assign(this, r2, IntVal(1));
           } else if (frame->reg[r1].isDef()) {
             Definition* def = frame->reg[r1].toDef();
-            if (def->domain.isInt()) {
-              frame->reg.assign(this, r1, def->domain);
+            if (def->domain().isInt()) {
+              frame->reg.assign(this, r1, def->domain());
               frame->reg.assign(this, r2, IntVal(1));
             } else {
               frame->reg.assign(this, r2, IntVal(0));
@@ -700,7 +700,7 @@ namespace MiniZinc {
               }
               ret->unlink();
               ret->makeUniqueReference();
-              ret->defs = defs;
+              ret->defs(defs);
               defs = ret;
             }
           }
@@ -758,7 +758,7 @@ namespace MiniZinc {
               DBG_INTERPRETER("--- FZN Builtin\n");
               // this is a FlatZinc builtin
               int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-              Definition* def = new Definition(this,IntVal(0),code,mode,Val(Vec::a(this,newIdent(),args)),ident);
+              Definition* def = Definition::a(this,IntVal(0),code,mode,args,ident);
               pushDef(frame,def);
               switch (mode) {
                 case BytecodeProc::ROOT:
@@ -923,11 +923,11 @@ namespace MiniZinc {
                   for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
                     d->destroy(this);
                     if (true /*TODO: !d->isInCSE()*/)
-                      delete d;
+                      free(d);
                   }
                   pushAgg(IntVal(!isFalse),-2);
                 } else {
-                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(this,newIdent(),args)),newIdent());
+                  Definition* d = Definition::a(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,args,newIdent());
                   pushDef(frame,d);
                   pushAgg(Val(d),-2);
                 }
@@ -966,12 +966,12 @@ namespace MiniZinc {
                   for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
                     d->destroy(this);
                     if (true /*TODO: !d->isInCSE()*/)
-                      delete d;
+                      free(d);
                   }
                   pushAgg(IntVal(isTrue),-2);
                 } else {
-                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::CLAUSE,
-                                                 BytecodeProc::FUN,Val(Vec::a(this,newIdent(),{Val(Vec::a(this,newIdent(),pos)),Val(Vec::a(this,newIdent(),neg))})),
+                  Definition* d = Definition::a(this,IntVal(0),PrimitiveMap::CLAUSE,
+                                                 BytecodeProc::FUN,{Val(Vec::a(this,newIdent(),pos)),Val(Vec::a(this,newIdent(),neg))},
                                                  newIdent());
                   pushDef(frame,d);
                   pushAgg(Val(d),-2);

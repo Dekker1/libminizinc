@@ -405,29 +405,51 @@ namespace MiniZinc {
   
   class Definition : public RefCountedObject {
   protected:
+    int _size;
     Definition* _prev;
     Definition* _next;
+    Val _domain;
+    Val _ann;
+    Definition* _defs;
+    int _pred;
+    char _mode;
+    Val _args[1];
+    Definition(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann)
+    : RefCountedObject(RefCountedObject::DEF,ident), _size(args.size()), _prev(this), _next(this),
+    _domain(domain), _ann(ann), _defs(nullptr) {
+      _domain.construct(interpreter);
+      _ann.construct(interpreter);
+      for (unsigned int i=0; i<args.size(); i++) {
+        new (&_args[i]) Val(args[i]);
+        _args[i].construct(interpreter);
+      }
+    }
+    ~Definition(void) = delete;
   public:
-    Val domain;
-    Val ann;
-    CallVal call;
-    Definition* defs;
-    Definition(Interpreter* interpreter, Val domain0,int pred0,char mode0,Val args0,int ident,Val ann0=IntVal(0))
-    : RefCountedObject(RefCountedObject::DEF,ident), _prev(this), _next(this),
-      domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)), defs(nullptr) {
-      domain.construct(interpreter);
-      ann.construct(interpreter);
-      call.args.construct(interpreter);
+    Val domain(void) const { return _domain; }
+    Val ann(void) const { return _ann; }
+    int pred(void) const { return _pred; }
+    char mode(void) const { return _mode; }
+    int size(void) const { return _size; }
+    Val arg(int i) const { assert(i < _size); return _args[i]; }
+    Definition* defs(void) const { return _defs; }
+    void defs(Definition* defs) { _defs = defs; }
+    static Definition* a(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
+      Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
+      new (d) Definition(interpreter,domain,pred,mode,args,ident,ann);
+      return d;
     }
     /// Destroy and unlink this definition
     void destroy(Interpreter* interpreter) {
-      domain.destroy(interpreter);
-      ann.destroy(interpreter);
-      call.args.destroy(interpreter);
+      _domain.destroy(interpreter);
+      _ann.destroy(interpreter);
+      for (unsigned int i=0; i<_size; i++) {
+        _args[i].destroy(interpreter);
+      }
       _ref_count = (1u<<31u)-1u;
-      if (defs) {
+      if (_defs) {
         // destroy all linked definitions
-        Definition* d = defs;
+        Definition* d = _defs;
         bool finished = false;
         while (!finished) {
           Definition* cur = d;
@@ -439,7 +461,7 @@ namespace MiniZinc {
             cur->insertBefore(this->next());
           } else {
             cur->destroy(interpreter);
-            delete cur;
+            free(cur);
           }
         }
       }
@@ -472,7 +494,7 @@ namespace MiniZinc {
     static void dec(Interpreter* interpreter, Definition* d) {
       if (--d->_ref_count==0) {
         d->destroy(interpreter);
-        delete d;
+        free(d);
       }
     }
     /// Set the reference count to 1
@@ -579,7 +601,7 @@ namespace MiniZinc {
 
     BytecodeFrame(const BytecodeStream& bs0, int def_ident_start0=0) :
     reg(bs0.maxRegister()), bs(&bs0),
-    pc(0), def_stack(new Definition(nullptr,IntVal(0),0,0,IntVal(0),-1)),
+    pc(0), def_stack(Definition::a(nullptr,IntVal(0),0,0,{},-1)),
     def_ident_start(def_ident_start0) {
       def_stack->inc(nullptr);
     }
