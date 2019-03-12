@@ -21,8 +21,8 @@
 #include <fstream>
 #include <streambuf>
 
-#define DBG_INTERPRETER(msg) std::cerr << msg
-//#define DBG_INTERPRETER(msg) do {} while(0)
+// #define DBG_INTERPRETER(msg) std::cerr << msg
+#define DBG_INTERPRETER(msg) do {} while(0)
 
 namespace MiniZinc {
 

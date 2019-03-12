@@ -1,5 +1,9 @@
 #### Minizinc bytecode compiler
-add_executable(mzncc mzncc.cpp lib/codegen.cpp include/minizinc/codegen.hh)
+add_executable(mzncc
+  mzncc.cpp
+  lib/codegen.cpp
+  lib/codegen/codegen_internal.hpp
+  include/minizinc/codegen.hh)
 target_link_libraries(mzncc minizinc_solver)
 
 install(

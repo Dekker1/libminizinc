@@ -44,7 +44,7 @@ using namespace std;
 namespace MiniZinc {
 
 MznReader::MznReader(std::ostream& os0, std::ostream& log0)
-  : solver_configs(log0) /*, flt(os0,log0,solver_configs.mznlibDir())*/,  os(os0), log(log0) {}
+  : solver_configs(log0), /*flt(os0,log0,solver_configs.mznlibDir()), */  os(os0), log(log0) {}
 
 MznReader::~MznReader()
 {
