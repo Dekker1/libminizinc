@@ -149,30 +149,48 @@ namespace MiniZinc {
   class Definition;
   class WeakVal;
 
+  class RefCountedObject {
+  public:
+    enum RCOType { VEC, DEF };
+  protected:
+    unsigned int _ref_count;
+    unsigned int _cse_ref_count : 31;
+    unsigned int _rco_type : 1;
+    int _timestamp;
+    RefCountedObject(const RCOType& t, int timestamp) : _ref_count(0), _cse_ref_count(0), _rco_type(t==VEC ? 1 : 0), _timestamp(timestamp) {}
+  public:
+    RCOType rcoType(void) const { return _rco_type==1 ? VEC : DEF; }
+  };
+  
+
   /// Value tagged union
   class Val {
     friend class WeakVal;
   protected:
     /// The value
-    // Bit 0,1: 0,X=int, 1,0=Ref, 1,1=Vec
+    // Bit 0: 0=int, 1=RefCountedObject
     void* _v;
   public:
+    bool isRCO(void) const {
+      return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == static_cast<ptrdiff_t>(1);
+    }
+    RefCountedObject* toRCO(void) const {
+      assert(isDef());
+      return reinterpret_cast<RefCountedObject*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(1));
+    }
     bool isVec(void) const {
-      return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(3)) == static_cast<ptrdiff_t>(3);
+      return isRCO() && toRCO()->rcoType()==RefCountedObject::VEC;
     }
     bool isInt(void) const {
       return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == 0;
     }
     bool isDef(void) const {
-      return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(3)) == static_cast<ptrdiff_t>(1);
+      return isRCO() && toRCO()->rcoType()==RefCountedObject::DEF;
     }
     bool operator==(const Val& rhs) const;
 
     /// Access value as Definition
-    Definition* toDef(void) const {
-      assert(isDef());
-      return reinterpret_cast<Definition*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(1));
-    }
+    Definition* toDef(void) const;
     /// Access value as IntVal
     IntVal operator() (void) const {
       assert(isInt());
@@ -193,10 +211,7 @@ namespace MiniZinc {
     /// Access value as vector, return size
     size_t size(void) const;
   protected:
-    Vec* toVec(void) const {
-      assert(isVec());
-      return reinterpret_cast<Vec*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(3));
-    }
+    Vec* toVec(void) const;
   public:
     explicit Val(Vec* v);
     Val(const IntVal& i=IntVal(0)) {
@@ -224,13 +239,11 @@ namespace MiniZinc {
     std::string toString(void) const;
   };
   
-  class Vec {
+  class Vec : public RefCountedObject {
   protected:
     int _size;
-    unsigned int _ref_count : 31;
-    unsigned int _in_cse : 1;
     Val _data[1];
-    Vec(Interpreter* interpreter, const std::vector<Val>& v) : _size(v.size()), _ref_count(0), _in_cse(0) {
+    Vec(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) : RefCountedObject(RefCountedObject::VEC,timestamp), _size(v.size()) {
       for (unsigned int i=0; i<v.size(); i++) {
         new (&_data[i]) Val(v[i]);
         _data[i].construct(interpreter);
@@ -239,12 +252,10 @@ namespace MiniZinc {
     ~Vec(void) = delete;
   public:
     int size(void) const { return _size; }
-    bool isInCSE(void) const { return _in_cse; }
-    void addToCSE(void) { _in_cse = 1; }
     const Val& operator [](int i) const { assert(i >= 0 && i<_size); return _data[i]; }
-    static Vec* a(Interpreter* interpreter, const std::vector<Val>& v) {
+    static Vec* a(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) {
       Vec* nv = static_cast<Vec*>(::malloc(sizeof(Vec)+sizeof(Val)*(v.size()-1)));
-      new (nv) Vec(interpreter,v);
+      new (nv) Vec(interpreter,timestamp,v);
       return nv;
     }
     void inc(void) { _ref_count++; }
@@ -392,20 +403,17 @@ namespace MiniZinc {
     CallVal(int pred0, char mode0, Val args0) : pred(pred0), mode(mode0), args(args0) {}
   };
   
-  class Definition {
+  class Definition : public RefCountedObject {
   protected:
     Definition* _prev;
     Definition* _next;
-    unsigned int _ref_count : 31;
-    unsigned int _in_cse : 1;
-    const int _ident;
   public:
     Val domain;
     Val ann;
     CallVal call;
     Definition* defs;
     Definition(Interpreter* interpreter, Val domain0,int pred0,char mode0,Val args0,int ident,Val ann0=IntVal(0))
-    : _prev(this), _next(this), _ref_count(0), _in_cse(0), _ident(ident),
+    : RefCountedObject(RefCountedObject::DEF,ident), _prev(this), _next(this),
       domain(domain0), ann(ann0), call(CallVal(pred0,mode0,args0)), defs(nullptr) {
       domain.construct(interpreter);
       ann.construct(interpreter);
@@ -471,9 +479,7 @@ namespace MiniZinc {
     void makeUniqueReference(void) { _ref_count = 1; }
     Definition* prev(void) const { return _prev; }
     Definition* next(void) const { return _next; }
-    bool isInCSE(void) const { return _in_cse; }
-    void addToCSE(void) { _in_cse = 1; }
-    int ident(void) const { return _ident; }
+    int ident(void) const { return _timestamp; }
     int listSize(void) const {
       int i=1;
       if (_next != this) {
@@ -517,8 +523,8 @@ namespace MiniZinc {
     const Val& operator [](int i) const { return stack[i]; }
     int size(void) const { return stack.size(); }
     bool empty(void) const { return stack.empty(); }
-    Val toVec(Interpreter* interpreter) const {
-      return Val(Vec::a(interpreter,stack));
+    Val toVec(Interpreter* interpreter, int timestamp) const {
+      return Val(Vec::a(interpreter,timestamp,stack));
     }
     /// Close this context
     void destroy(Interpreter* interpreter) {
@@ -651,6 +657,16 @@ namespace MiniZinc {
     } else if (isDef()) {
       Definition::dec(interpreter,toDef());
     }
+  }
+  inline
+  Definition* Val::toDef(void) const {
+    assert(isDef());
+    return static_cast<Definition*>(toRCO());
+  }
+  inline
+  Vec* Val::toVec(void) const {
+    assert(isVec());
+    return static_cast<Vec*>(toRCO());
   }
 
   std::vector<BytecodeProc> parse(const std::string& s);

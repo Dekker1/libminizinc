@@ -758,7 +758,7 @@ namespace MiniZinc {
               DBG_INTERPRETER("--- FZN Builtin\n");
               // this is a FlatZinc builtin
               int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-              Definition* def = new Definition(this,IntVal(0),code,mode,Val(Vec::a(this,args)),ident);
+              Definition* def = new Definition(this,IntVal(0),code,mode,Val(Vec::a(this,newIdent(),args)),ident);
               pushDef(frame,def);
               switch (mode) {
                 case BytecodeProc::ROOT:
@@ -922,12 +922,12 @@ namespace MiniZinc {
                   // Remove all elements from definition stack
                   for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
                     d->destroy(this);
-                    if (!d->isInCSE())
+                    if (true /*TODO: !d->isInCSE()*/)
                       delete d;
                   }
                   pushAgg(IntVal(!isFalse),-2);
                 } else {
-                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(this,args)),newIdent());
+                  Definition* d = new Definition(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,Val(Vec::a(this,newIdent(),args)),newIdent());
                   pushDef(frame,d);
                   pushAgg(Val(d),-2);
                 }
@@ -965,13 +965,13 @@ namespace MiniZinc {
                   // Remove all elements from definition stack
                   for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
                     d->destroy(this);
-                    if (!d->isInCSE())
+                    if (true /*TODO: !d->isInCSE()*/)
                       delete d;
                   }
                   pushAgg(IntVal(isTrue),-2);
                 } else {
                   Definition* d = new Definition(this,IntVal(0),PrimitiveMap::CLAUSE,
-                                                 BytecodeProc::FUN,Val(Vec::a(this,{Val(Vec::a(this,pos)),Val(Vec::a(this,neg))})),
+                                                 BytecodeProc::FUN,Val(Vec::a(this,newIdent(),{Val(Vec::a(this,newIdent(),pos)),Val(Vec::a(this,newIdent(),neg))})),
                                                  newIdent());
                   pushDef(frame,d);
                   pushAgg(Val(d),-2);
@@ -1002,15 +1002,15 @@ namespace MiniZinc {
                     }
                   }
                 }
-                _agg[_agg.size()-2].push(this,Val(Vec::a(this,coeffs)));
-                _agg[_agg.size()-2].push(this,Val(Vec::a(this,vars)));
+                _agg[_agg.size()-2].push(this,Val(Vec::a(this,newIdent(),coeffs)));
+                _agg[_agg.size()-2].push(this,Val(Vec::a(this,newIdent(),vars)));
                 _agg[_agg.size()-2].push(this,d);
               }
                 break;
               case AggregationCtx::VCTX_VEC:
                 // Create a vector on the aggregation stack
                 assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
-                _agg[_agg.size()-2].push(this,_agg.back().toVec(this));
+                _agg[_agg.size()-2].push(this,_agg.back().toVec(this,newIdent()));
                 break;
               case AggregationCtx::VCTX_OTHER:
                 // When closing a VCTX_OTHER context, it should contain at most one value
