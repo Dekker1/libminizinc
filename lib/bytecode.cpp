@@ -792,6 +792,9 @@ namespace MiniZinc {
               Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
               _procs[code].cse.insert(*this, cse_key, mode, v);
             }
+            if (ident >= 0) {
+              pushAgg(Val(def), -1);
+            }
           } else {
             _stack.emplace_back(_procs[code].mode[mode], currentIdent());
             BytecodeFrame* newFrame = &_stack[_stack.size()-1];
