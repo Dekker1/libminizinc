@@ -58,18 +58,24 @@ void PUSH_INSTR(CG_Builder& cg, std::vector<V>& vec, Args... args) {
   PUSH_INSTR(cg, args...);
 }
 template<typename... Args>
+void PUSH_INSTR(CG_Builder& cg, CG_ProcID p, Args... args) {
+  std::cerr << " proc[" << p.p << "]";
+    // std::cerr << " " << v;
+  PUSH_INSTR(cg, args...);
+}
+template<typename... Args>
 void PUSH_INSTR(CG_Builder& cg, CG_Value x, Args... args) {
   std::cerr << " " << x.value;
   PUSH_INSTR(cg, args...);
 }
 template<typename... Args>
 void PUSH_INSTR(CG_Builder& cg, BytecodeProc::Mode m, Args... args) {
-  std::cerr << " {{mode}}";
+  std::cerr << " " << mode_name(m);
   PUSH_INSTR(cg, args...);
 }
 template<typename... Args>
 void PUSH_INSTR(CG_Builder& cg, AggregationCtx::Symbol ctx, Args... args) {
-  std::cerr << " {{agg}}";
+  std::cerr << " " << agg_name(ctx);
   PUSH_INSTR(cg, args...);
 }
 void PUSH_LABEL(CG_Builder& frag, unsigned int label) { std::cerr << label << ":" << std::endl; }

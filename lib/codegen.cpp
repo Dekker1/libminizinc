@@ -26,10 +26,10 @@ namespace MiniZinc {
 
 struct builtin_t {
   std::function<void(Call*, BCtx, CodeGen&, CG_Builder&)> boolean;
-  std::function<void(Call*, BCtx, CodeGen&, CG_Builder&)> general;
+  std::function<void(Call*, BCtx, CodeGen&, CG_Builder&, CG_Builder&)> general;
 };
 
-typedef std::unordered_map<std::string, builtin_t> builtin_table;
+typedef std::unordered_map<ASTString, builtin_t> builtin_table;
 
 const char* instr_names[] = {
       "ADDI",
@@ -77,15 +77,60 @@ const char* instr_names[] = {
       "TRACE",
       "ABORT",
     };
+
+
+const char* mode_names[] = {
+  "RAW",
+  "ROOT",
+  "ROOT_NEG",
+  "FUN",
+  "FUN_NEG",
+  "IMP",
+  "IMP_NEG",
+  "MAX_MODE",
+};
+
+const char* agg_names[] = {
+  "VCTX_AND",
+  "VCTX_OR",
+  "VCTX_LIN",
+  "VCTX_VEC",
+  "VCTX_OTHER"
+};
 const char* instr_name(BytecodeStream::Instr i) {
   return instr_names[i];
+}
+
+const char* agg_name(AggregationCtx::Symbol s) {
+  return agg_names[s];
+}
+const char* mode_name(BytecodeProc::Mode m) {
+  return mode_names[m];
 }
 
 inline void TODO(void) {
   throw InternalError("Not yet implemented!");
 }
 
-CodeGen::ASTStSet CodeGen::scope(Expression* e) {
+CG_ProcID CodeGen::builtin_proc(std::string s) {
+  auto it(_builtins.find(s));
+  if(it != _builtins.end())
+    return (*it).second;
+  CG_ProcID id(_proc_info.size());
+  _proc_info.push_back(s);
+  _builtins.insert(std::make_pair(s, id));
+  return id;
+}
+
+
+CG_ProcID find_op(CodeGen& cg, BinOpType op) {
+  return CG_ProcID(0xbeef);
+}
+CG_ProcID find_op(CodeGen& cg, UnOpType op) {
+  return CG_ProcID(0xfeed);
+}
+
+ASTStSet CodeGen::scope(Expression* e) {
   // Is it already cached?
   auto it(_exp_scope.find(e));
   if(it != _exp_scope.end())
@@ -193,6 +238,13 @@ CodeGen::ASTStSet CodeGen::scope(Expression* e) {
   return r;
 }
 
+bool CodeGen::cache_lookup(Expression* e, Loc& out) {
+  return env().cache_lookup(e, scope(e), out);
+}
+
+void CodeGen::cache_store(Expression* e, Loc l) {
+  env().cache_store(e, scope(e), l); 
+}
 // The code generation is done with a combinator style.
 // Combinators for an expression take a CodeGen object
 
@@ -314,9 +366,10 @@ private:
   void vVarDeclI(VarDeclI* vdi) {
     VarDecl* vd(vdi->e());
     if(!vd->type().isvar() && !vd->type().isann()) {
-      std::cerr << "## Binding " << vd->id()->str() << " at g" << slot << std::endl;
+      std::cerr << "%%%% Binding " << vd->id()->str() << " at g" << slot << std::endl;
+      std::cerr << "%%%% "; debugprint(vd);
       if(!vd->e()) {
-        debugprint(vd);
+        // debugprint(vd);
         env.bind(vd->id()->v(), Loc::global(slot));
         ++slot;
       } else {
@@ -331,6 +384,10 @@ private:
     // debugprint(ass); 
   }
 
+  void vFunctionI(FunctionI* f) {
+    std::cout << "%% F: "; debugprint(f);
+  }
+
   int slot;
   CG_Env<Loc>& env;
 public:
@@ -341,14 +398,6 @@ public:
 };
 
 // Placeholders.
-#define MAKE_VAR 0xf00f
-
-/*
-#define VEC_CTX 8
-#define OP_OR 3
-#define OP_AND 4
-*/
-
 class Compile : public ItemVisitor {
 private:
   friend class ItemIter<Compile>;
@@ -362,6 +411,8 @@ private:
   /// Visit variable declaration
   void vVarDeclI(VarDeclI* vdi) {
     VarDecl* vd(vdi->e());
+    if(vd->type().isann())
+      return;
     std::cerr << "## Binding " << vd->id()->str() << std::endl;
     if(vd->type().isvar()) {
       // In whatever case, we're going to create something,
@@ -390,16 +441,16 @@ private:
             nesting.push_back(iter);
             iter.emit_pre(root_frag);
           }
-          PUSH_INSTR(root_frag, BytecodeStream::CALL /*, "make-var" */, CG::r(r_d));
+          PUSH_INSTR(root_frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.builtin_proc("make-var"), CG::r(r_d));
           for(int r_i = r_regs.size()-1; r_i >= 0; --r_i) {
             nesting[r_i].emit_post(root_frag);
           }
           PUSH_INSTR(root_frag, BytecodeStream::CLOSE_AGGREGATION);
         } else {
           // FIXME: Compute the domain of the variable.
-          PUSH_INSTR(root_frag, BytecodeStream::CALL /*, "make-var" */, CG::r(r_d));
+          PUSH_INSTR(root_frag, BytecodeStream::CALL, cg.builtin_proc("make-var"), CG::r(r_d));
         }
-        int r(TEMP_REG(cg));
+        r = TEMP_REG(cg);
         PUSH_INSTR(root_frag, BytecodeStream::POP, CG::r(r));
       }
       // Now copy it into a global, and add it to the env.
@@ -418,12 +469,11 @@ private:
 
   /// Visit assign item
   void vAssignI(AssignI* ass) {
-    std::cerr << "Assign: ";
-    debugprint(ass); 
+    std::cerr << "%%%% Assign: "; debugprint(ass); 
   }
 
   void vConstraintI(ConstraintI* c) {
-    std::cerr << "## "; debugprint(c->e());
+    std::cerr << "%%%% "; debugprint(c->e());
     CG::eval(c->e(), C_ROOT, cg, root_frag);
   }
   CodeGen& cg;
@@ -446,6 +496,21 @@ void CG::run(CodeGen& cg, Model* m) {
 
 // Evaluate an expression, place it on the value stack.
 void CG::eval(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
+  // If the value is already available in a register somewhere, just push it.
+  Loc l(Loc::reg(0));
+  if(cg.cache_lookup(e, l)) {
+    int r;
+    if(l.is_reg()) {
+      r = l.index();
+    } else {
+      // If a global, put it in a register, and update the cached value.
+      r = GET_REG(cg); 
+      PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(l.index()), CG::r(r));
+      cg.cache_store(e, Loc::reg(r));
+    }
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+    return;
+  }
   switch (e->eid()) {
   case Expression::E_INTLIT:
     CG::eval(e->template cast<IntLit>(), cg, frag);
@@ -578,24 +643,37 @@ void CG::eval(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builder
 }
 
 int CG::locate(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
+  Loc l(Loc::reg(0));
+  if(cg.cache_lookup(e, l)) {
+    if(l.is_reg()) {
+      return l.index();
+    } else {
+      // Otherwise, move the result into a register, and update the cache entry.
+      int r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(l.index()), CG::r(r));
+      cg.cache_store(e, Loc::reg(r));
+      return r;
+    }
+  }
+  int r;
   switch (e->eid()) {
   case Expression::E_INTLIT:
-    return CG::locate(e->template cast<IntLit>(), cg, frag);
+    r = CG::locate(e->template cast<IntLit>(), cg, frag);
     break;
   case Expression::E_FLOATLIT:
-    return CG::locate(e->template cast<FloatLit>(), cg, frag);
+    r = CG::locate(e->template cast<FloatLit>(), cg, frag);
     break;
   case Expression::E_BOOLLIT:
-    return CG::locate(e->template cast<BoolLit>(), cg, frag);
+    r = CG::locate(e->template cast<BoolLit>(), cg, frag);
     break;
   case Expression::E_STRINGLIT:
-    return CG::locate(e->template cast<StringLit>(), cg, frag);
+    r = CG::locate(e->template cast<StringLit>(), cg, frag);
     break;
   case Expression::E_ID:
-    return CG::locate(e->template cast<Id>(), cg, frag);
+    r = CG::locate(e->template cast<Id>(), cg, frag);
     break;
   case Expression::E_ARRAYACCESS:
-    return CG::locate(e->template cast<ArrayAccess>(), ctx, cg, frag);
+    r = CG::locate(e->template cast<ArrayAccess>(), ctx, cg, frag);
     break;
   case Expression::E_VARDECL:
   case Expression::E_TI:
@@ -605,13 +683,15 @@ int CG::locate(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
   default: {
     PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_OTHER);
     CG::eval(e, ctx, cg, frag);
-    int r = GET_REG(cg);
+    r = GET_REG(cg);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-    return r;
     break;
   }
   }
+  // Now save it in the cache.
+  cg.cache_store(e, Loc::reg(r));
+  return r;
 }
 
 int CG::locate(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value) {
@@ -640,11 +720,16 @@ int CG::locate(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builde
     throw InternalError("Bytecode generator encountered unexpected expression type.");
     break;
   default: {
-    PUSH_INSTR(value, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_OTHER);
-    CG::eval(e, ctx, cg, pred, value);
+    // We bind e at the end of the _pred_ fragment, so that compiler-level CSE is well-behaved.
+    // Otherwise, we end up in situations where e is bound in [value], but not in [pred].
+    CG_Builder pred_tl;
+    PUSH_INSTR(pred_tl, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_OTHER);
+    CG::eval(e, ctx, cg, pred, pred_tl);
+    pred.append(pred_tl);
     int r = GET_REG(cg);
-    PUSH_INSTR(value, BytecodeStream::POP, CG::r(r));
-    PUSH_INSTR(value, BytecodeStream::CLOSE_AGGREGATION);
+    PUSH_INSTR(pred, BytecodeStream::POP, CG::r(r));
+    PUSH_INSTR(pred, BytecodeStream::CLOSE_AGGREGATION);
+    cg.cache_store(e, Loc::reg(r));
     return r;
     break;
   }
@@ -732,7 +817,7 @@ void CG::eval(ArrayLit* a, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
 }
 
-int vec_get_ith(int r_A, int pos, CodeGen& cg, CG_Builder& frag, int r) {
+void vec_get_ith(int r_A, int pos, CodeGen& cg, CG_Builder& frag, int r) {
   PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(pos), CG::r(r));
   PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r), CG::r(r));
 }
@@ -882,7 +967,6 @@ void CG::eval(ITE* ite, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
 
   PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_AND);
   // Post c_1 || ... || c_{k-1} || ~c_k || v_k, for k in 1..n.
-
   PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
 }
 void CG::eval(ITE* ite, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value) {
@@ -967,6 +1051,12 @@ void eval_exists(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
   }
   PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
 }
+void eval_error_b(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
+  throw InternalError("Call should only appear in general context.");
+}
+void eval_error_g(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value) {
+  throw InternalError("Call should only appear in Boolean context.");
+}
 void eval_sum(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value) {
   std::cerr << "## Evaluating sum" << std::endl;
   assert(call->n_args() == 1);
@@ -975,9 +1065,21 @@ void eval_sum(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& v
   // TODO
 }
 
+void eval_assert_b(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 2);
+  // return CG::eval(call->arg(2), ctx, cg, frag);
+  // FIXME: Ignoring for now.
+  int r = CG::locate_immi(1, cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+}
+
 builtin_table init_builtins(void) {
   builtin_table tbl;
-  // tbl.insert(std::make_pair("sum", eval_sum));
+  Constants& c(constants());
+  tbl.insert(std::make_pair(c.ids.sum, builtin_t { eval_error_b, eval_sum } ));
+  tbl.insert(std::make_pair(c.ids.exists, builtin_t { eval_exists, eval_error_g } ));
+  tbl.insert(std::make_pair(c.ids.forall, builtin_t { eval_forall, eval_error_g } ));
+  tbl.insert(std::make_pair(c.ids.assert, builtin_t { eval_assert_b, eval_error_g } ));
   return tbl;
 }
 builtin_table& builtins(void) {
@@ -1058,8 +1160,8 @@ void CG::eval(BinOp* b, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& val
     CG_Builder cond_tl;
     int r_rhs(CG::locate(b->rhs(), ctx, cg, cond_tl, value));
     int r_zero(CG::locate_immi(0, cg, cond_tl));
-    PUSH_INSTR(cond_tl, BytecodeStream::CALL, /* find_builtin(cg, BOT_NQ), */ CG::r(r_rhs), CG::r(r_zero));
-    PUSH_INSTR(value, BytecodeStream::CALL /*, find_builtin(cg, b->op(), r_lhs, r_rhs) */); 
+    PUSH_INSTR(cond_tl, BytecodeStream::CALL, find_op(cg, BOT_NQ), CG::r(r_rhs), CG::r(r_zero));
+    PUSH_INSTR(value, BytecodeStream::CALL , find_op(cg, b->op()), CG::r(r_lhs), CG::r(r_rhs)); 
     cond.append(cond_tl);
   } else {
     // TODO: Check whether the expression is aggregatable.
@@ -1085,6 +1187,16 @@ void CG::eval(UnOp* u, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& valu
 }
 
 void CG::eval(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& frag) {
+  // If we have a builtin for this, dispatch to that instead.
+  {
+    GCLock gc;
+    auto it(builtins().find(call->id().str()));
+    if(it != builtins().end()) {
+      (*it).second.boolean(call, ctx, cg, frag);
+      return;
+    }
+  }
+
   // Might have some partiality from the arguments.
   CG_Builder frag_tl;
 
@@ -1106,6 +1218,14 @@ void CG::eval(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& v
   // For a call, we need to bind each of the arguments into registers.
   // They need to be available for the conditional call, so they get evaluated in the
   // conditional bit.
+  {
+    GCLock gc;
+    auto it(builtins().find(call->id().str()));
+    if(it != builtins().end()) {
+      (*it).second.general(call, ctx, cg, cond, value);
+      return;
+    }
+  }
   CG_Builder cond_tl;
 
   int sz = call->n_args();

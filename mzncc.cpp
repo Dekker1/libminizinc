@@ -64,7 +64,7 @@ int main(int argc, const char** argv) {
       }
 
       Model* m(r.read());
-      debugprint(m);
+      // debugprint(m);
 
       CodeGen cg;
       CG::run(cg, m);

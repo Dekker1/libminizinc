@@ -40,10 +40,6 @@ public:
   int x;
 };
 
-// During code generation, we track the mapping between
-// identifiers and their locations.
-// typedef std::unordered_map<ASTString, Loc> CG_Env;
-
 // Code generators for structures.
 // Expressions can be executed in three modes:
 // - If Boolean, it is always just executed.
@@ -107,8 +103,26 @@ class CG_Builder {
   CG_Frag* tl;
 };
 */
+struct cmp_ASTString {
+  bool operator()(const ASTString& s, const ASTString& t) const {
+    if(s.size() != t.size())
+      return s.size() < t.size();
+    return s.size() > 0 && strncmp(s.c_str(), t.c_str(), s.size()) < 0;
+  }
+};
+
+typedef std::set<ASTString, cmp_ASTString> ASTStSet;
 
 // An environment should never outlive its parent.
+struct eq_Expression {
+  bool operator()(Expression* e, Expression* f) const {
+    return Expression::equal(e, f);
+  }
+};
+struct hash_Expression {
+  bool operator()(Expression* e) const { return Expression::hash(e); }
+};
+
 template<class T>
 class CG_Env {
 private:
@@ -122,7 +136,7 @@ public:
   CG_Env(void)
     : p(nullptr), sz(0) { }
   CG_Env(CG_Env&& o)
-    : bindings(std::move(o.bindings)), available(std::move(o.available)), p(o.p), sz(o.sz) { }
+    : bindings(std::move(o.bindings)), available(std::move(o.available)), occurs(std::move(o.occurs)), p(o.p), sz(o.sz) { }
 
   T lookup(const ASTString& s) const {
     auto it(bindings.find(s));
@@ -131,6 +145,7 @@ public:
     assert(p);
     return p->lookup(s);
   }
+
   void bind(const ASTString& s, T val) {
     auto it(bindings.find(s));
     if(it != bindings.end())
@@ -138,6 +153,43 @@ public:
     else
       sz++;
     bindings.insert(std::make_pair(s, val));
+
+    // Invalidate any cached values mentioning s.
+    auto o_it(occurs.find(s));
+    if(o_it != occurs.end()) {
+      // We're lazy here, in that we don't remove e from
+      // other occurs lists.
+      for(Expression* e : (*o_it).second)
+        available.erase(e);
+      occurs.erase(o_it);
+    }
+  }
+
+  // Check whether e is already available in an enclosing environment.
+  bool cache_lookup(Expression* e, ASTStSet e_scope, T& ret) {
+    auto it(available.find(e));
+    // Anything in the current table is hasn't been invalidated.
+    if(it != available.end()) {
+      ret = (*it).second;
+      return true; 
+    }
+    if(!p) return false;
+
+    // If there's a parent table, check whether we've re-bound
+    // something in its scope.
+    for(auto p : bindings) {
+      if(e_scope.find(p.first) != e_scope.end())
+        return false;
+    }
+    // If the scope hasn't been invalidated, check the parent.
+    return p->cache_lookup(e, e_scope, ret);
+  }
+
+  void cache_store(Expression* e, ASTStSet e_scope, T val) {
+    available.insert(std::make_pair(e, val));
+    // Add e to the occurs lists for variables in its scope.
+    for(ASTString s : e_scope)
+      occurs[s].push_back(e);
   }
 
   /*
@@ -149,8 +201,10 @@ public:
 
   unsigned int size(void) const { return sz; }
 
-  std::unordered_map<ASTString, T> bindings;
-  std::unordered_map<Expression*, T> available;
+  typename ASTStringMap<T>::t bindings;
+
+  std::unordered_map<Expression*, T, hash_Expression, eq_Expression> available;
+  typename ASTStringMap<std::vector<Expression*> >::t occurs;
 
   // Parent environment.
   CG_Env<T>* p;
@@ -159,7 +213,7 @@ public:
 
 struct CG {
   struct Builtin {
-    enum T { CLAUSE, ELEMENT };
+    enum T { MAKE_VAR, CLAUSE, ELEMENT, EQ, LE };
   };
   
   inline static CG_Value g(int g) { return CG_Value::global(g); }
@@ -196,23 +250,11 @@ struct CG {
 
   // For other, possibly partial, expressions.
   static void eval(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
+  // FIXME: Locate always binds the result in the partial fragment, so the result is available
+  // in following calls. So the [value] argument is ignored.
+  // GKG: Check that this behaves correctly for comprehensions.
   static int locate(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
-  /*
-  static void run(CodeGen& cg, ArrayAccess* a, BCtx ctx);
-  static void run(CodeGen& cg, Comprehension* c, BCtx ctx);
-  static void run(CodeGen& cg, ITE* ite, BCtx ctx);
-  static void run(CodeGen& cg, BinOp* op, BCtx ctx);
-  static void run(CodeGen& cg, UnOp* op, BCtx ctx);
-  static void run(CodeGen& cg, Call* call, BCtx ctx);
-  static void run(CodeGen& cg, Let* let, BCtx ctx);
 
-  static void run_condition(CodeGen& cg, ArrayAccess* a, BCtx ctx);
-  static void run_condition(CodeGen& cg, ITE* ite, BCtx ctx);
-  static void run_condition(CodeGen& cg, BinOp* op, BCtx ctx);
-  static void run_condition(CodeGen& cg, UnOp* op, BCtx ctx);
-  static void run_condition(CodeGen& cg, Call* call, BCtx ctx);
-  static void run_condition(CodeGen& cg, Let* let, BCtx ctx);
-  */
   static void eval(ArrayAccess* a, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
   static void eval(ITE* ite, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
   static void eval(BinOp* op, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
@@ -237,12 +279,6 @@ struct CG_Proc {
 };
 
 struct CodeGen {
-  struct cmp_ASTString {
-    bool operator()(const ASTString& s, const ASTString& t) {
-      return s.hash() < t.hash();
-    }
-  };
-  typedef std::set<ASTString, cmp_ASTString> ASTStSet;
   
   typedef unsigned int proc_id;
   typedef unsigned int reg_id;
@@ -267,7 +303,11 @@ struct CodeGen {
     delete c;
   }
 
-  CG_Value find_builtin(CG::Builtin::T builtin);
+  // Consult/update the available expressions in the current environment.
+  bool cache_lookup(Expression* e, Loc& out);
+  void cache_store(Expression* e, Loc l);
+
+  // CG_Value find_builtin(CG::Builtin::T builtin);
 
   std::vector< std::vector<CG_Instr> > bytecode; // Bytecode we've built
 
@@ -285,10 +325,20 @@ struct CodeGen {
 
   // Helper information. For an expression, which variables does it refer to?
   ASTStSet scope(Expression* e);
-  std::unordered_map<Expression*, ASTStSet> _exp_scope;
+  std::unordered_map<Expression*, ASTStSet, hash_Expression, eq_Expression> _exp_scope;
+
+  // Procedure information
+  CG_ProcID builtin_proc(std::string s);
+  std::unordered_map<std::string, CG_ProcID> _builtins;
+  std::vector<std::string> _proc_info;
+
+  // Procedures yet to be emitted.
+  std::vector< std::pair<Expression*, unsigned int> > let_queue;
 };
 
 const char* instr_name(BytecodeStream::Instr i);
+const char* agg_name(AggregationCtx::Symbol s);
+const char* mode_name(BytecodeProc::Mode m);
 
 };
 
