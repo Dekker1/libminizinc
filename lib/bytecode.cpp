@@ -33,11 +33,11 @@ namespace MiniZinc {
       assert(d->pred() != 0);
       for (unsigned int i=0; i<indent; i++)
         os << "  ";
-      if (d->ident() >=0) {
-        os << d->ident() << "(";
+      if (d->timestamp() >=0) {
+        os << d->timestamp() << "(";
       }
       os << d << "." << d->_ref_count;
-      if (d->ident() >=0) {
+      if (d->timestamp() >=0) {
         os << ")";
       }
       os << ":\t";
@@ -68,15 +68,15 @@ namespace MiniZinc {
     if (isInt()) {
       oss << (*this)();
     } else if (isDef()) {
-      if (toDef()->ident() >= 0) {
-        oss << "X" << toDef()->ident() << "(";
+      if (toDef()->timestamp() >= 0) {
+        oss << "X" << toDef()->timestamp() << "(";
       }
       oss << toDef();
-      if (toDef()->ident() >= 0) {
+      if (toDef()->timestamp() >= 0) {
         oss << ")";
       }
     } else {
-      oss << "[";
+      oss << "X" << toVec()->timestamp() << "[";
       for (unsigned int i=0; i<size(); i++) {
         oss << (*this)[i].toString();
         if (i<size()-1)
@@ -708,7 +708,7 @@ namespace MiniZinc {
           if (defs && std::get<3>(frame->cse_info.back()) == _agg.back().size()-1 && _agg.back().back().isDef()) {
             // Call produced constraints and exactly one return value, which is a definition
             Definition* ret = _agg.back().back().toDef();
-            if (ret->ident() >= frame->def_ident_start) {
+            if (ret->timestamp() >= frame->def_ident_start) {
               // the definition was produced by the current frame, so
               // attach all other defs to it
               if (ret == defs) {

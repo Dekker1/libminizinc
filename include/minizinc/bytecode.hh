@@ -161,6 +161,7 @@ namespace MiniZinc {
     RefCountedObject(const RCOType& t, int timestamp) : _ref_count(0), _cse_ref_count(0), _rco_type(t==VEC ? 1 : 0), _timestamp(timestamp) {}
   public:
     RCOType rcoType(void) const { return _rco_type==1 ? VEC : DEF; }
+    const int timestamp() const { return _timestamp; }
 
     void addRef(Interpreter* interpreter) { _ref_count++; }
     void rmRef(Interpreter* interpreter);
@@ -503,7 +504,6 @@ namespace MiniZinc {
     void makeUniqueReference(void) { _ref_count = 1; }
     Definition* prev(void) const { return _prev; }
     Definition* next(void) const { return _next; }
-    int ident(void) const { return _timestamp; }
     int listSize(void) const {
       int i=1;
       if (_next != this) {
@@ -522,11 +522,8 @@ namespace MiniZinc {
     void* _v;
   public:
     explicit WeakVal(const Val& val) {
-      if(val.isDef()) {
-        _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(val.toDef()->ident()) | static_cast<ptrdiff_t>(1));
-      } else if (val.isVec()) {
-        // TODO: INCORRECT pointer could be reused, replace by vector ident
-        _v = val._v;
+      if(val.isRCO()) {
+        _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(val.toRCO()->timestamp()) | static_cast<ptrdiff_t>(1));
       } else {
         _v = val._v;
       }
