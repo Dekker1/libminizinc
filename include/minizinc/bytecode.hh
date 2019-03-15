@@ -168,7 +168,7 @@ namespace MiniZinc {
     static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
     bool exists() { return _ref_count > 0; }
 
-    void addCSE(Interpreter* interpreter) { _cse_ref_count++; }
+    void addCSE(Interpreter* interpreter) { assert(_ref_count > 0); _cse_ref_count++; }
     static void rmCSE(Interpreter* interpreter, RefCountedObject* rco);
     bool inCSE() { return _cse_ref_count > 0; }
   };
@@ -290,6 +290,11 @@ namespace MiniZinc {
     void destroy(Interpreter* interpreter) {
       for (unsigned int i=0; i<size(); i++) {
         _data[i].destroy(interpreter);
+      }
+    }
+    void reconstruct(Interpreter* interpreter) {
+      for (unsigned int i=0; i<size(); i++) {
+        _data[i].construct(interpreter);
       }
     }
     inline bool operator==(const Vec& rhs) const {
@@ -429,7 +434,6 @@ namespace MiniZinc {
         _args[i].construct(interpreter);
       }
     }
-    ~Definition(void) = delete;
   public:
     Val domain(void) const { return _domain; }
     Val ann(void) const { return _ann; }
@@ -444,63 +448,41 @@ namespace MiniZinc {
       new (d) Definition(interpreter,domain,pred,mode,args,ident,ann);
       return d;
     }
-    /// Destroy and unlink this definition
-    void destroy(Interpreter* interpreter) {
-      _ref_count = (1u<<31u)-1u;
-      if (_defs) {
+    static void free(Definition* def) {
+      if (def->_defs) {
         // destroy all linked definitions
-        Definition* d = _defs;
+        Definition* d = def->_defs;
         bool finished = false;
         while (!finished) {
           Definition* cur = d;
           d = d->next();
           finished = (cur == d);
-          if (cur->_ref_count > 0) {
-            // promote cur to parent level
-            cur->unlink();
-            cur->insertBefore(this->next());
-          } else {
-            cur->destroy(interpreter);
-            free(cur);
-          }
+          assert(cur->_ref_count == 0);
+          Definition::free(cur);
         }
       }
-      _domain.destroy(interpreter);
-      _ann.destroy(interpreter);
-      for (unsigned int i=0; i<_size; i++) {
-        _args[i].destroy(interpreter);
+      ::free(def);
+    }
+    ~Definition(void) = delete;
+    /// Destroy and unlink this definition
+    void destroy(Interpreter* interpreter);
+    void reconstruct(Interpreter* interpreter) {
+      assert(_ref_count == 0);
+      for (int i = 0; i < _size; ++i) {
+        _args[i].construct(interpreter);
       }
+      _ann.construct(interpreter);
+      _domain.construct(interpreter);
       _ref_count = 0;
-      _prev->_next = _next;
-      _next->_prev = _prev;
     }
     /// Insert singleton element into list before \a d
-    void insertBefore(Definition* d) {
-      assert(_prev==_next);
-      _prev = d->_prev;
-      _next = d;
-      d->_prev->_next = this;
-      d->_prev = this;
-    }
+    void insertBefore(Interpreter* interpreter, Definition* d);
     /// Append list to other list before \a d
-    void appendBefore(Definition* d) {
-      Definition* e1 = _prev;
-      Definition* e2 = d->_prev;
-      d->_prev = e1;
-      e1->_next = d;
-      e2->_next = this;
-      _prev = e2;
-    }
-    void unlink(void) {
-      _prev->_next = _next;
-      _next->_prev = _prev;
-      _next = this;
-      _prev = this;
-    }
+    void appendBefore(Interpreter* interpreter, Definition* d);
+    void unlink(Interpreter* interpreter);
     static void dec(Interpreter* interpreter, Definition* d) {
       if (--d->_ref_count==0) {
         d->destroy(interpreter);
-
       }
     }
     /// Set the reference count to 1
@@ -700,9 +682,45 @@ namespace MiniZinc {
     std::string operator [](Primitive p) { return _n[p.ident]; }
     int size(void) const { return _n.size(); }
   };
+
+  class Trail {
+  protected:
+    std::vector<std::pair<Definition**, Definition*>> hedge_trail;
+    std::vector<RefCountedObject*> obj_trail;
+    // <Obj trail size, Hedge trail size>
+    std::vector<std::pair<size_t, size_t>> trail_size;
+    std::vector<int> timestamp_trail;
+  public:
+    Trail() = default;
+    // TODO: Think about how to ensure deleted objects don't get removed
+    virtual ~Trail() = default;
+
+    size_t len() { return trail_size.size(); }
+    bool is_trailed(RefCountedObject* rco) { return (!trail_size.empty() && timestamp_trail.back() > rco->timestamp()); }
+
+    // Trail hedge pointer change
+    inline bool operator() (Definition** ptr) {
+      if (trail_size.empty() || timestamp_trail.back() <= (*ptr)->timestamp()) {
+        return false;
+      }
+      hedge_trail.emplace_back(ptr, *ptr);
+      return true;
+    }
+    // Trail Reference Counted Object removal
+    inline bool operator() (RefCountedObject* obj) {
+      if (trail_size.empty() || timestamp_trail.back() <= obj->timestamp()) {
+        return false;
+      }
+      obj_trail.push_back(obj);
+      return true;
+    }
+    size_t create_choicepoint(Interpreter* interpreter);
+    void untrail(Interpreter* interpreter);
+  };
   
   class Interpreter {
     friend class BytecodeProc::CSETable;
+    friend class Trail;
   public:
     typedef void (*builtin) (Interpreter& i, std::vector<Val> args);
   protected:
@@ -712,6 +730,8 @@ namespace MiniZinc {
     const std::vector<builtin>& _builtins;
     int _identCount;
   public:
+    Trail trail;
+
     Interpreter(std::vector<BytecodeProc>& procs,
                 const std::vector<builtin>& builtins,
                 const BytecodeFrame& f) : _procs(procs), _builtins(builtins), _identCount(0)
@@ -741,32 +761,26 @@ namespace MiniZinc {
         default:
           assert(false);
       }
-      if (rco->_cse_ref_count==0) {
-        switch (rco->rcoType()) {
-          case DEF:
-            free(static_cast<Definition*>(rco));
-            break;
-          case VEC:
-            free(static_cast<Vec*>(rco));
-            break;
-          default:
-            assert(false);
+      if (interpreter->trail.is_trailed(rco)) {
+        interpreter->trail(rco);
+      } else if (rco->_cse_ref_count==0) {
+        if (rco->rcoType() == DEF) {
+          Definition::free(static_cast<Definition*>(rco));
+        } else {
+          assert(rco->rcoType() == VEC);
+          free(rco);
         }
       }
     }
   }
   inline
   void RefCountedObject::rmCSE(Interpreter* interpreter, RefCountedObject* rco) {
-    if(--rco->_cse_ref_count == 0 && rco->_ref_count == 0) {
-      switch (rco->rcoType()) {
-        case DEF:
-          free(static_cast<Definition*>(rco));
-          break;
-        case VEC:
-          free(static_cast<Vec*>(rco));
-          break;
-        default:
-          assert(false);
+    if(--rco->_cse_ref_count == 0 && !interpreter->trail.is_trailed(rco) && rco->_ref_count == 0) {
+      if (rco->rcoType() == DEF) {
+        Definition::free(static_cast<Definition*>(rco));
+      } else {
+        assert(rco->rcoType() == VEC);
+        free(rco);
       }
     }
   }

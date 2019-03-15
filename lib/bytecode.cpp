@@ -56,7 +56,74 @@ namespace MiniZinc {
     } while (d != head);
   }
 
-  
+  void Definition::destroy(MiniZinc::Interpreter* interpreter)  {
+    _ref_count = (1u<<31u)-1u;
+    if (_defs) {
+      // destroy all linked definitions
+      Definition* d = _defs;
+      bool finished = false;
+      while (!finished) {
+        Definition* cur = d;
+        d = d->next();
+        finished = (cur == d);
+        if (cur->_ref_count > 0) {
+          // promote cur to parent level
+          cur->unlink(interpreter);
+          cur->insertBefore(interpreter, this->next());
+        } else {
+          cur->destroy(interpreter);
+        }
+      }
+    }
+    _domain.destroy(interpreter);
+    _ann.destroy(interpreter);
+    for (unsigned int i=0; i<_size; i++) {
+      _args[i].destroy(interpreter);
+    }
+    _ref_count = 0;
+    interpreter->trail(&(_prev->_next));
+    _prev->_next = _next;
+    interpreter->trail(&(_next->_prev));
+    _next->_prev = _prev;
+  }
+
+  void Definition::insertBefore(Interpreter* interpreter, Definition* d) {
+    assert(_prev==_next);
+    interpreter->trail(&_prev);
+    _prev = d->_prev;
+    interpreter->trail(&_next);
+    _next = d;
+    interpreter->trail(&d->_prev->_next);
+    d->_prev->_next = this;
+    interpreter->trail(&d->_prev);
+    d->_prev = this;
+  }
+
+  void Definition::appendBefore(Interpreter* interpreter, Definition* d) {
+    Definition* e1 = _prev;
+    Definition* e2 = d->_prev;
+    interpreter->trail(&d->_prev);
+    d->_prev = e1;
+    interpreter->trail(&e1->_next);
+    e1->_next = d;
+    interpreter->trail(&e2->_next);
+    e2->_next = this;
+    interpreter->trail(&_prev);
+    _prev = e2;
+  }
+
+  void Definition::unlink(Interpreter* interpreter) {
+    interpreter->trail(&_prev->_next);
+    _prev->_next = _next;
+    interpreter->trail(&_next->_prev);
+    _next->_prev = _prev;
+    interpreter->trail(&_next);
+    _next = this;
+    interpreter->trail(&_prev);
+    _prev = this;
+  }
+
+
   PrimitiveMap::PrimitiveMap(void)
   : _s({ {"bool_not", {BOOLNOT,1}}, {"clause",{CLAUSE,2}}, {"forall",{FORALL,1}}, {"exists",{EXISTS,1}}, {"lin_exp",{LINEXP,3}} }) {
     _n.resize(_s.size());
@@ -455,7 +522,7 @@ namespace MiniZinc {
   
   void
   Interpreter::pushDef(Definition* d) {
-    d->insertBefore(_agg.back().def_stack);
+    d->insertBefore(this, _agg.back().def_stack);
   }
   
   void
@@ -755,12 +822,12 @@ namespace MiniZinc {
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
             Definition* def = Definition::a(this,IntVal(0),code,mode,args,ident);
             pushDef(def);
+            if (ident >= 0) {
+              pushAgg(Val(def), -1);
+            }
             if (cse_suited) {
               Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
               _procs[code].cse.insert(*this, cse_key, mode, v);
-            }
-            if (ident >= 0) {
-              pushAgg(Val(def), -1);
             }
           } else {
             _stack.emplace_back(_procs[code].mode[mode]);
@@ -923,7 +990,7 @@ namespace MiniZinc {
             if (_agg.back().def_stack->next() != _agg.back().def_stack) {
               defs = _agg.back().def_stack->next();
               // unlink definitions from aggregation, to get rid of dummy head element
-              _agg.back().def_stack->unlink();
+              _agg.back().def_stack->unlink(this);
             }
             
             assert(_agg.size() >= 2);
@@ -1015,7 +1082,7 @@ namespace MiniZinc {
                     defs = defs->next();
                   }
                 }
-                result->unlink();
+                result->unlink(this);
                 result->makeUniqueReference();
                 result->defs(defs);
                 defs = result;
@@ -1023,7 +1090,7 @@ namespace MiniZinc {
             }
             if (defs) {
               // Move definitions to parent aggregation
-              defs->appendBefore(_agg[_agg.size()-2].def_stack);
+              defs->appendBefore(this, _agg[_agg.size()-2].def_stack);
             }
             _agg.back().destroyDef(this);
             _agg.pop_back();
@@ -1570,4 +1637,45 @@ namespace MiniZinc {
     }
   }
   
+
+  size_t Trail::create_choicepoint(MiniZinc::Interpreter* interpreter) {
+    trail_size.emplace_back(obj_trail.size(), hedge_trail.size());
+    timestamp_trail.push_back(interpreter->_identCount);
+    return len();
+  }
+
+  void Trail::untrail(MiniZinc::Interpreter* interpreter) {
+    assert(len() > 0);
+    size_t ot_size, ht_size;
+    std::tie(ot_size, ht_size) = trail_size.back(); trail_size.pop_back();
+    int timestamp = timestamp_trail.back(); timestamp_trail.pop_back();
+    Definition* back = interpreter->_agg[0].def_stack;
+    while(obj_trail.size() > ot_size) {
+      auto obj = obj_trail.back();
+      switch (obj->rcoType()) {
+        case RefCountedObject::DEF:
+          static_cast<Definition*>(obj)->reconstruct(interpreter);
+          break;
+        case RefCountedObject::VEC:
+          static_cast<Vec*>(obj)->reconstruct(interpreter);
+          break;
+        default:
+          assert(false);
+      }
+      obj_trail.pop_back();
+    }
+    while (hedge_trail.size() > ht_size) {
+      auto entry = hedge_trail.back();
+      *entry.first = entry.second;
+      hedge_trail.pop_back();
+    }
+    assert(interpreter->_stack.size() == 1);
+    while (back->timestamp() > timestamp) {
+      Definition* rem = back;
+      back = back->prev();
+      rem->destroy(interpreter);
+      free(rem);
+    }
+    interpreter->_identCount = timestamp;
+  }
 }
