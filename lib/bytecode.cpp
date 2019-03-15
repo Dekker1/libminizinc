@@ -206,20 +206,25 @@ namespace MiniZinc {
     return hash;
   }
 
-  std::pair<Val, bool> BytecodeProc::CSETable::lookup(Interpreter& interpreter, const CSEKey& key, BytecodeProc::Mode& mode) {
-    assert(mode != RAW);
-    auto it = _table.find(key);
-    if (it != _table.end()) {
+  std::pair<Val, bool> CSETable::lookup(Interpreter* interpreter, const CSEKey& key, BytecodeProc::Mode& mode) {
+    assert(mode != BytecodeProc::RAW);
+    iterator it;
+    size_t i = _table.size();
+    do {
+      i--;
+      it = _table[i].find(key);
+    } while (it == _table[i].end() && i > 0);
+    if (it != _table[i].end()) {
       Val val = it->second.second;
-      Mode val_m = it->second.first;
+      BytecodeProc::Mode val_m = it->second.first;
       if (!val.exists()) {
-        this->_table.erase(it);
+        this->_table[i].erase(it);
         return {Val(), false};
       }
-      DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << mode_to_string[val_m] << " Value: " << val.toString() << "\n");
+      DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << BytecodeProc::mode_to_string[val_m] << " Value: " << val.toString() << "\n");
       auto convert = [&interpreter, val_m, mode](Val v) {
         assert(!v.isVec());
-        if (is_neg(mode) != is_neg(val_m)) {
+        if (BytecodeProc::is_neg(mode) != BytecodeProc::is_neg(val_m)) {
           Val new_val;
           if (v.isInt()) {
             assert(v().toInt() == 0 || v().toInt() == 1);
@@ -229,13 +234,13 @@ namespace MiniZinc {
             *ptr = WeakVal(v);
             auto nkey = CSEKey({1, ptr});
             bool found;
-            auto mode = BytecodeProc::FUN;
-            std::tie(new_val, found) = interpreter._procs[PrimitiveMap::BOOLNOT].cse.lookup(interpreter, nkey, mode);
+            auto cmode = BytecodeProc::FUN;
+            std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
             if (!found) {
-              auto d = Definition::a(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter.newIdent());
-              interpreter.pushDef(d);
+              auto d = Definition::a(interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter->newIdent());
+              interpreter->pushDef(d);
               new_val = Val(d);
-              interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(interpreter, nkey, mode, new_val);
+              interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
             }
           }
           return new_val;
@@ -245,14 +250,14 @@ namespace MiniZinc {
       if (mode == val_m){
         return std::make_pair(val, true);
       // Assumption: 'val' must be of boolean type, otherwise mode is always FUN (or RAW)
-      } else if (val_m == ROOT || val_m == ROOT_NEG) {
+      } else if (val_m == BytecodeProc::ROOT || val_m == BytecodeProc::ROOT_NEG) {
         return {convert(val), true};
-      } else if (mode == ROOT || mode == ROOT_NEG) {
-        DBG_INTERPRETER("--- Run call in " + mode_to_string[mode] + " context\n");
+      } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+        DBG_INTERPRETER("--- Run call in " + BytecodeProc::mode_to_string[mode] + " context\n");
         return {Val(), false};
-      } else if (val_m == IMP || val_m == IMP_NEG) {
-        mode = is_neg(mode) ? FUN_NEG : FUN;
-        DBG_INTERPRETER("--- Run call in " + mode_to_string[mode] + " context\n");
+      } else if (val_m == BytecodeProc::IMP || val_m == BytecodeProc::IMP_NEG) {
+        mode = BytecodeProc::is_neg(mode) ? BytecodeProc::FUN_NEG : BytecodeProc::FUN;
+        DBG_INTERPRETER("--- Run call in " + BytecodeProc::mode_to_string[mode] + " context\n");
         return {Val(), false};
       } else {
         return {convert(val), true};
@@ -261,20 +266,20 @@ namespace MiniZinc {
     return {Val(), false};
   }
 
-  void BytecodeProc::CSETable::insert(Interpreter& interpreter, const CSEKey& key, const BytecodeProc::Mode& mode, Val& val) {
-    assert(mode != RAW);
-    DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << mode_to_string[mode] << " Value: " << val.toString() << "\n");
+  void CSETable::insert(Interpreter* interpreter, const CSEKey& key, const BytecodeProc::Mode& mode, Val& val) {
+    assert(mode != BytecodeProc::RAW);
+    DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString() << "\n");
     // If value is reference counted, flag that it's in CSE
-    val.addToCSE(&interpreter);
-    auto insertion = _table.emplace(key, std::make_pair(mode, val));
+    val.addToCSE(interpreter);
+    auto insertion = _table.back().emplace(key, std::make_pair(mode, val));
     if (!insertion.second) {
       CSETable::iterator& it = insertion.first;
       // We are replacing another entry within the CSE table.
       assert(it->first == key && it->second.first != mode);
-      it->second.second.removeFromCSE(&interpreter);
-      if (mode == ROOT || mode == ROOT_NEG) {
+      it->second.second.removeFromCSE(interpreter);
+      if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
         // TODO: Replace all occurences of previous value by true / false
-      } else if (mode == FUN || mode == FUN_NEG) {
+      } else if (mode == BytecodeProc::FUN || mode == BytecodeProc::FUN_NEG) {
         // TODO: Replace all occurences of previous value by val / ~val
       }
       it->second = std::make_pair(mode, val);
@@ -768,10 +773,10 @@ namespace MiniZinc {
             if (std::get<2>(entry).first != 0) {
               if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
                 Val v = Val(1);
-                _procs[std::get<0>(entry)].cse.insert(*this, std::get<2>(entry), std::get<1>(entry), v);
+                cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), v);
               } else if (std::get<3>(entry) == _agg.back().size()-1) {
                 Val ret = _agg[_agg.size()-1].back();
-                _procs[std::get<0>(entry)].cse.insert(*this, std::get<2>(entry), std::get<1>(entry), ret);
+                cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
               }
             }
           }
@@ -802,7 +807,7 @@ namespace MiniZinc {
           if (cse_suited) {
             cse_key = WeakVal::cse_key(args);
             // Lookup item in CSE
-            auto cse = _procs[code].cse.lookup(*this, cse_key, mode);
+            auto cse = cse_lookup(code, cse_key, mode);
             if (cse.second) {
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(cse.first.isInt());
@@ -827,7 +832,7 @@ namespace MiniZinc {
             }
             if (cse_suited) {
               Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
-              _procs[code].cse.insert(*this, cse_key, mode, v);
+              cse_insert(code, cse_key, mode, v);
             }
           } else {
             _stack.emplace_back(_procs[code].mode[mode]);
@@ -874,7 +879,7 @@ namespace MiniZinc {
             cse_key = WeakVal::cse_key(args);
             bool found;
             Val ret;
-            std::tie(ret, found) = _procs[code].cse.lookup(*this, cse_key, mode);
+            std::tie(ret, found) = cse_lookup(code, cse_key, mode);
             if (found) {
               // RET with CSE found value
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
@@ -890,10 +895,10 @@ namespace MiniZinc {
                 if (std::get<2>(entry).first != 0) {
                   if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
                     Val v = Val(1);
-                    _procs[std::get<0>(entry)].cse.insert(*this, std::get<2>(entry), std::get<1>(entry), v);
+                    cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), v);
                   } else if (std::get<3>(entry) == _agg.back().size()-1) {
                     Val ret = _agg[_agg.size()-1].back();
-                    _procs[std::get<0>(entry)].cse.insert(*this, std::get<2>(entry), std::get<1>(entry), ret);
+                    cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
                   }
                 }
               }
@@ -1577,12 +1582,18 @@ namespace MiniZinc {
   }
   
   Interpreter::~Interpreter(void) {
+    while (trail.len() > 0) {
+      trail.untrail(this);
+    }
     for (auto& f : _stack) {
       f.destroy(this);
     }
     for (auto& a : _agg) {
       a.destroyStack(this);
       a.destroyDef(this);
+    }
+    for (auto &table : cse) {
+      table.destroy(this);
     }
   }
   
@@ -1601,7 +1612,7 @@ namespace MiniZinc {
     if (cse_suited) {
       cse_key = WeakVal::cse_key(args);
       // Lookup item in CSE
-      auto cse = _procs[code].cse.lookup(*this, cse_key, mode);
+      auto cse = cse_lookup(code, cse_key, mode);
       if (cse.second) {
         if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
           assert(cse.first.isInt());
@@ -1623,7 +1634,7 @@ namespace MiniZinc {
       pushDef(def);
       if (cse_suited) {
         Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
-        _procs[code].cse.insert(*this, cse_key, mode, v);
+        cse_insert(code, cse_key, mode, v);
       }
       if (ident >= 0) {
         pushAgg(Val(def), -1);
@@ -1636,11 +1647,13 @@ namespace MiniZinc {
       run();
     }
   }
-  
 
-  size_t Trail::create_choicepoint(MiniZinc::Interpreter* interpreter) {
+  size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
     trail_size.emplace_back(obj_trail.size(), hedge_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
+    for (auto &table : interpreter->cse) {
+      table.push();
+    }
     return len();
   }
 
@@ -1677,5 +1690,8 @@ namespace MiniZinc {
       free(rem);
     }
     interpreter->_identCount = timestamp;
+    for (auto &table : interpreter->cse) {
+      table.pop();
+    }
   }
 }

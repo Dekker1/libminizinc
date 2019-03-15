@@ -568,6 +568,20 @@ namespace MiniZinc {
     }
   };
 
+  class BytecodeProc {
+  public:
+    /// The name of this procedure
+    std::string name;
+    /// Number of arguments
+    int nargs;
+    /// Modes
+    enum Mode { RAW, ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
+    static const std::string mode_to_string[MAX_MODE+1];
+    static const bool is_neg(const Mode& mode) { return mode == ROOT_NEG || mode == FUN_NEG || mode == IMP_NEG; }
+    /// The code for different modes
+    BytecodeStream mode[MAX_MODE+1];
+  };
+
   typedef std::pair<size_t, WeakVal*> CSEKey;
   // TODO: Currently not used. Was used for CSE as an Hashtable
   struct CSEHasher {
@@ -602,33 +616,29 @@ namespace MiniZinc {
       }
     }
   };
-  
-  class BytecodeProc {
+  /// CSE table: Saved results of historical executions
+  class CSETable {
   public:
-    /// The name of this procedure
-    std::string name;
-    /// Number of arguments
-    int nargs;
-    /// Modes
-    enum Mode { RAW, ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
-    static const std::string mode_to_string[MAX_MODE+1];
-    static const bool is_neg(const Mode& mode) { return mode == ROOT_NEG || mode == FUN_NEG || mode == IMP_NEG; }
-    /// The code for different modes
-    BytecodeStream mode[MAX_MODE+1];
-
-    /// CSE table: Saved results of historical executions
-    class CSETable {
-    public:
 //      typedef std::unordered_map<CSEKey, std::pair<Mode, Val>, CSEHasher, CSEEquals> impl;
-      typedef std::map<CSEKey, std::pair<Mode, Val>, CSECompare> impl;
-      typedef impl::iterator iterator;
-      std::pair<Val, bool> lookup(Interpreter& interpreter, const CSEKey& key, BytecodeProc::Mode& mode);
-      void insert(Interpreter& interpreter, const CSEKey& key, const BytecodeProc::Mode& mode, Val& val);
-    protected:
-      impl _table;
-    public:
-      ~CSETable() { for(const auto &item : _table ) { free(item.first.second); }}
-    } cse;
+    typedef std::map<CSEKey, std::pair<BytecodeProc::Mode, Val>, CSECompare> impl;
+    typedef impl::iterator iterator;
+    std::pair<Val, bool> lookup(Interpreter* interpreter, const CSEKey& key, BytecodeProc::Mode& mode);
+    void insert(Interpreter* interpreter, const CSEKey& key, const BytecodeProc::Mode& mode, Val& val);
+  protected:
+    std::vector<impl> _table = std::vector<impl>(1);
+  public:
+    ~CSETable() { assert(_table.size() == 1 && _table[0].size() == 0); }
+    void destroy(Interpreter* interpreter) {
+      for (auto &table : _table) {
+        for(auto &item : table) {
+          free(item.first.second);
+          item.second.second.removeFromCSE(interpreter);
+        }
+      }
+      _table = std::vector<impl>(1);
+    }
+    void push() { _table.emplace_back(); }
+    void pop() { _table.pop_back(); }
   };
 
   class BytecodeFrame {
@@ -714,12 +724,11 @@ namespace MiniZinc {
       obj_trail.push_back(obj);
       return true;
     }
-    size_t create_choicepoint(Interpreter* interpreter);
+    size_t save_state(Interpreter* interpreter);
     void untrail(Interpreter* interpreter);
   };
   
   class Interpreter {
-    friend class BytecodeProc::CSETable;
     friend class Trail;
   public:
     typedef void (*builtin) (Interpreter& i, std::vector<Val> args);
@@ -729,12 +738,13 @@ namespace MiniZinc {
     std::vector<BytecodeProc>& _procs;
     const std::vector<builtin>& _builtins;
     int _identCount;
+    std::vector<CSETable> cse;
   public:
     Trail trail;
 
     Interpreter(std::vector<BytecodeProc>& procs,
                 const std::vector<builtin>& builtins,
-                const BytecodeFrame& f) : _procs(procs), _builtins(builtins), _identCount(0)
+                const BytecodeFrame& f) : _procs(procs), _builtins(builtins), _identCount(0), cse(procs.size())
     {
       _stack.push_back(f);
     }
@@ -742,6 +752,12 @@ namespace MiniZinc {
     void run(void);
     void pushAgg(const Val& v, int stackOffset);
     void pushDef(Definition* d);
+    std::pair<Val, bool> cse_lookup(size_t proc, const CSEKey& key, BytecodeProc::Mode& mode) {
+      return cse[proc].lookup(this, key, mode);
+    }
+    void cse_insert(size_t proc, const CSEKey& key, BytecodeProc::Mode& mode, Val& val) {
+      return cse[proc].insert(this, key, mode, val);
+    }
     int newIdent(void) { return _identCount++; }
     int currentIdent(void) const { return _identCount; }
     void dumpState(std::ostream& os);
