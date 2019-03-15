@@ -166,7 +166,7 @@ namespace MiniZinc {
             std::tie(new_val, found) = interpreter._procs[PrimitiveMap::BOOLNOT].cse.lookup(interpreter, nkey, mode);
             if (!found) {
               auto d = Definition::a(&interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter.newIdent());
-              interpreter.pushDef(&interpreter._stack.back(),d);
+              interpreter.pushDef(d);
               new_val = Val(d);
               interpreter._procs[PrimitiveMap::BOOLNOT].cse.insert(interpreter, nkey, mode, new_val);
             }
@@ -454,7 +454,7 @@ namespace MiniZinc {
   }
   
   void
-  Interpreter::pushDef(BytecodeFrame* frame, Definition* d) {
+  Interpreter::pushDef(Definition* d) {
     d->insertBefore(_agg.back().def_stack);
   }
   
@@ -754,7 +754,7 @@ namespace MiniZinc {
             // this is a FlatZinc builtin
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
             Definition* def = Definition::a(this,IntVal(0),code,mode,args,ident);
-            pushDef(frame,def);
+            pushDef(def);
             if (cse_suited) {
               Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
               _procs[code].cse.insert(*this, cse_key, mode, v);
@@ -1518,4 +1518,56 @@ namespace MiniZinc {
       a.destroyDef(this);
     }
   }
+  
+  void
+  Interpreter::call(int code, const BytecodeProc::Mode& mode0, const std::vector<Val>& args0) {
+    BytecodeProc::Mode mode = mode0;
+    std::vector<Val> args = args0;
+    assert(code >= 0);
+    assert(code < _procs.size());
+    int n = _procs[code].nargs;
+    DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
+    // TODO: See if args is created when not necessary
+    assert(n == args.size());
+    bool cse_suited = n < 5 && mode != BytecodeProc::RAW;
+    CSEKey cse_key = {0, nullptr};
+    if (cse_suited) {
+      cse_key = WeakVal::cse_key(args);
+      // Lookup item in CSE
+      auto cse = _procs[code].cse.lookup(*this, cse_key, mode);
+      if (cse.second) {
+        if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+          assert(cse.first.isInt());
+          if (cse.first().toInt() != 1) {
+            // TODO: The model is inconsistent!
+            throw Error("Error: Model Inconsistent!");
+          }
+        } else {
+          pushAgg(cse.first, -1);
+        }
+        return;
+      }
+    }
+    if (_procs[code].mode[mode].size() == 0) {
+      DBG_INTERPRETER("--- FZN Builtin\n");
+      // this is a FlatZinc builtin
+      int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
+      Definition* def = Definition::a(this,IntVal(0),code,mode,args,ident);
+      pushDef(def);
+      if (cse_suited) {
+        Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
+        _procs[code].cse.insert(*this, cse_key, mode, v);
+      }
+      if (ident >= 0) {
+        pushAgg(Val(def), -1);
+      }
+    } else {
+      _stack.emplace_back(_procs[code].mode[mode]);
+      BytecodeFrame* newFrame = &_stack[_stack.size()-1];
+      newFrame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
+      newFrame->reg.mov(this, args);
+      run();
+    }
+  }
+  
 }

@@ -721,10 +721,11 @@ namespace MiniZinc {
     ~Interpreter(void);
     void run(void);
     void pushAgg(const Val& v, int stackOffset);
-    void pushDef(BytecodeFrame* frame, Definition* d);
+    void pushDef(Definition* d);
     int newIdent(void) { return _identCount++; }
     int currentIdent(void) const { return _identCount; }
     void dumpState(std::ostream& os);
+    void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args);
   };
 
   inline
