@@ -674,6 +674,8 @@ namespace MiniZinc {
       CLAUSE,
       FORALL,
       EXISTS,
+      INT_SUM,
+      INT_TIMES,
       LINEXP
     };
     struct Primitive {

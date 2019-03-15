@@ -125,14 +125,14 @@ namespace MiniZinc {
 
 
   PrimitiveMap::PrimitiveMap(void)
-  : _s({ {"bool_not", {BOOLNOT,1}}, {"clause",{CLAUSE,2}}, {"forall",{FORALL,1}}, {"exists",{EXISTS,1}}, {"lin_exp",{LINEXP,3}} }) {
+  : _s({ {"bool_not", {BOOLNOT,1}}, {"clause",{CLAUSE,2}}, {"forall",{FORALL,1}}, {"exists",{EXISTS,1}}, {"int_sum",{INT_SUM,1}}, {"int_times",{INT_TIMES,2}}, {"lin_exp",{LINEXP,3}} }) {
     _n.resize(_s.size());
     for (auto& entry : _s) {
       _n[entry.second.ident] = entry.first;
     }
   }
 
-  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { {BOOLNOT,1}, {CLAUSE,2}, {FORALL,1}, {EXISTS,1}, {LINEXP,3} };
+  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { {BOOLNOT,1}, {CLAUSE,2}, {FORALL,1}, {EXISTS,1}, {INT_SUM,1}, {INT_TIMES,2}, {LINEXP,3} };
   
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   
@@ -968,14 +968,54 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          
-          std::vector<Val> coeffs({IntVal(1)});
-          std::vector<Val> vars({frame->reg[r0]});
-          Val coeffs_v = Val(Vec::a(this, newIdent(), coeffs));
-          Val vars_v = Val(Vec::a(this, newIdent(), vars));
-          frame->reg.assign(this, r1, coeffs_v);
-          frame->reg.assign(this, r2, vars_v);
-          frame->reg.assign(this, r3, IntVal(0));
+          if (frame->reg[r0].isInt()) {
+            Val result = frame->reg[r0];
+            frame->reg.assign(this, r3, result);
+            frame->reg.assign(this, r1, Val(Vec::a(this, newIdent(), {})));
+            frame->reg.assign(this, r2, Val(Vec::a(this, newIdent(), {})));
+          } else {
+            std::vector<Val> coeffs;
+            std::vector<Val> vars;
+            IntVal d = 0;
+            std::vector<std::pair<IntVal,Val>> defs({std::make_pair(IntVal(1),frame->reg[r0])});
+            while (!defs.empty()) {
+              IntVal coeff = defs.back().first;
+              Val stacktop = defs.back().second;
+              defs.pop_back();
+              if (stacktop.isInt()) {
+                d += coeff*stacktop();
+              } else {
+                Definition* cur = stacktop.toDef();
+                switch (cur->pred()) {
+                  case PrimitiveMap::LINEXP:
+                  {
+                    for (unsigned int i=0; i<cur->arg(0).size(); i++) {
+                      defs.push_back(std::make_pair(coeff*cur->arg(0)[i](), cur->arg(1)[i]));
+                    }
+                    d += coeff*cur->arg(2)();
+                  }
+                    break;
+                  case PrimitiveMap::INT_SUM:
+                    for (unsigned int i=0; i<cur->arg(0).size(); i++) {
+                      defs.push_back(std::make_pair(coeff,cur->arg(0)[i]));
+                    }
+                    break;
+//                  case PrimitiveMap::INT_TIMES:
+                    /// TODO
+//                    break;
+                  default:
+                    coeffs.push_back(coeff);
+                    vars.push_back(Val(cur));
+                    break;
+                }
+              }
+            }
+            Val coeffs_v = Val(Vec::a(this, newIdent(), coeffs));
+            Val vars_v = Val(Vec::a(this, newIdent(), vars));
+            frame->reg.assign(this, r1, coeffs_v);
+            frame->reg.assign(this, r2, vars_v);
+            frame->reg.assign(this, r3, d);
+          }
         }
           break;
         case BytecodeStream::CLOSE_AGGREGATION:
