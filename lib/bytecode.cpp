@@ -21,13 +21,15 @@
 #include <fstream>
 #include <streambuf>
 
-// #define DBG_INTERPRETER(msg) std::cerr << msg
+//#define DBG_INTERPRETER(msg) std::cerr << msg
 #define DBG_INTERPRETER(msg) do {} while(0)
 
 namespace MiniZinc {
 
   void
   Definition::dump(Definition* head, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead, int indent) {
+    if (ignoreHead && head->next()==head)
+      return;
     Definition* d = ignoreHead ? head->next() : head;
     do {
       assert(d->pred() != 0);
@@ -41,8 +43,13 @@ namespace MiniZinc {
         os << ")";
       }
       os << ":\t";
-      os << bs[d->pred()].name << " ";
-//      os << d->call.args.toString() << "\n";
+      os << bs[d->pred()].name << "(";
+      for (unsigned int i=0; i<d->size(); i++) {
+        os << d->arg(i).toString();
+        if (i<d->size()-1)
+          os << ", ";
+      }
+      os << ")\n";
       if (d->defs())
         dump(d->defs(),bs,os,false,indent+2);
       d = d->next();
@@ -51,14 +58,14 @@ namespace MiniZinc {
 
   
   PrimitiveMap::PrimitiveMap(void)
-  : _s({ {"bool_not", BOOLNOT}, {"clause",CLAUSE}, {"forall",FORALL}, {"lin_exp",LINEXP} }) {
+  : _s({ {"bool_not", {BOOLNOT,1}}, {"clause",{CLAUSE,2}}, {"forall",{FORALL,1}}, {"exists",{EXISTS,1}}, {"lin_exp",{LINEXP,3}} }) {
     _n.resize(_s.size());
     for (auto& entry : _s) {
-      _n[entry.second] = entry.first;
+      _n[entry.second.ident] = entry.first;
     }
   }
 
-  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { BOOLNOT, CLAUSE, FORALL, LINEXP };
+  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { {BOOLNOT,1}, {CLAUSE,2}, {FORALL,1}, {EXISTS,1}, {LINEXP,3} };
   
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   
@@ -390,9 +397,6 @@ namespace MiniZinc {
             case AggregationCtx::VCTX_OR:
               oss << "OR\n";
               break;
-            case AggregationCtx::VCTX_LIN:
-              oss << "LIN\n";
-              break;
             case AggregationCtx::VCTX_VEC:
               oss << "VEC\n";
               break;
@@ -409,6 +413,11 @@ namespace MiniZinc {
         case BytecodeStream::CLOSE_AGGREGATION:
         {
           oss << "CLOSE_AGGREGATION\n";
+        }
+          break;
+        case BytecodeStream::SIMPLIFY_LIN:
+        {
+          oss << "SIMPLIFY_LIN R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
         }
           break;
         case BytecodeStream::PUSH:
@@ -440,17 +449,13 @@ namespace MiniZinc {
   Interpreter::pushAgg(const Val& v, int stackOffset) {
     assert(stackOffset < 0);
     assert(_agg.size()+stackOffset >= 0);
-    if (_agg[_agg.size()+stackOffset].symbol==AggregationCtx::VCTX_LIN) {
-      // add coefficient to surrounding linear context
-      _agg[_agg.size()+stackOffset].push(this,IntVal(1));
-    }
     // push value onto surrounding context
     _agg[_agg.size()+stackOffset].push(this,v);
   }
   
   void
   Interpreter::pushDef(BytecodeFrame* frame, Definition* d) {
-    d->insertBefore(frame->def_stack);
+    d->insertBefore(_agg.back().def_stack);
   }
   
   void
@@ -685,50 +690,12 @@ namespace MiniZinc {
         case BytecodeStream::RET:
         {
           DBG_INTERPRETER("RET\n");
+          assert(_stack.size() >= 1);
           if (_stack.size()==1) {
             // Always leave final frame on the stack
             return;
           }
           assert(!frame->cse_info.empty());
-          
-          // First remove all references to new definitions that
-          // may still be stored in registers
-          _stack.back().destroyRegisters(this);
-
-          // Definitions to be promoted to parent frame
-          Definition* defs = nullptr;
-          
-          // get definitions that were added during this call
-          if (frame->def_stack->next() != frame->def_stack) {
-            defs = frame->def_stack->next();
-            // unlink definitions from frame, to get rid of dummy head element
-            frame->def_stack->unlink();
-          }
-
-          if (defs && std::get<3>(frame->cse_info.back()) == _agg.back().size()-1 && _agg.back().back().isDef()) {
-            // Call produced constraints and exactly one return value, which is a definition
-            Definition* ret = _agg.back().back().toDef();
-            if (ret->timestamp() >= frame->def_ident_start) {
-              // the definition was produced by the current frame, so
-              // attach all other defs to it
-              if (ret == defs) {
-                if (defs->next()==defs) {
-                  defs = nullptr;
-                } else {
-                  defs = defs->next();
-                }
-              }
-              ret->unlink();
-              ret->makeUniqueReference();
-              ret->defs(defs);
-              defs = ret;
-            }
-          }
-          
-          if (defs) {
-            // Move d to parent frame
-            defs->appendBefore(_stack[_stack.size()-2].def_stack);
-          }
           
           for (auto& entry : frame->cse_info) {
             if (std::get<2>(entry).first != 0) {
@@ -741,7 +708,7 @@ namespace MiniZinc {
               }
             }
           }
-          _stack.back().destroyDefs(this);
+          _stack.back().destroy(this);
           _stack.pop_back();
           frame = &_stack.back();
         }
@@ -796,7 +763,7 @@ namespace MiniZinc {
               pushAgg(Val(def), -1);
             }
           } else {
-            _stack.emplace_back(_procs[code].mode[mode], currentIdent());
+            _stack.emplace_back(_procs[code].mode[mode]);
             BytecodeFrame* newFrame = &_stack[_stack.size()-1];
             newFrame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
             newFrame->reg.mov(this, args);
@@ -914,11 +881,29 @@ namespace MiniZinc {
           assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
           if (r==AggregationCtx::VCTX_OTHER || r==AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
             // Push a new aggregation context
-            _agg.push_back(AggregationCtx(this, r, frame->def_stack->prev()));
+            _agg.push_back(AggregationCtx(this, r));
           } else {
             // Increment depth counter for current aggregation context
             _agg.back().n_symbols++;
           }
+        }
+          break;
+        case BytecodeStream::SIMPLIFY_LIN:
+        {
+          DBG_INTERPRETER("SIMPLIFY_LIN\n");
+          /// TODO: aggregate and simplify linear expression
+          int r0 = frame->bs->reg(frame->pc);
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          
+          std::vector<Val> coeffs({IntVal(1)});
+          std::vector<Val> vars({frame->reg[r0]});
+          Val coeffs_v = Val(Vec::a(this, newIdent(), coeffs));
+          Val vars_v = Val(Vec::a(this, newIdent(), vars));
+          frame->reg.assign(this, r1, coeffs_v);
+          frame->reg.assign(this, r2, vars_v);
+          frame->reg.assign(this, r3, IntVal(0));
         }
           break;
         case BytecodeStream::CLOSE_AGGREGATION:
@@ -928,6 +913,19 @@ namespace MiniZinc {
           // Decrement depth counter for current aggregation context
           _agg.back().n_symbols--;
           if (_agg.back().n_symbols==0) {
+            
+            // Definitions to be promoted to parent frame
+            Definition* defs = nullptr;
+            // Definition produced by this aggregation
+            Definition* result = nullptr;
+            
+            // get definitions that were added during this aggregation
+            if (_agg.back().def_stack->next() != _agg.back().def_stack) {
+              defs = _agg.back().def_stack->next();
+              // unlink definitions from aggregation, to get rid of dummy head element
+              _agg.back().def_stack->unlink();
+            }
+            
             assert(_agg.size() >= 2);
             switch (_agg.back().symbol) {
               case AggregationCtx::VCTX_AND:
@@ -950,17 +948,11 @@ namespace MiniZinc {
                 }
                 if (isFalse || args.empty()) {
                   // Conjunction is constant true or false
-                  // Remove all elements from definition stack
-                  for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
-                    d->destroy(this);
-                    if (!d->inCSE())
-                      free(d);
-                  }
                   pushAgg(IntVal(!isFalse),-2);
                 } else {
-                  Definition* d = Definition::a(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,args,newIdent());
-                  pushDef(frame,d);
-                  pushAgg(Val(d),-2);
+                  result = Definition::a(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,
+                                         {Val(Vec::a(this,newIdent(),args))},newIdent());
+                  pushAgg(Val(result),-2);
                 }
               }
                 break;
@@ -969,73 +961,27 @@ namespace MiniZinc {
                 // Create a clause on the definition stack, and push a reference
                 // to it onto the aggregation stack
                 
-                std::vector<Val> pos;
-                pos.reserve(_agg.back().size());
-                std::vector<Val> neg;
-                neg.reserve(_agg.back().size());
+                std::vector<Val> args;
+                args.reserve(_agg.back().size());
                 bool isTrue = false;
-                for (unsigned int i=0; i<_agg.back().size(); i+=2) {
-                  IntVal sign = _agg.back()[i]();
-                  const Val& v = _agg.back()[i+1];
-                  if (v.isInt()) {
-                    if ( (sign==0 && v()==0) || (sign!=0 && v()!=0) ) {
-                      // Disjunction is constant true
-                      isTrue = true;
-                      break;
-                    }
+                for (unsigned int i=0; i<_agg.back().size(); i++) {
+                  const Val& v = _agg.back()[i];
+                  if (v.isInt() && v()!=0) {
+                    // Disjunction is constant true
+                    isTrue = true;
+                    break;
                   } else {
-                    if (sign==0) {
-                      neg.push_back(v);
-                    } else {
-                      pos.push_back(v);
-                    }
+                    args.push_back(v);
                   }
                 }
-                if (isTrue || (pos.empty() && neg.empty())) {
+                if (isTrue || args.empty()) {
                   // Disjunction is constant true or false
-                  // Remove all elements from definition stack
-                  for (Definition* d = _agg.back().def_stack_top; d != frame->def_stack; d = d->next()) {
-                    d->destroy(this);
-                    if (!d->inCSE())
-                      free(d);
-                  }
                   pushAgg(IntVal(isTrue),-2);
                 } else {
-                  Definition* d = Definition::a(this,IntVal(0),PrimitiveMap::CLAUSE,
-                                                 BytecodeProc::FUN,{Val(Vec::a(this,newIdent(),pos)),Val(Vec::a(this,newIdent(),neg))},
-                                                 newIdent());
-                  pushDef(frame,d);
-                  pushAgg(Val(d),-2);
+                  result = Definition::a(this,IntVal(0),PrimitiveMap::EXISTS,BytecodeProc::FUN,
+                                         {Val(Vec::a(this,newIdent(),args))},newIdent());
+                  pushAgg(Val(result),-2);
                 }
-              }
-                break;
-              case AggregationCtx::VCTX_LIN:
-              {
-                // Create a linear expression on the aggregation stack
-                // This will leave the coefficient vector, the variable vector, and a constant
-                // in the surrounding context
-                assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
-                assert(_agg.back().size() % 2 == 0);
-                std::vector<Val> coeffs;
-                coeffs.reserve(_agg.back().size());
-                std::vector<Val> vars;
-                vars.reserve(_agg.back().size());
-                IntVal d = 0;
-                for (unsigned int i=0; i<_agg.back().size(); i+=2) {
-                  const Val& ci = _agg.back()[i];
-                  const Val& vi = _agg.back()[i+1];
-                  if (ci() != 0) {
-                    if (vi.isInt()) {
-                      d += ci()*vi();
-                    } else {
-                      coeffs.push_back(ci);
-                      vars.push_back(vi);
-                    }
-                  }
-                }
-                _agg[_agg.size()-2].push(this,Val(Vec::a(this,newIdent(),coeffs)));
-                _agg[_agg.size()-2].push(this,Val(Vec::a(this,newIdent(),vars)));
-                _agg[_agg.size()-2].push(this,d);
               }
                 break;
               case AggregationCtx::VCTX_VEC:
@@ -1047,16 +993,39 @@ namespace MiniZinc {
                 // When closing a VCTX_OTHER context, it should contain at most one value
                 assert(_agg.back().size()<=1);
                 if (_agg.back().size()==1) {
-                  if (_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_LIN) {
-                    // add coefficient to surrounding linear context
-                    _agg[_agg.size()-2].push(this,IntVal(1));
+                  if (_agg.back()[0].isDef()) {
+                    result = _agg.back()[0].toDef();
                   }
                   // push value onto surrounding context
                   _agg[_agg.size()-2].push(this,_agg.back()[0]);
                 }
                 break;
             }
-            _agg.back().destroy(this);
+            
+            _agg.back().destroyStack(this);
+            if (defs && result) {
+              // Aggregation produced constraints and exactly one return value, which is a definition
+              if (result->timestamp() >= _agg.back().def_ident_start) {
+                // the definition was produced by the current frame, so
+                // attach all other defs to it
+                if (result == defs) {
+                  if (defs->next()==defs) {
+                    defs = nullptr;
+                  } else {
+                    defs = defs->next();
+                  }
+                }
+                result->unlink();
+                result->makeUniqueReference();
+                result->defs(defs);
+                defs = result;
+              }
+            }
+            if (defs) {
+              // Move definitions to parent aggregation
+              defs->appendBefore(_agg[_agg.size()-2].def_stack);
+            }
+            _agg.back().destroyDef(this);
             _agg.pop_back();
           }
         }
@@ -1148,6 +1117,22 @@ namespace MiniZinc {
     r3 = std::stoi(n3);
     return true;
   }
+  bool instrRRRR(const std::string& line, const std::string& op, int& r1, int& r2, int& r3, int& r4) {
+    if (!startsWith(line, op+" R"))
+      return false;
+    std::string n = line.substr(op.size()+2);
+    std::string n1 = n.substr(0,n.find(' '));
+    r1 = std::stoi(n1);
+    std::string nn = n.substr(n.find(" R")+2);
+    std::string n2 = nn.substr(0,n.find(' '));
+    r2 = std::stoi(n2);
+    std::string nnn = nn.substr(nn.find(" R")+2);
+    std::string n3 = nnn.substr(0,nn.find(' '));
+    r3 = std::stoi(n3);
+    std::string n4 = nnn.substr(nnn.find(" R")+2);
+    r4 = std::stoi(n4);
+    return true;
+  }
 
   std::vector<BytecodeProc> parse(const std::string& s) {
 
@@ -1169,9 +1154,10 @@ namespace MiniZinc {
     for (const PrimitiveMap::Primitive& p : PrimitiveMap::ALL) {
       BytecodeProc bcp;
       bcp.name = pm[p];
-      DBG_INTERPRETER("add primitive " << bcp.name << " " << p << "\n");
+      bcp.nargs = p.n_args;
+      DBG_INTERPRETER("add primitive " << bcp.name << " " << p.ident << " " << p.n_args << "\n");
       codes.push_back(bcp);
-      procs.emplace(bcp.name, p);
+      procs.emplace(bcp.name, p.ident);
     }
 
     std::istringstream iss(s);
@@ -1203,6 +1189,9 @@ namespace MiniZinc {
             BytecodeProc& bcp = codes[it->second];
             if (bcp.mode[cur_mode].size() > 0) {
               throw Error("Error: procedure "+cur_proc+" already defined before with the same mode\n");
+            }
+            if (bcp.nargs != cur_proc_nargs) {
+              throw Error("Error: procedure "+cur_proc+" already defined before with different number of arguments\n");
             }
             bcp.mode[cur_mode] = cur_code;
             toPatch.emplace_back(it->second, cur_mode, cur_toPatch);
@@ -1254,7 +1243,7 @@ namespace MiniZinc {
       if (cur_proc.empty()) {
         throw Error("Error: not in a procedure yet\n");
       }
-      int r1, r2, r3;
+      int r1, r2, r3, r4;
       std::string rs;
       if (instrRRR(line,"ADDI",r1,r2,r3)) {
         cur_code.addInstr(BytecodeStream::ADDI);
@@ -1397,7 +1386,6 @@ namespace MiniZinc {
         cur_toPatch.emplace_back(cur_code.size(), rs);
         cur_code.addSmallInt(0); // placeholder
         n = n.substr(n.find(' '));
-        int n_args = 0;
         std::vector<int> args;
         size_t pos = n.find(" R");
         while (pos != std::string::npos) {
@@ -1441,8 +1429,6 @@ namespace MiniZinc {
           cur_code.addCharVal(AggregationCtx::VCTX_AND);
         } else if (rs=="OR") {
           cur_code.addCharVal(AggregationCtx::VCTX_OR);
-        } else if (rs=="LIN") {
-          cur_code.addCharVal(AggregationCtx::VCTX_LIN);
         } else if (rs=="VEC") {
           cur_code.addCharVal(AggregationCtx::VCTX_VEC);
         } else if (rs=="OTHER") {
@@ -1452,6 +1438,12 @@ namespace MiniZinc {
         }
       } else if (line=="CLOSE_AGGREGATION") {
         cur_code.addInstr(BytecodeStream::CLOSE_AGGREGATION);
+      } else if (instrRRRR(line, "SIMPLIFY_LIN", r1, r2, r3, r4)) {
+        cur_code.addInstr(BytecodeStream::SIMPLIFY_LIN);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+        cur_code.addReg(r3);
+        cur_code.addReg(r4);
       } else if (instrR(line,"PUSH",r1)) {
         cur_code.addInstr(BytecodeStream::PUSH);
         cur_code.addReg(r1);
@@ -1481,6 +1473,9 @@ namespace MiniZinc {
           throw Error("Error: procedure "+cur_proc+" already defined before with the same mode\n");
         }
         bcp.mode[cur_mode] = cur_code;
+        if (bcp.nargs != cur_proc_nargs) {
+          throw Error("Error: procedure "+cur_proc+" already defined before with different number of arguments\n");
+        }
         cur_code = BytecodeStream();
         cur_toPatch.clear();
       } else {
@@ -1507,13 +1502,20 @@ namespace MiniZinc {
     return codes;
   }
 
+  void
+  Interpreter::dumpState(std::ostream& os) {
+    if (!_agg.empty()) {
+      Definition::dump(_agg.back().def_stack, _procs, os, true);
+    }
+  }
+  
   Interpreter::~Interpreter(void) {
-    int fc = 0;
     for (auto& f : _stack) {
       f.destroy(this);
     }
     for (auto& a : _agg) {
-      a.destroy(this);
+      a.destroyStack(this);
+      a.destroyDef(this);
     }
   }
 }

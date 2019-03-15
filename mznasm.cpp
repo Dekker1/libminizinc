@@ -77,7 +77,7 @@ int main(int argc, const char** argv) {
     interpreter.run();
     if (verbose) {
       std::cerr << "Done\n";
-      Definition::dump(frame.def_stack, bs, std::cerr, true);
+      interpreter.dumpState(std::cerr);
     }
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";

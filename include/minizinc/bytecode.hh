@@ -68,6 +68,7 @@ namespace MiniZinc {
       
       OPEN_AGGREGATION, // i: Create a new aggregation context with symbol i
       CLOSE_AGGREGATION,  // Close current aggregation context, put result onto context above
+      SIMPLIFY_LIN, // R1 -> R2, R3, R4: simplify linear expression in R1, return coefficients (R2), variables (R3), constant (R4)
       
       PUSH,  // R: push R onto value stack
       POP,   // R: pop from value stack into R
@@ -164,11 +165,11 @@ namespace MiniZinc {
     const int timestamp() const { return _timestamp; }
 
     void addRef(Interpreter* interpreter) { _ref_count++; }
-    void rmRef(Interpreter* interpreter);
+    static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
     bool exists() { return _ref_count > 0; }
 
     void addCSE(Interpreter* interpreter) { _cse_ref_count++; }
-    void rmCSE(Interpreter* interpreter);
+    static void rmCSE(Interpreter* interpreter, RefCountedObject* rco);
     bool inCSE() { return _cse_ref_count > 0; }
   };
   
@@ -216,7 +217,7 @@ namespace MiniZinc {
 
     void destroy(Interpreter* interpreter) {
       if (isRCO()) {
-        toRCO()->rmRef(interpreter);
+        RefCountedObject::rmRef(interpreter, toRCO());
       }
     };
     void construct(Interpreter* interpreter) {
@@ -231,7 +232,7 @@ namespace MiniZinc {
     };
     void removeFromCSE(Interpreter* interpreter) {
       if (isRCO()) {
-        toRCO()->rmCSE(interpreter);
+        RefCountedObject::rmCSE(interpreter, toRCO());
       }
     };
 
@@ -420,7 +421,7 @@ namespace MiniZinc {
     Val _args[1];
     Definition(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann)
     : RefCountedObject(RefCountedObject::DEF,ident), _size(args.size()), _prev(this), _next(this),
-    _domain(domain), _ann(ann), _defs(nullptr) {
+    _domain(domain), _ann(ann), _defs(nullptr), _pred(pred), _mode(mode) {
       _domain.construct(interpreter);
       _ann.construct(interpreter);
       for (unsigned int i=0; i<args.size(); i++) {
@@ -445,12 +446,7 @@ namespace MiniZinc {
     }
     /// Destroy and unlink this definition
     void destroy(Interpreter* interpreter) {
-      _domain.destroy(interpreter);
-      _ann.destroy(interpreter);
-      for (unsigned int i=0; i<_size; i++) {
-        _args[i].destroy(interpreter);
-      }
-//      _ref_count = (1u<<31u)-1u;
+      _ref_count = (1u<<31u)-1u;
       if (_defs) {
         // destroy all linked definitions
         Definition* d = _defs;
@@ -469,6 +465,12 @@ namespace MiniZinc {
           }
         }
       }
+      _domain.destroy(interpreter);
+      _ann.destroy(interpreter);
+      for (unsigned int i=0; i<_size; i++) {
+        _args[i].destroy(interpreter);
+      }
+      _ref_count = 0;
       _prev->_next = _next;
       _next->_prev = _prev;
     }
@@ -482,11 +484,12 @@ namespace MiniZinc {
     }
     /// Append list to other list before \a d
     void appendBefore(Definition* d) {
-      Definition* e = d->_prev;
-      d->_prev = this;
-      _next = d;
-      e->_next = this;
-      _prev = e;
+      Definition* e1 = _prev;
+      Definition* e2 = d->_prev;
+      d->_prev = e1;
+      e1->_next = d;
+      e2->_next = this;
+      _prev = e2;
     }
     void unlink(void) {
       _prev->_next = _next;
@@ -542,17 +545,16 @@ namespace MiniZinc {
     /// Stack of values that need to be aggregated
     std::vector<Val> stack;
   public:
+    /// Definitions attached to the computed value
+    Definition* def_stack;
+    /// Earliest time stamp for definitions in the current aggregation
+    int def_ident_start;
     /// Type of function represented by this context
-    enum Symbol { VCTX_AND, VCTX_OR, VCTX_LIN, VCTX_VEC, VCTX_OTHER } symbol;
+    enum Symbol { VCTX_AND, VCTX_OR, VCTX_VEC, VCTX_OTHER } symbol;
     /// Nesting depth for this symbol (how many of these are open)
     int n_symbols;
-    /// Depth of definition stack when this frame was created
-    Definition* def_stack_top;
     /// Constructor
-    AggregationCtx(Interpreter* interpreter, int s, Definition* t) : symbol(static_cast<Symbol>(s)), n_symbols(1), def_stack_top(t) {
-      assert(s >= 0 && s <= VCTX_OTHER);
-      def_stack_top->addRef(interpreter);
-    }
+    AggregationCtx(Interpreter* interpreter, int s);
     /// Push value onto aggregation stack
     void push(Interpreter* interpreter, const Val& v) {
       stack.push_back(v);
@@ -571,12 +573,16 @@ namespace MiniZinc {
     Val toVec(Interpreter* interpreter, int timestamp) const {
       return Val(Vec::a(interpreter,timestamp,stack));
     }
-    /// Close this context
-    void destroy(Interpreter* interpreter) {
+    /// Destroy stack values
+    void destroyStack(Interpreter* interpreter) {
+      int i=0;
       for (auto& v : stack) {
         v.destroy(interpreter);
       }
-      Definition::dec(interpreter,def_stack_top);
+    }
+    /// Destroy head of linked definitions
+    void destroyDef(Interpreter* interpreter) {
+      Definition::dec(interpreter, def_stack);
     }
   };
 
@@ -648,29 +654,20 @@ namespace MiniZinc {
     RegisterFile reg;
     const BytecodeStream* bs;
     int pc;
-    Definition* def_stack;
-    int def_ident_start;
     
     // CSE information for RET statement
     // <proc, mode, cse_key, stack size>
     typedef std::tuple<int,BytecodeProc::Mode, CSEKey, size_t> CSEInfo;
     std::vector<CSEInfo> cse_info;
 
-    BytecodeFrame(const BytecodeStream& bs0, int def_ident_start0=0) :
+    BytecodeFrame(const BytecodeStream& bs0) :
     reg(bs0.maxRegister()), bs(&bs0),
-    pc(0), def_stack(Definition::a(nullptr,IntVal(0),0,0,{},-1)),
-    def_ident_start(def_ident_start0) {
-      def_stack->addRef(nullptr);
-    }
+    pc(0) {}
     void destroyRegisters(Interpreter* interpreter) {
       reg.destroy(interpreter);
     }
-    void destroyDefs(Interpreter* interpreter) {
-      Definition::dec(interpreter, def_stack);
-    }
     void destroy(Interpreter* interpreter) {
       destroyRegisters(interpreter);
-      destroyDefs(interpreter);
     }
     void dump(std::ostream& os) {
       reg.dump(os);
@@ -680,11 +677,18 @@ namespace MiniZinc {
 
   class PrimitiveMap {
   public:
-    enum Primitive {
+    enum Id {
       BOOLNOT,
       CLAUSE,
       FORALL,
+      EXISTS,
       LINEXP
+    };
+    struct Primitive {
+      Id ident;
+      int n_args;
+      Primitive(void) {}
+      Primitive(const Id& ident0, int n_args0) : ident(ident0), n_args(n_args0) {}
     };
     static const Primitive ALL[];
   protected:
@@ -693,7 +697,8 @@ namespace MiniZinc {
   public:
     PrimitiveMap(void);
     Primitive operator [](const std::string& s) { return _s[s]; }
-    std::string operator [](Primitive p) { return _n[p]; }
+    std::string operator [](Primitive p) { return _n[p.ident]; }
+    int size(void) const { return _n.size(); }
   };
   
   class Interpreter {
@@ -719,28 +724,29 @@ namespace MiniZinc {
     void pushDef(BytecodeFrame* frame, Definition* d);
     int newIdent(void) { return _identCount++; }
     int currentIdent(void) const { return _identCount; }
+    void dumpState(std::ostream& os);
   };
 
   inline
-  void RefCountedObject::rmRef(Interpreter* interpreter) {
-    if(--_ref_count==0) {
-      switch (rcoType()) {
+  void RefCountedObject::rmRef(Interpreter* interpreter, RefCountedObject* rco) {
+    if(--rco->_ref_count==0) {
+      switch (rco->rcoType()) {
         case DEF:
-          static_cast<Definition*>(this)->destroy(interpreter);
+          static_cast<Definition*>(rco)->destroy(interpreter);
           break;
         case VEC:
-          static_cast<Vec*>(this)->destroy(interpreter);
+          static_cast<Vec*>(rco)->destroy(interpreter);
           break;
         default:
           assert(false);
       }
-      if (_cse_ref_count==0) {
-        switch (rcoType()) {
+      if (rco->_cse_ref_count==0) {
+        switch (rco->rcoType()) {
           case DEF:
-            free(static_cast<Definition*>(this));
+            free(static_cast<Definition*>(rco));
             break;
           case VEC:
-            free(static_cast<Vec*>(this));
+            free(static_cast<Vec*>(rco));
             break;
           default:
             assert(false);
@@ -749,14 +755,14 @@ namespace MiniZinc {
     }
   }
   inline
-  void RefCountedObject::rmCSE(Interpreter* interpreter) {
-    if(--_cse_ref_count == 0 && _ref_count == 0) {
-      switch (rcoType()) {
+  void RefCountedObject::rmCSE(Interpreter* interpreter, RefCountedObject* rco) {
+    if(--rco->_cse_ref_count == 0 && rco->_ref_count == 0) {
+      switch (rco->rcoType()) {
         case DEF:
-          free(static_cast<Definition*>(this));
+          free(static_cast<Definition*>(rco));
           break;
         case VEC:
-          free(static_cast<Vec*>(this));
+          free(static_cast<Vec*>(rco));
           break;
         default:
           assert(false);
@@ -773,6 +779,15 @@ namespace MiniZinc {
   Vec* Val::toVec(void) const {
     assert(isVec());
     return static_cast<Vec*>(toRCO());
+  }
+
+  inline
+  AggregationCtx::AggregationCtx(Interpreter* interpreter, int s) :
+    def_stack(Definition::a(interpreter,IntVal(0),0,0,{},-1)),
+    def_ident_start(interpreter->currentIdent()),
+    symbol(static_cast<Symbol>(s)), n_symbols(1) {
+    assert(s >= 0 && s <= VCTX_OTHER);
+    def_stack->addRef(interpreter);
   }
 
   std::vector<BytecodeProc> parse(const std::string& s);
