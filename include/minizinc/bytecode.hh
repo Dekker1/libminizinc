@@ -214,6 +214,10 @@ namespace MiniZinc {
         return -(static_cast<long long int>(i>>2));
       }
     }
+    int timestamp() {
+      assert(isRCO());
+      return toRCO()->timestamp();
+    }
 
     void destroy(Interpreter* interpreter) {
       if (isRCO()) {
@@ -266,6 +270,24 @@ namespace MiniZinc {
     void assign(Interpreter* interpreter, const Val& v);
     void assign(Interpreter* interpreter, Val&& v);
     std::string toString(void) const;
+    Expression* const toFZN(const std::map<int, VarDecl*>& vdmap = {}) {
+      GCLock lock;
+      if (this->isInt()) {
+        return IntLit::a((*this)());
+      } else if (this->isDef()) {
+        auto it = vdmap.find(this->timestamp());
+        VarDecl* vd = it != vdmap.end() ? it->second : nullptr;
+        return new Id(Location().introduce(), this->timestamp(), vd);
+      } else {
+        assert(this->isVec());
+        std::vector<Expression*> vec(this->size());
+        for (int i = 0; i < this->size(); ++i) {
+          Val v = (*this)[i];
+          vec[i] = v.toFZN(vdmap);
+        }
+        return new ArrayLit(Location().introduce(), vec);
+      }
+    }
   };
   
   class Vec : public RefCountedObject {
@@ -499,6 +521,7 @@ namespace MiniZinc {
       return i;
     }
     static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead=true, int indent=0);
+    static Model* toFZN(Definition* d, const std::vector<BytecodeProc>& bs, bool ignoreHead = true, Model* model = nullptr);
   };
 
   class WeakVal {
@@ -763,6 +786,7 @@ namespace MiniZinc {
     int newIdent(void) { return _identCount++; }
     int currentIdent(void) const { return _identCount; }
     void dumpState(std::ostream& os);
+    Model* toFZN();
     void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args);
   };
 

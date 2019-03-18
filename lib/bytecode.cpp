@@ -123,6 +123,55 @@ namespace MiniZinc {
     _prev = this;
   }
 
+  Model* Definition::toFZN(Definition* head, const std::vector<BytecodeProc>& bs, bool ignoreHead, Model* model) {
+    GCLock lock;
+    auto fzn = model ? model : new Model();
+    if (ignoreHead && head->next()==head)
+      return fzn;
+    Definition* d = ignoreHead ? head->next() : head;
+    std::map<int, VarDecl*> vdmap;
+    do {
+      assert(d->pred() != 0);
+      BytecodeProc proc = bs[d->pred()];
+      BytecodeProc::Mode mode = static_cast<BytecodeProc::Mode>(d->mode());
+      if (proc.name == "mk_intvar") {
+        // Construct domain
+        Val dom = d->arg(0);
+        auto ti = new TypeInst(Location().introduce(), Type::varint(), new SetLit(Location().introduce(), IntSetVal::a(dom[0](), dom[1]())));
+        auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
+        auto vdi = new VarDeclI(Location().introduce(), vd);
+        auto ret = vdmap.emplace(d->timestamp(), vd);
+        fzn->addItem(vdi);
+      } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+        std::vector<Expression*> args(proc.nargs);
+        for (int i = 0; i < proc.nargs; ++i) {
+          args[i] = d->arg(i).toFZN(vdmap);
+        }
+        auto c = new Call(Location().introduce(), proc.name, args);
+        auto ci = new ConstraintI(Location().introduce(), c);
+        fzn->addItem(ci);
+      } else {
+        std::vector<Expression*> args(proc.nargs);
+        for (int i = 0; i < proc.nargs; ++i) {
+          args[i] = d->arg(i).toFZN(vdmap);
+        }
+        auto c = new Call(Location().introduce(), proc.name, args);
+
+        Val dom = d->domain();
+        // TODO: Add domain
+        auto ti = new TypeInst(Location().introduce(), Type::varint());
+        auto vd = new VarDecl(Location().introduce(), ti, d->timestamp(), c);
+        auto vdi = new VarDeclI(Location().introduce(), vd);
+        auto ret = vdmap.emplace(d->timestamp(), vd);
+        fzn->addItem(vdi);
+      }
+      if (d->defs())
+        toFZN(d->defs(), bs, false, fzn);
+      d = d->next();
+    } while (d != head);
+    return fzn;
+  }
+
 
   PrimitiveMap::PrimitiveMap(void)
   : _s({ {"bool_not", {BOOLNOT,1}}, {"clause",{CLAUSE,2}}, {"forall",{FORALL,1}}, {"exists",{EXISTS,1}}, {"int_sum",{INT_SUM,1}}, {"int_times",{INT_TIMES,2}}, {"lin_exp",{LINEXP,3}} }) {
@@ -1619,6 +1668,14 @@ namespace MiniZinc {
     if (!_agg.empty()) {
       Definition::dump(_agg.back().def_stack, _procs, os, true);
     }
+  }
+
+  Model*
+  Interpreter::toFZN() {
+    if (!_agg.empty()) {
+      return Definition::toFZN(_agg.back().def_stack, _procs, true);
+    }
+    return nullptr;
   }
   
   Interpreter::~Interpreter(void) {
