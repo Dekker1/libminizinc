@@ -1012,7 +1012,7 @@ namespace MiniZinc {
         case BytecodeStream::SIMPLIFY_LIN:
         {
           DBG_INTERPRETER("SIMPLIFY_LIN\n");
-          /// TODO: aggregate and simplify linear expression
+
           int r0 = frame->bs->reg(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
@@ -1025,6 +1025,7 @@ namespace MiniZinc {
           } else {
             std::vector<Val> coeffs;
             std::vector<Val> vars;
+            std::vector<int> idx;
             IntVal d = 0;
             std::vector<std::pair<IntVal,Val>> defs({std::make_pair(IntVal(1),frame->reg[r0])});
             while (!defs.empty()) {
@@ -1049,16 +1050,77 @@ namespace MiniZinc {
                       defs.push_back(std::make_pair(coeff,cur->arg(0)[i]));
                     }
                     break;
-//                  case PrimitiveMap::INT_TIMES:
-                    /// TODO
-//                    break;
+                  case PrimitiveMap::INT_TIMES:
+                    if (cur->arg(0).isInt()) {
+                      if (cur->arg(1).isInt()) {
+                        // both constants, compute result
+                        d += coeff*cur->arg(0)()*cur->arg(1)();
+                      } else {
+                        defs.push_back(std::make_pair(coeff*cur->arg(0)(), cur->arg(1)));
+                      }
+                    } else if (cur->arg(1).isInt()) {
+                      if (cur->arg(0).isInt()) {
+                        // both constants, compute result
+                        d += coeff*cur->arg(0)()*cur->arg(1)();
+                      } else {
+                        defs.push_back(std::make_pair(coeff*cur->arg(1)(), cur->arg(0)));
+                      }
+                    } else {
+                      // Variable multiplication, don't aggregate
+                      coeffs.push_back(coeff);
+                      vars.push_back(Val(cur));
+                      idx.push_back(idx.size());
+                    }
+                    break;
                   default:
                     coeffs.push_back(coeff);
                     vars.push_back(Val(cur));
+                    idx.push_back(idx.size());
                     break;
                 }
               }
             }
+            
+            if (coeffs.size()>1) {
+              // Find and merge duplicate variables
+              class CmpValIdx {
+              public:
+                std::vector<Val>& x;
+                CmpValIdx(std::vector<Val>& x0) : x(x0) {}
+                bool operator ()(int i, int j) const {
+                  return x[i].timestamp() < x[j].timestamp();
+                }
+              };
+              std::sort(idx.begin(),idx.end(),CmpValIdx(vars));
+              std::vector<IntVal> coeffs_simple;
+              coeffs_simple.reserve(coeffs.size());
+              std::vector<Val> vars_simple;
+              vars_simple.reserve(vars.size());
+
+              int ci=0;
+              coeffs_simple.push_back(coeffs[idx[0]]());
+              vars_simple.push_back(vars[idx[0]]);
+              bool foundDuplicates = false;
+              for (unsigned int i=1; i<idx.size(); i++) {
+                if (vars[idx[i]].timestamp() == vars_simple[ci].timestamp()) {
+                  coeffs_simple[ci] += coeffs[idx[i]]();
+                  foundDuplicates = true;
+                } else {
+                  coeffs_simple.push_back(coeffs[idx[i]]());
+                  vars_simple.push_back(vars[idx[i]]);
+                  ci++;
+                }
+              }
+              if (foundDuplicates) {
+                for (unsigned int i=0; i<coeffs_simple.size(); i++) {
+                  coeffs[i] = coeffs_simple[i];
+                  vars[i] = vars_simple[i];
+                }
+                coeffs.resize(coeffs_simple.size());
+                vars.resize(vars_simple.size());
+              }
+            }
+            
             Val coeffs_v = Val(Vec::a(this, newIdent(), coeffs));
             Val vars_v = Val(Vec::a(this, newIdent(), vars));
             frame->reg.assign(this, r1, coeffs_v);
