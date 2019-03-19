@@ -70,8 +70,8 @@ namespace MiniZinc {
         finished = (cur == d);
         if (cur->_ref_count > 0) {
           // Promote cur to parent level
-          cur->insertBefore(interpreter, this->next());
           cur->unlink(interpreter);
+          cur->insertBefore(interpreter, this->next());
         } else {
           cur->destroy(interpreter);
           if(cur->_cse_ref_count > 0) {
@@ -86,7 +86,6 @@ namespace MiniZinc {
         }
       }
       if (ndefs != _defs) {
-        assert(_defs->_ref_count > 0 || _defs->_cse_ref_count > 0);
         interpreter->trail(this, &_defs);
         _defs = ndefs;
       }
