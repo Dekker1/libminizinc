@@ -486,6 +486,8 @@ namespace MiniZinc {
       return d;
     }
     static void free(Definition* def) {
+      // INVARIANT: def->destroy() should be called before free(def);
+      assert(def->_ref_count == 0 && def->_cse_ref_count == 0);
       if (def->_defs) {
         // destroy all linked definitions
         Definition* d = def->_defs;
@@ -494,7 +496,8 @@ namespace MiniZinc {
           Definition* cur = d;
           d = d->next();
           finished = (cur == d);
-          assert(cur->_ref_count == 0);
+          // INVARIANT: def->destroy() should ensure that no children with reference counts are still linked
+          assert(cur->_ref_count == 0 && cur->_cse_ref_count == 0);
           Definition::free(cur);
         }
       }
@@ -676,7 +679,13 @@ namespace MiniZinc {
       _table = std::vector<impl>(1);
     }
     void push() { _table.emplace_back(); }
-    void pop() { _table.pop_back(); }
+    void pop(Interpreter* interpreter) {
+      for (auto& item : _table.back()) {
+        free(item.first.second);
+        item.second.second.removeFromCSE(interpreter);
+      }
+      _table.pop_back();
+    }
   };
 
   class BytecodeFrame {
@@ -742,8 +751,16 @@ namespace MiniZinc {
     std::vector<int> timestamp_trail;
   public:
     Trail() = default;
-    // TODO: Think about how to ensure deleted objects don't get removed
-    virtual ~Trail() = default;
+    virtual ~Trail() {
+      for (auto &i : obj_trail) {
+        if (i->rcoType() == RefCountedObject::DEF) {
+          Definition::free(static_cast<Definition*>(i));
+        } else {
+          free(i);
+        }
+      }
+      obj_trail.clear();
+    };
 
     size_t len() { return trail_size.size(); }
     bool is_trailed(RefCountedObject* rco) { return (!trail_size.empty() && timestamp_trail.back() > rco->timestamp()); }
@@ -792,10 +809,10 @@ namespace MiniZinc {
     void run(void);
     void pushAgg(const Val& v, int stackOffset);
     void pushDef(Definition* d);
-    std::pair<Val, bool> cse_lookup(size_t proc, const CSEKey& key, BytecodeProc::Mode& mode) {
+    std::pair<Val, bool> cse_lookup(int proc, const CSEKey& key, BytecodeProc::Mode& mode) {
       return cse[proc].lookup(this, key, mode);
     }
-    void cse_insert(size_t proc, const CSEKey& key, BytecodeProc::Mode& mode, Val& val) {
+    void cse_insert(int proc, const CSEKey& key, BytecodeProc::Mode& mode, Val& val) {
       return cse[proc].insert(this, key, mode, val);
     }
     int newIdent(void) { return _identCount++; }
@@ -821,24 +838,18 @@ namespace MiniZinc {
       if (interpreter->trail.is_trailed(rco)) {
         interpreter->trail(rco);
       } else if (rco->_cse_ref_count==0) {
-        if (rco->rcoType() == DEF) {
-          Definition::free(static_cast<Definition*>(rco));
-        } else {
-          assert(rco->rcoType() == VEC);
-          free(rco);
-        }
+        // INVARIANT: All children of a definition are already promoted, cut, or freed.
+        assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());
+        free(rco);
       }
     }
   }
   inline
   void RefCountedObject::rmCSE(Interpreter* interpreter, RefCountedObject* rco) {
     if(--rco->_cse_ref_count == 0 && !interpreter->trail.is_trailed(rco) && rco->_ref_count == 0) {
-      if (rco->rcoType() == DEF) {
-        Definition::free(static_cast<Definition*>(rco));
-      } else {
-        assert(rco->rcoType() == VEC);
-        free(rco);
-      }
+      // INVARIANT: All children of a definition are already promoted, cut, or freed.
+      assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());
+      free(rco);
     }
   }
 

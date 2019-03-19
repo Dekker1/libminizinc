@@ -57,24 +57,29 @@ namespace MiniZinc {
   }
 
   void Definition::destroy(MiniZinc::Interpreter* interpreter)  {
+    assert(_ref_count == 0);
     _ref_count = (1u<<31u)-1u;
     if (_defs) {
       // destroy all linked definitions
       Definition* d = _defs;
       bool finished = false;
-      Definition* ndefs = nullptr; // First child with no reference count
+      Definition* ndefs = nullptr; // Children remaining after destroy operation
       while (!finished) {
         Definition* cur = d;
         d = d->next();
         finished = (cur == d);
         if (cur->_ref_count > 0) {
-          // promote cur to parent level
-          cur->unlink(interpreter);
+          // Promote cur to parent level
           cur->insertBefore(interpreter, this->next());
+          cur->unlink(interpreter);
         } else {
           cur->destroy(interpreter);
           if(cur->_cse_ref_count > 0) {
+            // Cut cur: it is kept alive for a CSE entry
             cur->unlink(interpreter);
+          } else if (!interpreter->trail.is_trailed(this)) {
+            // Free cur: it will not be used again
+            ::free(cur);
           } else if (!ndefs) {
             ndefs = cur;
           }
@@ -1755,9 +1760,6 @@ namespace MiniZinc {
   }
   
   Interpreter::~Interpreter(void) {
-    while (trail.len() > 0) {
-      trail.untrail(this);
-    }
     for (auto& f : _stack) {
       f.destroy(this);
     }
@@ -1864,7 +1866,7 @@ namespace MiniZinc {
     }
     interpreter->_identCount = timestamp;
     for (auto &table : interpreter->cse) {
-      table.pop();
+      table.pop(interpreter);
     }
   }
 }
