@@ -1179,7 +1179,9 @@ namespace MiniZinc {
     return static_cast<IntVal>(std::floor(eval_float(env,call->arg(0))));
   }
   IntVal b_round(EnvI& env, Call* call) {
-    return static_cast<IntVal>(eval_float(env,call->arg(0))+0.5);
+    FloatVal v(eval_float(env, call->arg(0)));
+    return v < 0 ? static_cast<IntVal>(v-0.5) : static_cast<IntVal>(v+0.5);
+    // return static_cast<IntVal>(eval_float(env,call->arg(0))+0.5);
   }
   FloatVal b_log10(EnvI& env, Call* call) {
     return std::log10(eval_float(env,call->arg(0)).toDouble());

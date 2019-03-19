@@ -20,6 +20,7 @@
 
 #include <minizinc/bytecode.hh>
 #include <minizinc/flatten_internal.hh>
+#include <minizinc/codegen_support.hh>
 
 namespace MiniZinc {
 
@@ -51,18 +52,19 @@ public:
 // one which is 
 // A slightly more structured representation for code generation.
 class CG_Value {
+public:
   enum CG_ValueKind { V_Immi, V_Global, V_Reg, V_Proc, V_Label };
-
+protected:
   CG_Value(CG_ValueKind _kind, int _value)
     : kind(_kind), value(_value) { }
-
 public:
+
   CG_Value(void)
     : kind(V_Immi), value(0) { }
   static CG_Value reg(int r) { return CG_Value(V_Reg, r); }
   static CG_Value global(int r) { return CG_Value(V_Global, r); }
   static CG_Value immi(long long int r) { return CG_Value(V_Immi, r); }
-//   static CG_Value proc(int p) { return CG_Value(V_Proc, p); }
+  static CG_Value proc(int p) { return CG_Value(V_Proc, p); }
   static CG_Value label(int l) { return CG_Value(V_Label, l); }
 
   CG_ValueKind kind;
@@ -70,15 +72,28 @@ public:
 };
 
 struct CG_Instr {
-  BytecodeStream::Instr i; 
-  std::vector<CG_Value> params;
+protected:
+  CG_Instr(unsigned int _tag) : tag(_tag) { }
+public:
+  static CG_Instr instr(BytecodeStream::Instr i) { return static_cast<unsigned int>(i)<<1; }
+  static CG_Instr label(unsigned int l) { return (l<<1)+1; }
 
-  unsigned int label;
+  unsigned int tag;
+  std::vector<CG_Value> params;
 };
 
 struct CG_ProcID {
+protected:
   CG_ProcID(int _p) : p(_p) { }
-  int p;
+public:
+  static CG_ProcID builtin(int b) { return CG_ProcID((b<<1)|1); }
+  static CG_ProcID proc(int p) { return CG_ProcID(p<<1); }
+  bool is_builtin(void) const { return p&1; }
+  unsigned int id(void) const { return p>>1; }
+
+  static CG_ProcID of_val(CG_Value v) { assert(v.kind == CG_Value::V_Proc); return CG_ProcID(v.value); }
+  
+  unsigned int p;
 };
 
 struct CG_Builder {
@@ -91,38 +106,7 @@ struct CG_Builder {
   void clear(void) { instrs.clear(); }
 };
 
-/*
-class CG_Frag {
-  std::vector<CG_Instr> instrs;
-  CG_Frag* pred;
-  CG_Frag* succ;
-};
-
-class CG_Builder {
-  CG_Frag* hd;
-  CG_Frag* tl;
-};
-*/
-struct cmp_ASTString {
-  bool operator()(const ASTString& s, const ASTString& t) const {
-    if(s.size() != t.size())
-      return s.size() < t.size();
-    return s.size() > 0 && strncmp(s.c_str(), t.c_str(), s.size()) < 0;
-  }
-};
-
-typedef std::set<ASTString, cmp_ASTString> ASTStSet;
-
 // An environment should never outlive its parent.
-struct eq_Expression {
-  bool operator()(Expression* e, Expression* f) const {
-    return Expression::equal(e, f);
-  }
-};
-struct hash_Expression {
-  bool operator()(Expression* e) const { return Expression::hash(e); }
-};
-
 template<class T>
 class CG_Env {
 private:
@@ -136,7 +120,10 @@ public:
   CG_Env(void)
     : p(nullptr), sz(0) { }
   CG_Env(CG_Env&& o)
-    : bindings(std::move(o.bindings)), available(std::move(o.available)), occurs(std::move(o.occurs)), p(o.p), sz(o.sz) { }
+    : bindings(std::move(o.bindings))
+    , available(std::move(o.available))
+    , available_csts(std::move(o.available_csts))
+    , occurs(std::move(o.occurs)), p(o.p), sz(o.sz) { }
 
   T lookup(const ASTString& s) const {
     auto it(bindings.find(s));
@@ -192,6 +179,20 @@ public:
       occurs[s].push_back(e);
   }
 
+  bool cache_lookup_cst(int x, T& ret) {
+    auto it(available_csts.find(x));
+    // Anything in the current table is hasn't been invalidated.
+    if(it != available_csts.end()) {
+      ret = (*it).second;
+      return true; 
+    }
+    if(!p) return false;
+    return p->cache_lookup_cst(x, ret);
+  }
+  void cache_store_cst(int x, T val) {
+    available_csts.insert(std::make_pair(x, val));
+  }
+
   /*
   CG_Env clone(const CG_Env& o) {
     return CG_Env(o);
@@ -203,7 +204,9 @@ public:
 
   typename ASTStringMap<T>::t bindings;
 
-  std::unordered_map<Expression*, T, hash_Expression, eq_Expression> available;
+  typename ExprMap<T>::t available;
+  std::unordered_map<int, T> available_csts;
+//  std::unordered_map<std::pair<int, int>, T> available_ranges;
   typename ASTStringMap<std::vector<Expression*> >::t occurs;
 
   // Parent environment.
@@ -215,7 +218,79 @@ struct CG {
   struct Builtin {
     enum T { MAKE_VAR, CLAUSE, ELEMENT, EQ, LE };
   };
-  
+
+  struct Mode {
+    Mode(BytecodeProc::Mode _m) : m(_m) { }
+    bool is_neg(void) const {
+      switch(m) {
+        case BytecodeProc::ROOT_NEG:
+        case BytecodeProc::IMP_NEG:
+        case BytecodeProc::FUN_NEG:
+          return true;
+        default:
+          return false;
+      }
+    }
+    bool is_root(void) const {
+      switch(m) {
+        case BytecodeProc::ROOT:
+        case BytecodeProc::ROOT_NEG:
+          return true;
+        default:
+          return false;
+      }
+    }
+
+    
+    // Half
+    Mode operator+(void) const {
+      switch(m) {
+        case BytecodeProc::ROOT:
+        case BytecodeProc::IMP:
+          return BytecodeProc::IMP;
+        case BytecodeProc::ROOT_NEG:
+        case BytecodeProc::IMP_NEG:
+          return BytecodeProc::IMP_NEG; 
+        case BytecodeProc::RAW:
+          throw InternalError("Half-reified invalid mode.");
+        default: // Already functional.
+          return m;
+      }
+    }
+
+    Mode operator-(void) const {
+      switch(m) {
+        case BytecodeProc::ROOT: return BytecodeProc::ROOT_NEG;
+        case BytecodeProc::IMP: return BytecodeProc::IMP_NEG;
+        case BytecodeProc::FUN: return BytecodeProc::FUN_NEG;
+        case BytecodeProc::ROOT_NEG: return BytecodeProc::ROOT;
+        case BytecodeProc::IMP_NEG: return BytecodeProc::IMP;
+        case BytecodeProc::FUN_NEG: return BytecodeProc::FUN;
+        default:
+          throw InternalError("Negated invalid mode.");
+      }
+    }
+    
+    // Switch the current mode to functional.
+    Mode operator*(void) const {
+      switch(m) {
+        case BytecodeProc::ROOT:
+        case BytecodeProc::IMP:
+        case BytecodeProc::FUN:
+          return BytecodeProc::FUN;
+        case BytecodeProc::ROOT_NEG:
+        case BytecodeProc::IMP_NEG:
+        case BytecodeProc::FUN_NEG:
+          return BytecodeProc::FUN_NEG;
+        default:
+          throw InternalError("Reified invalid mode."); 
+      }
+    }
+    operator BytecodeProc::Mode() const { return m; }
+
+    BytecodeProc::Mode m;
+  };
+
   inline static CG_Value g(int g) { return CG_Value::global(g); }
   inline static CG_Value r(int r) { return CG_Value::reg(r); }
   inline static CG_Value i(int i) { return CG_Value::immi(i); }
@@ -229,68 +304,131 @@ struct CG {
   static void eval(IntLit* z, CodeGen& cg, CG_Builder& frag);
   static void eval(FloatLit* f, CodeGen& cg, CG_Builder& frag);
   static void eval(SetLit* s, CodeGen& cg, CG_Builder& frag);
-  static void eval(BoolLit* b, CodeGen& cg, CG_Builder& frag);
   static void eval(StringLit* s, CodeGen& cg, CG_Builder& frag);
-  static void eval(Id* id, CodeGen& cg, CG_Builder& frag);
   static void eval(AnonVar* v, CodeGen& cg, CG_Builder& frag);
-  static void eval(ArrayLit* a, BCtx ctx, CodeGen& cg, CG_Builder& frag);
-
+  static void eval(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  
+  // For Id and BoolLit, we need the context, to know whether we're
+  // emitting the negated form.
+  static void eval(BoolLit* b, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(Id* id, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  
   static int locate_immi(int x, CodeGen& cg, CG_Builder& frag);
 
   static int locate(IntLit* id, CodeGen& cg, CG_Builder& frag);
   static int locate(FloatLit* f, CodeGen& cg, CG_Builder& frag);
   static int locate(SetLit* s, CodeGen& cg, CG_Builder& frag);
-  static int locate(BoolLit* b, CodeGen& cg, CG_Builder& frag);
   static int locate(StringLit* s, CodeGen& cg, CG_Builder& frag);
-  static int locate(Id* id, CodeGen& cg, CG_Builder& frag);
+
+  static int locate(BoolLit* b, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static int locate(Id* id, Mode ctx, CodeGen& cg, CG_Builder& frag);
 
   // For Boolean expressions
-  static void eval(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& frag);
-  static int locate(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static int locate(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag);
+
+  // When we know an expression is par. (And total?)
+  static int locate_par(Expression* e, CodeGen& cg, CG_Builder& frag);
 
   // For other, possibly partial, expressions.
-  static void eval(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
+  static void eval(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
   // FIXME: Locate always binds the result in the partial fragment, so the result is available
   // in following calls. So the [value] argument is ignored.
   // GKG: Check that this behaves correctly for comprehensions.
-  static int locate(Expression* e, BCtx ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
+  static int locate(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
 
-  static void eval(ArrayAccess* a, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(ITE* ite, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(BinOp* op, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(UnOp* op, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(Let* let, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(Comprehension* let, BCtx ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+  static int locate(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
 
-  static void eval(ArrayAccess* a, BCtx ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(ITE* ite, BCtx ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(BinOp* op, BCtx ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(UnOp* op, BCtx ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(Call* call, BCtx ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(Let* let, BCtx ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(Comprehension* let, BCtx ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+  static void eval(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+  static void eval(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+  static void eval(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+  static void eval(Call* call, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+  static void eval(Let* let, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+  static void eval(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+
+  static void eval(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static void eval(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
+
+  static int locate_par(ArrayAccess* a, CodeGen& cg, CG_Builder& frag);
+  static int locate_par(ITE* ite, CodeGen& cg, CG_Builder& frag);
+  static int locate_par(BinOp* op, CodeGen& cg, CG_Builder& frag);
+  static int locate_par(UnOp* op, CodeGen& cg, CG_Builder& frag);
+  static int locate_par(Call* call, CodeGen& cg, CG_Builder& frag);
+  static int locate_par(Let* let, CodeGen& cg, CG_Builder& frag);
+  static int locate_par(Comprehension* let, CodeGen& cg, CG_Builder& frag);
 };
 
 // Partially compiled bytecode.
+/*
 struct CG_Proc {
   std::string ident; 
   CG_Builder body[BytecodeProc::MAX_MODE+1];
 };
+*/
+struct CG_Proc {
+  CG_Proc(std::string _ident, int _arity, CG::Mode _m)
+    : ident(_ident), arity(_arity), m(_m) { }
+
+  std::string ident;
+  unsigned int arity;
+  CG::Mode m;
+  std::vector<CG_Instr> body;
+};
+
+// For identifying a call...
+struct CallSig {
+  ASTString id;  
+  std::vector<Type> params;
+
+  struct HashSig {
+    size_t operator()(const CallSig& c) const { return c.hash(); }
+  };
+  struct EqSig {
+    bool operator()(const CallSig& x, const CallSig& y) const { return x == y; }
+  };
+
+  bool operator==(const CallSig& o) const {
+    if (id != o.id || params.size() != o.params.size())
+      return false;
+    for(int ii = 0; ii < params.size(); ++ii) {
+      if(params[ii] != o.params[ii])
+        return false;
+    }
+    return true;
+  }
+
+  size_t hash(void) const {
+    size_t h(id.hash());
+    for(int ii = 0; ii < params.size(); ++ii)
+      h ^= params[ii].toInt() + 0x9e3779b9 + (h << 6) + (h >> 2);
+    return h;
+  }
+};
+
+template<class T>
+struct SigMap {
+  typedef std::unordered_map<CallSig, T, CallSig::HashSig, CallSig::EqSig> t;
+};
 
 struct CodeGen {
-  
   typedef unsigned int proc_id;
   typedef unsigned int reg_id;
   CodeGen(void)
     : /*entry_proc(0)
     ,*/ current_env(new CG_Env<Loc>())
     , current_reg_count(0), current_label_count(0), temporary_reg(-1) {
-    bytecode.push_back(std::vector<CG_Instr>());
+    bytecode.push_back(CG_Proc("main", 0, BytecodeProc::ROOT));
+    register_builtins();
   }
 
   void append(int proc, CG_Builder& b) {
-    bytecode[proc].insert(bytecode[proc].end(),
+    bytecode[proc].body.insert(bytecode[proc].body.end(),
       b.instrs.begin(), b.instrs.end());
     b.clear();
   }
@@ -309,7 +447,7 @@ struct CodeGen {
 
   // CG_Value find_builtin(CG::Builtin::T builtin);
 
-  std::vector< std::vector<CG_Instr> > bytecode; // Bytecode we've built
+  std::vector< CG_Proc > bytecode; // Bytecode we've built
 
   // Procedures
   // std::vector<std::pair<proc_id, CallSig> > proc_queue; // Typed calls yet to be compiled
@@ -325,15 +463,25 @@ struct CodeGen {
 
   // Helper information. For an expression, which variables does it refer to?
   ASTStSet scope(Expression* e);
-  std::unordered_map<Expression*, ASTStSet, hash_Expression, eq_Expression> _exp_scope;
+  ExprMap<ASTStSet>::t _exp_scope;
 
   // Procedure information
-  CG_ProcID builtin_proc(std::string s);
-  std::unordered_map<std::string, CG_ProcID> _builtins;
-  std::vector<std::string> _proc_info;
+  void register_builtins(void);
+  void register_builtin(std::string s, unsigned int p);
+  CG_ProcID find_builtin(std::string s);
+  std::vector<std::pair<std::string, unsigned int> > _builtins;
+  std::unordered_map<std::string, CG_ProcID> _proc_map;
 
   // Procedures yet to be emitted.
+  /*
   std::vector< std::pair<Expression*, unsigned int> > let_queue;
+  std::vector< std::pair<FunctionI*, unsigned int> > fun_queue;
+  std::vector< std::pair<CallSig, unsigned int> > call_queue;
+
+  std::unordered_map<Expression*, unsigned int> let_map;
+  std::unordered_map<FunctionI*, unsigned int> fun_map;
+  SigMap<unsigned int>::t call_map;
+  */
 };
 
 const char* instr_name(BytecodeStream::Instr i);

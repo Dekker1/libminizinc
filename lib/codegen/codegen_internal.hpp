@@ -16,67 +16,126 @@
 
 namespace MiniZinc {
 
-#if 0
-void PUSH_INSTR(CodeGen& cg) { return; }
+#if 1
+template<class V>
+void PUSH_INSTR_OPERAND(CG_Instr& i, std::vector<V>& vec) {
+  for(auto v : vec)
+    PUSH_INSTR_OPERAND(i, v);
+}
+void PUSH_INSTR_OPERAND(CG_Instr& i, CG_Value x) {
+  i.params.push_back(x);
+}
+void PUSH_INSTR_OPERAND(CG_Instr& i, CG_ProcID p) {
+  i.params.push_back(CG_Value::proc(p.p));
+}
+void PUSH_INSTR_OPERAND(CG_Instr& i, BytecodeProc::Mode m) {
+  i.params.push_back(CG::i((int) m));
+}
+void PUSH_INSTR_OPERAND(CG_Instr& i, AggregationCtx::Symbol s) {
+  i.params.push_back(CG::i((int) s));
+}
+void PUSH_INSTR_OPERANDS(CG_Instr& i) { }
 
-template<typename... Args>
-void PUSH_INSTR(CodeGen& cg, BytecodeStream::Instr i, Args... args) {
-  cg.bytecode[cg.current_proc].addInstr(i);
-  PUSH_INSTR(cg, args...);
+template<class T, typename ...Args>
+void PUSH_INSTR_OPERANDS(CG_Instr& i, T x, Args... args) {
+  PUSH_INSTR_OPERAND(i, x);
+  PUSH_INSTR_OPERANDS(i, args...);
 }
-template<class V, typename... Args>
-void PUSH_INSTR(CodeGen& cg, std::vector<V>& vec, Args... args) {
-  // FIXME
-}
-template<typename T, typename... Args>
-void PUSH_INSTR(CodeGen& cg, T x, Args... args) {
-  /*
-  char mem[sizeof(T)];
-  memcpy(mem, &x, sizeof(T));
-  for(int ii = 0; ii < sizeof(T); ++ii)
-    cg.bytecode.push_back(mem[ii]);
-    */
-  PUSH_INSTR(cg, args...);
-}
-void PUSH_LABEL(CodeGen& cg, unsigned int label) { return; }
-#else
-
-void PUSH_INSTR(CG_Builder& cg) { std::cerr << std::endl; }
 
 template<typename... Args>
 void PUSH_INSTR(CG_Builder& cg, BytecodeStream::Instr i, Args... args) {
+  cg.instrs.push_back(CG_Instr::instr(i));
+  PUSH_INSTR_OPERANDS(cg.instrs.back(), args...);
+}
+
+void PUSH_LABEL(CG_Builder& frag, unsigned int label) { frag.instrs.push_back(CG_Instr::label(label)); }
+/*
+template<typename... Args>
+void PUSH_INSTR_BODY(CG_Builder& cg, BytecodeStream::Instr i, Args... args) {
   std::cerr << "  " << instr_name(i);
   // cg.bytecode[cg.current_proc].addInstr(i);
-  PUSH_INSTR(cg, args...);
+  PUSH_INSTR_BODY(cg, args...);
 }
 template<class V, typename... Args>
-void PUSH_INSTR(CG_Builder& cg, std::vector<V>& vec, Args... args) {
+void PUSH_INSTR_BODY(CG_Builder& cg, std::vector<V>& vec, Args... args) {
   std::cerr << " " << vec.size();
   for(const V& v : vec)
-    PUSH_INSTR(cg, v);
+    PUSH_INSTR_BODY(cg, v);
     // std::cerr << " " << v;
-  PUSH_INSTR(cg, args...);
+  PUSH_INSTR_BODY(cg, args...);
 }
 template<typename... Args>
-void PUSH_INSTR(CG_Builder& cg, CG_ProcID p, Args... args) {
+void PUSH_INSTR_BODY(CG_Builder& cg, CG_ProcID p, Args... args) {
   std::cerr << " proc[" << p.p << "]";
     // std::cerr << " " << v;
-  PUSH_INSTR(cg, args...);
+  PUSH_INSTR_BODY(cg, args...);
 }
 template<typename... Args>
-void PUSH_INSTR(CG_Builder& cg, CG_Value x, Args... args) {
+void PUSH_INSTR_BODY(CG_Builder& cg, CG_Value x, Args... args) {
   std::cerr << " " << x.value;
-  PUSH_INSTR(cg, args...);
+  PUSH_INSTR_BODY(cg, args...);
 }
 template<typename... Args>
-void PUSH_INSTR(CG_Builder& cg, BytecodeProc::Mode m, Args... args) {
+void PUSH_INSTR_BODY(CG_Builder& cg, BytecodeProc::Mode m, Args... args) {
   std::cerr << " " << mode_name(m);
-  PUSH_INSTR(cg, args...);
+  PUSH_INSTR_BODY(cg, args...);
 }
 template<typename... Args>
-void PUSH_INSTR(CG_Builder& cg, AggregationCtx::Symbol ctx, Args... args) {
+void PUSH_INSTR_BODY(CG_Builder& cg, AggregationCtx::Symbol ctx, Args... args) {
   std::cerr << " " << agg_name(ctx);
-  PUSH_INSTR(cg, args...);
+  PUSH_INSTR_BODY(cg, args...);
+}
+template<typename... Args>
+void PUSH_INSTR(CG_Builder& cg, Args... args) {
+  PUSH_INSTR_BODY(cg, args...);
+  std::cerr << std::endl;
+}
+void PUSH_LABEL(CG_Builder& frag, unsigned int label) { std::cerr << label << ":" << std::endl; }
+*/
+
+#else
+
+void PUSH_INSTR_BODY(CG_Builder& cg) { }
+
+template<typename... Args>
+void PUSH_INSTR_BODY(CG_Builder& cg, BytecodeStream::Instr i, Args... args) {
+  std::cerr << "  " << instr_name(i);
+  // cg.bytecode[cg.current_proc].addInstr(i);
+  PUSH_INSTR_BODY(cg, args...);
+}
+template<class V, typename... Args>
+void PUSH_INSTR_BODY(CG_Builder& cg, std::vector<V>& vec, Args... args) {
+  std::cerr << " " << vec.size();
+  for(const V& v : vec)
+    PUSH_INSTR_BODY(cg, v);
+    // std::cerr << " " << v;
+  PUSH_INSTR_BODY(cg, args...);
+}
+template<typename... Args>
+void PUSH_INSTR_BODY(CG_Builder& cg, CG_ProcID p, Args... args) {
+  std::cerr << " proc[" << p.p << "]";
+    // std::cerr << " " << v;
+  PUSH_INSTR_BODY(cg, args...);
+}
+template<typename... Args>
+void PUSH_INSTR_BODY(CG_Builder& cg, CG_Value x, Args... args) {
+  std::cerr << " " << x.value;
+  PUSH_INSTR_BODY(cg, args...);
+}
+template<typename... Args>
+void PUSH_INSTR_BODY(CG_Builder& cg, BytecodeProc::Mode m, Args... args) {
+  std::cerr << " " << mode_name(m);
+  PUSH_INSTR_BODY(cg, args...);
+}
+template<typename... Args>
+void PUSH_INSTR_BODY(CG_Builder& cg, AggregationCtx::Symbol ctx, Args... args) {
+  std::cerr << " " << agg_name(ctx);
+  PUSH_INSTR_BODY(cg, args...);
+}
+template<typename... Args>
+void PUSH_INSTR(CG_Builder& cg, Args... args) {
+  PUSH_INSTR_BODY(cg, args...);
+  std::cerr << std::endl;
 }
 void PUSH_LABEL(CG_Builder& frag, unsigned int label) { std::cerr << label << ":" << std::endl; }
 #endif
