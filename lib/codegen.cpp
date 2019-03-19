@@ -357,8 +357,8 @@ private:
   void vVarDeclI(VarDeclI* vdi) {
     VarDecl* vd(vdi->e());
     if(!vd->type().isvar() && !vd->type().isann()) {
-      std::cerr << "%%%% Binding " << vd->id()->str() << " at g" << slot << std::endl;
-      std::cerr << "%%%% "; debugprint(vd);
+      // std::cerr << "%%%% Binding " << vd->id()->str() << " at g" << slot << std::endl;
+      // std::cerr << "%%%% "; debugprint(vd);
       if(!vd->e()) {
         // debugprint(vd);
         cg.env().bind(vd->id()->v(), Loc::global(slot));
@@ -377,9 +377,11 @@ private:
 
   void vFunctionI(FunctionI* f) {
     // std::cout << "%% F: "; debugprint(f);
+    /*
     if(!f->e() && !f->from_stdlib()) {
       std::cerr << "%% F: "; debugprint(f);
     }
+    */
   }
 
   int slot;
@@ -423,7 +425,7 @@ void show_frag(CodeGen& cg, std::vector<CG_Instr>& frag) {
 
   for(CG_Instr& i : frag) {
     if(i.tag&1) {
-      std::cerr << "l" << i.label << ":" << std::endl;
+      std::cerr << "l" << (i.tag>>1) << ":" << std::endl;
       continue;
     }
 
@@ -479,7 +481,7 @@ private:
     VarDecl* vd(vdi->e());
     if(vd->type().isann())
       return;
-    std::cerr << "## Binding " << vd->id()->str() << std::endl;
+    std::cerr << "%%%% Binding " << vd->id()->str() << std::endl;
     if(vd->type().isvar()) {
       // In whatever case, we're going to create something,
       // and dump it in a register.
@@ -522,14 +524,14 @@ private:
             nesting.push_back(iter);
             iter.emit_pre(root_frag);
           }
-          PUSH_INSTR(root_frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("mk_intvar"), CG::r(r_d));
+          PUSH_INSTR(root_frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(r_d));
           for(int r_i = r_regs.size()-1; r_i >= 0; --r_i) {
             nesting[r_i].emit_post(root_frag);
           }
           PUSH_INSTR(root_frag, BytecodeStream::CLOSE_AGGREGATION);
         } else {
           // FIXME: Compute the domain of the variable.
-          PUSH_INSTR(root_frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("mk_intvar"), CG::r(r_d));
+          PUSH_INSTR(root_frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(r_d));
         }
         r_var = GET_REG(cg);
         PUSH_INSTR(root_frag, BytecodeStream::POP, CG::r(r_var));
@@ -550,11 +552,11 @@ private:
 
   /// Visit assign item
   void vAssignI(AssignI* ass) {
-    std::cerr << "%%%% Assign: "; debugprint(ass); 
+    // std::cerr << "%%%% Assign: "; debugprint(ass); 
   }
 
   void vConstraintI(ConstraintI* c) {
-    std::cerr << "%%%% "; debugprint(c->e());
+    // std::cerr << "%%%% "; debugprint(c->e());
     CG::eval(c->e(), BytecodeProc::ROOT, cg, root_frag);
   }
 
@@ -582,7 +584,7 @@ Mode open_conj(Mode ctx, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, ctx.is_neg() ? AggregationCtx::VCTX_OR : AggregationCtx::VCTX_AND);
   return +ctx;
 }
-Mode close_conj(Mode ctx, CG_Builder& frag) {
+void close_conj(Mode ctx, CG_Builder& frag) {
   if(ctx != BytecodeProc::ROOT)
     PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
 }
@@ -593,7 +595,7 @@ Mode open_disj(Mode ctx, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, ctx.is_neg() ? AggregationCtx::VCTX_AND : AggregationCtx::VCTX_OR);
   return +ctx;
 }
-Mode close_disj(Mode ctx, CG_Builder& frag) {
+void close_disj(Mode ctx, CG_Builder& frag) {
   if(ctx != BytecodeProc::ROOT_NEG)
     PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
 }
@@ -1038,6 +1040,7 @@ int CG::locate_par(ITE* ite, CodeGen& cg, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_else), CG::r(r));
   cg.env_pop();
   PUSH_LABEL(frag, l_end);
+  return r;
 }
 
 int CG::locate_par(BinOp* b, CodeGen& cg, CG_Builder& frag) {
@@ -1118,7 +1121,7 @@ int CG::locate_par(UnOp* u, CodeGen& cg, CG_Builder& frag) {
   case UOT_NOT: {
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_e), CG::r(r));
-    break;
+    return r;
   }
   case UOT_PLUS:
     return r_e;
@@ -1134,9 +1137,11 @@ int CG::locate_par(UnOp* u, CodeGen& cg, CG_Builder& frag) {
 int CG::locate_par(Call* call, CodeGen& cg, CG_Builder& frag) {
   // Call 
   TODO();
+  return 0;
 }
 int CG::locate_par(Let* let, CodeGen& cg, CG_Builder& frag) {
   TODO(); 
+  return 0;
 }
 
 void CG::eval(IntLit* z, CodeGen& cg, CG_Builder& frag) {
@@ -1470,7 +1475,7 @@ void eval_error_g(Call* call, Mode ctx, CodeGen& cg, CG_Builder& pred, CG_Builde
   throw InternalError("Call should only appear in Boolean context.");
 }
 void eval_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value) {
-  std::cerr << "## Evaluating sum" << std::endl;
+  std::cerr << "%%%% Evaluating sum" << std::endl;
   assert(call->n_args() == 1);
   Expression* e = call->arg(0);
   // Components of the sum may be partial.
