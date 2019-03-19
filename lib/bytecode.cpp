@@ -246,11 +246,11 @@ namespace MiniZinc {
     }
   }
 
-  std::pair<size_t, WeakVal*> WeakVal::cse_key(const std::vector<Val> &vec) {
+  CSEKey CSETable::cse_key(const std::vector<Val> &vec) {
     size_t size = vec.size();
     for (const auto& val : vec) {
       if (val.isVec() && val.size() <= 3) {
-        size += val.toVec()->size();
+        size += val.size();
       }
     }
     auto nvec = (WeakVal*) malloc(size*sizeof(WeakVal));
@@ -351,6 +351,7 @@ namespace MiniZinc {
       CSETable::iterator& it = insertion.first;
       // We are replacing another entry within the CSE table.
       assert(it->first == key && it->second.first != mode);
+      free(it->first.second);
       it->second.second.removeFromCSE(interpreter);
       if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
         // TODO: Replace all occurences of previous value by true / false
@@ -852,6 +853,8 @@ namespace MiniZinc {
               } else if (std::get<3>(entry) == _agg.back().size()-1) {
                 Val ret = _agg[_agg.size()-1].back();
                 cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
+              } else {
+                free(std::get<2>(entry).second);
               }
             }
           }
@@ -880,7 +883,7 @@ namespace MiniZinc {
           }
           CSEKey cse_key = {0, nullptr};
           if (cse_suited) {
-            cse_key = WeakVal::cse_key(args);
+            cse_key = CSETable::cse_key(args);
             // Lookup item in CSE
             auto cse = cse_lookup(code, cse_key, mode);
             if (cse.second) {
@@ -951,7 +954,7 @@ namespace MiniZinc {
           }
           CSEKey cse_key = {0, nullptr};
           if (cse_suited) {
-            cse_key = WeakVal::cse_key(args);
+            cse_key = CSETable::cse_key(args);
             bool found;
             Val ret;
             std::tie(ret, found) = cse_lookup(code, cse_key, mode);
@@ -1794,7 +1797,7 @@ namespace MiniZinc {
     bool cse_suited = n < 5 && mode != BytecodeProc::RAW;
     CSEKey cse_key = {0, nullptr};
     if (cse_suited) {
-      cse_key = WeakVal::cse_key(args);
+      cse_key = CSETable::cse_key(args);
       // Lookup item in CSE
       auto cse = cse_lookup(code, cse_key, mode);
       if (cse.second) {

@@ -560,7 +560,6 @@ namespace MiniZinc {
     inline bool operator!=(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) != reinterpret_cast<ptrdiff_t>(rhs._v); }
     inline bool operator<(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) < reinterpret_cast<ptrdiff_t>(rhs._v); }
 
-    static std::pair<size_t, WeakVal*> cse_key(const std::vector<Val>& vec);
   };
 
   class AggregationCtx {
@@ -665,6 +664,7 @@ namespace MiniZinc {
     typedef impl::iterator iterator;
     std::pair<Val, bool> lookup(Interpreter* interpreter, const CSEKey& key, BytecodeProc::Mode& mode);
     void insert(Interpreter* interpreter, const CSEKey& key, const BytecodeProc::Mode& mode, Val& val);
+    static CSEKey cse_key(const std::vector<Val>& vec);
   protected:
     std::vector<impl> _table = std::vector<impl>(1);
   public:
