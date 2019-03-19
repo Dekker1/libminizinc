@@ -200,6 +200,19 @@ namespace MiniZinc {
       return isRCO() && toRCO()->rcoType()==RefCountedObject::DEF;
     }
     bool operator==(const Val& rhs) const;
+    bool contains(const Val& v) const {
+      if (*this == v) {
+        return true;
+      }
+      if (this->isVec()) {
+        for (int i = 0; i < this->size(); ++i) {
+          if ((*this)[i].contains(v)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
 
     /// Access value as Definition
     Definition* toDef(void) const;
@@ -385,6 +398,8 @@ namespace MiniZinc {
   public:
     RegisterFile(int n=0) : _r(n) {}
     const Val& operator [](int r) { assert(r < _r.size()); return _r[r]; }
+    std::vector<Val>::const_iterator cbegin() { return _r.cbegin(); }
+    std::vector<Val>::const_iterator cend() { return _r.cend(); }
     void assign(Interpreter* interpreter, int r, const Val& v) {
       if (r >= _r.size()) {
         _r.resize(r+1);

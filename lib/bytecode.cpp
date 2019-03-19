@@ -1239,6 +1239,8 @@ namespace MiniZinc {
                   }
                 }
                 result->unlink(this);
+                // INVARIANT: The result of aggregation is not referenced by any of the registers.
+                assert(std::none_of(frame->reg.cbegin(), frame->reg.cend(), [result](Val v) { return v.contains(Val(result)); }));
                 result->makeUniqueReference();
                 result->defs(defs);
                 defs = result;
