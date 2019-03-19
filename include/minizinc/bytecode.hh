@@ -749,11 +749,11 @@ namespace MiniZinc {
     bool is_trailed(RefCountedObject* rco) { return (!trail_size.empty() && timestamp_trail.back() > rco->timestamp()); }
 
     // Trail hedge pointer change
-    inline bool operator() (Definition** ptr) {
-      if (trail_size.empty() || timestamp_trail.back() <= (*ptr)->timestamp()) {
+    inline bool operator() (Definition* def, Definition** member) {
+      if (trail_size.empty() || timestamp_trail.back() <= def->timestamp()) {
         return false;
       }
-      hedge_trail.emplace_back(ptr, *ptr);
+      hedge_trail.emplace_back(member, *member);
       return true;
     }
     // Trail Reference Counted Object removal

@@ -62,6 +62,7 @@ namespace MiniZinc {
       // destroy all linked definitions
       Definition* d = _defs;
       bool finished = false;
+      Definition* ndefs = nullptr; // First child with no reference count
       while (!finished) {
         Definition* cur = d;
         d = d->next();
@@ -72,54 +73,65 @@ namespace MiniZinc {
           cur->insertBefore(interpreter, this->next());
         } else {
           cur->destroy(interpreter);
+          if(cur->_cse_ref_count > 0) {
+            cur->unlink(interpreter);
+          } else if (!ndefs) {
+            ndefs = cur;
+          }
         }
       }
+      if (ndefs != _defs) {
+        assert(_defs->_ref_count > 0 || _defs->_cse_ref_count > 0);
+        interpreter->trail(this, &_defs);
+        _defs = ndefs;
+      }
     }
+
     _domain.destroy(interpreter);
     _ann.destroy(interpreter);
     for (unsigned int i=0; i<_size; i++) {
       _args[i].destroy(interpreter);
     }
     _ref_count = 0;
-    interpreter->trail(&(_prev->_next));
+    interpreter->trail(_prev, &(_prev->_next));
     _prev->_next = _next;
-    interpreter->trail(&(_next->_prev));
+    interpreter->trail(_next, &(_next->_prev));
     _next->_prev = _prev;
   }
 
   void Definition::insertBefore(Interpreter* interpreter, Definition* d) {
     assert(_prev==_next);
-    interpreter->trail(&_prev);
+    interpreter->trail(this, &_prev);
     _prev = d->_prev;
-    interpreter->trail(&_next);
+    interpreter->trail(this, &_next);
     _next = d;
-    interpreter->trail(&d->_prev->_next);
+    interpreter->trail(d->_prev, &d->_prev->_next);
     d->_prev->_next = this;
-    interpreter->trail(&d->_prev);
+    interpreter->trail(d, &d->_prev);
     d->_prev = this;
   }
 
   void Definition::appendBefore(Interpreter* interpreter, Definition* d) {
     Definition* e1 = _prev;
     Definition* e2 = d->_prev;
-    interpreter->trail(&d->_prev);
+    interpreter->trail(d, &d->_prev);
     d->_prev = e1;
-    interpreter->trail(&e1->_next);
+    interpreter->trail(e1, &e1->_next);
     e1->_next = d;
-    interpreter->trail(&e2->_next);
+    interpreter->trail(e2, &e2->_next);
     e2->_next = this;
-    interpreter->trail(&_prev);
+    interpreter->trail(this, &_prev);
     _prev = e2;
   }
 
   void Definition::unlink(Interpreter* interpreter) {
-    interpreter->trail(&_prev->_next);
+    interpreter->trail(_prev, &_prev->_next);
     _prev->_next = _next;
-    interpreter->trail(&_next->_prev);
+    interpreter->trail(_prev, &_next->_prev);
     _next->_prev = _prev;
-    interpreter->trail(&_next);
+    interpreter->trail(this, &_next);
     _next = this;
-    interpreter->trail(&_prev);
+    interpreter->trail(this, &_prev);
     _prev = this;
   }
 
