@@ -149,16 +149,17 @@ namespace MiniZinc {
     do {
       assert(d->pred() != 0);
       BytecodeProc proc = bs[d->pred()];
-      BytecodeProc::Mode mode = static_cast<BytecodeProc::Mode>(d->mode());
+      auto mode = static_cast<BytecodeProc::Mode>(d->mode());
       if (proc.name == "mk_intvar") {
         // Construct domain
         Val dom = d->arg(0);
-        auto ti = new TypeInst(Location().introduce(), Type::varint(), new SetLit(Location().introduce(), IntSetVal::a(dom[0](), dom[1]())));
+        auto dom_set = dom.isVec() ? new SetLit(Location().introduce(), IntSetVal::a(dom[0](), dom[1]())) : nullptr;
+        auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
         auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
         auto vdi = new VarDeclI(Location().introduce(), vd);
         auto ret = vdmap.emplace(d->timestamp(), vd);
         fzn->addItem(vdi);
-      } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+      } else if (mode == BytecodeProc::ROOT) {
         std::vector<Expression*> args(proc.nargs);
         for (int i = 0; i < proc.nargs; ++i) {
           args[i] = d->arg(i).toFZN(vdmap);
@@ -167,19 +168,28 @@ namespace MiniZinc {
         auto ci = new ConstraintI(Location().introduce(), c);
         fzn->addItem(ci);
       } else {
-        std::vector<Expression*> args(proc.nargs);
+        assert(!BytecodeProc::is_neg(mode));
+        // TODO: Actual domain
+        Val dom = d->arg(0);
+        auto ti = new TypeInst(Location().introduce(), Type::varint());
+        auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
+        fzn->addItem(new VarDeclI(Location().introduce(), vd));
+        auto ret = vdmap.emplace(d->timestamp(), vd);
+
+        std::vector<Expression*> args(proc.nargs + 1);
         for (int i = 0; i < proc.nargs; ++i) {
           args[i] = d->arg(i).toFZN(vdmap);
         }
+        args.back() = Val(d).toFZN(vdmap);
+        std::string name;
+        if (mode == BytecodeProc::FUN) {
+          name += "_reif";
+        } else {
+          assert(mode == BytecodeProc::IMP);
+          name += "_imp";
+        }
         auto c = new Call(Location().introduce(), proc.name, args);
-
-        Val dom = d->domain();
-        // TODO: Add domain
-        auto ti = new TypeInst(Location().introduce(), Type::varint());
-        auto vd = new VarDecl(Location().introduce(), ti, d->timestamp(), c);
-        auto vdi = new VarDeclI(Location().introduce(), vd);
-        auto ret = vdmap.emplace(d->timestamp(), vd);
-        fzn->addItem(vdi);
+        fzn->addItem(new ConstraintI(Location().introduce(), c));
       }
       if (d->defs())
         toFZN(d->defs(), bs, false, fzn);
