@@ -520,11 +520,6 @@ namespace MiniZinc {
     /// Append list to other list before \a d
     void appendBefore(Interpreter* interpreter, Definition* d);
     void unlink(Interpreter* interpreter);
-    static void dec(Interpreter* interpreter, Definition* d) {
-      if (--d->_ref_count==0) {
-        d->destroy(interpreter);
-      }
-    }
     /// Set the reference count to 1
     void makeUniqueReference(void) { _ref_count = 1; }
     Definition* prev(void) const { return _prev; }
@@ -604,7 +599,7 @@ namespace MiniZinc {
     }
     /// Destroy head of linked definitions
     void destroyDef(Interpreter* interpreter) {
-      Definition::dec(interpreter, def_stack);
+      RefCountedObject::rmRef(interpreter, def_stack);
     }
   };
 
