@@ -887,6 +887,7 @@ namespace MiniZinc {
             // Lookup item in CSE
             auto cse = cse_lookup(code, cse_key, mode);
             if (cse.second) {
+              ::free(cse_key.second);
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(cse.first.isInt());
                 if (cse.first().toInt() != 1) {
