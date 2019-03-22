@@ -26,6 +26,7 @@
 #include <ratio>
 
 #include <minizinc/bytecode.hh>
+#include <minizinc/prettyprinter.hh>
 
 using namespace std;
 using namespace MiniZinc;
@@ -75,9 +76,16 @@ int main(int argc, const char** argv) {
       std::cerr << "Run:\n";
     }
     interpreter.run();
+    bool delayed;
+    do {
+      bool delayed = interpreter.runDelayed();
+    } while (delayed);
     if (verbose) {
       std::cerr << "Done\n";
       interpreter.dumpState(std::cerr);
+      std::cerr << "----------------" << std::endl;
+      auto fzn = interpreter.toFZN();
+      debugprint(fzn);
     }
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";

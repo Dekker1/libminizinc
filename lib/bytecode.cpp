@@ -27,14 +27,12 @@
 namespace MiniZinc {
 
   void
-  Definition::dump(Definition* head, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead, int indent) {
-    if (ignoreHead && head->next()==head)
-      return;
-    Definition* d = ignoreHead ? head->next() : head;
-    do {
-      assert(d->pred() != 0);
-      for (unsigned int i=0; i<indent; i++)
+  Definition::dump(Definition* head, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent) {
+    Definition* d = head->next();
+    while (d != head) {
+      for (unsigned int i=0; i<indent; i++) {
         os << "  ";
+      }
       if (d->timestamp() >=0) {
         os << d->timestamp() << "(";
       }
@@ -51,9 +49,9 @@ namespace MiniZinc {
       }
       os << ")\n";
       if (d->defs())
-        dump(d->defs(),bs,os,false,indent+2);
+        dump(d->defs(),bs,os,indent+2);
       d = d->next();
-    } while (d != head);
+    }
   }
 
   void Definition::destroy(MiniZinc::Interpreter* interpreter)  {
@@ -74,7 +72,7 @@ namespace MiniZinc {
           cur->insertBefore(interpreter, this->next());
         } else {
           cur->destroy(interpreter);
-          if(cur->_cse_ref_count > 0) {
+          if(cur->_weak_ref_count > 0) {
             // Cut cur: it is kept alive for a CSE entry
             cur->unlink(interpreter);
           } else if (!interpreter->trail.is_trailed(this)) {
@@ -139,15 +137,18 @@ namespace MiniZinc {
     _prev = this;
   }
 
-  Model* Definition::toFZN(Definition* head, const std::vector<BytecodeProc>& bs, bool ignoreHead, Model* model) {
+  Model* Definition::toFZN(Interpreter* interpreter, Definition* head, const std::vector<BytecodeProc>& bs, Model* model) {
     GCLock lock;
     auto fzn = model ? model : new Model();
-    if (ignoreHead && head->next()==head)
+    if (head->next()==head)
       return fzn;
-    Definition* d = ignoreHead ? head->next() : head;
+    Definition* d = head->next(); // Ignore dummy head
     std::map<int, VarDecl*> vdmap;
-    do {
-      assert(d->pred() != 0);
+    while (d != head) {
+      if (d->pred() == 0) {
+        d = d->next();
+        continue;
+      }
       BytecodeProc proc = bs[d->pred()];
       auto mode = static_cast<BytecodeProc::Mode>(d->mode());
       if (proc.name == "mk_intvar") {
@@ -162,7 +163,8 @@ namespace MiniZinc {
       } else if (mode == BytecodeProc::ROOT) {
         std::vector<Expression*> args(proc.nargs);
         for (int i = 0; i < proc.nargs; ++i) {
-          args[i] = d->arg(i).toFZN(vdmap);
+          Val v = Val::follow_alias(interpreter, d->arg(i));
+          args[i] = v.toFZN(vdmap);
         }
         auto c = new Call(Location().introduce(), proc.name, args);
         auto ci = new ConstraintI(Location().introduce(), c);
@@ -178,7 +180,8 @@ namespace MiniZinc {
 
         std::vector<Expression*> args(proc.nargs + 1);
         for (int i = 0; i < proc.nargs; ++i) {
-          args[i] = d->arg(i).toFZN(vdmap);
+          Val v = Val::follow_alias(interpreter, d->arg(i));
+          args[i] = v.toFZN(vdmap);
         }
         args.back() = Val(d).toFZN(vdmap);
         std::string name;
@@ -192,9 +195,9 @@ namespace MiniZinc {
         fzn->addItem(new ConstraintI(Location().introduce(), c));
       }
       if (d->defs())
-        toFZN(d->defs(), bs, false, fzn);
+        toFZN(interpreter, d->defs(), bs, fzn);
       d = d->next();
-    } while (d != head);
+    }
     return fzn;
   }
 
@@ -218,7 +221,7 @@ namespace MiniZinc {
           cur->insertBefore(interpreter, this->next());
         } else {
           cur->destroy(interpreter);
-          if(cur->_cse_ref_count > 0) {
+          if(cur->_weak_ref_count > 0) {
             // Cut cur: it is kept alive for a CSE entry
             cur->unlink(interpreter);
           } else if (!interpreter->trail.is_trailed(this)) {
@@ -298,18 +301,20 @@ namespace MiniZinc {
     }
   }
 
-  inline
-  void Val::remove_alias(Interpreter* interpreter) const {
-    if (isDef() && toDef()->pred() == PrimitiveMap::ALIAS) {
-      Val nval = *this;
+  Val Val::follow_alias(Interpreter* interpreter, const Val& v) {
+    if (v.isDef() && v.toDef()->pred() == PrimitiveMap::ALIAS) {
+      Val nval = v;
       while(nval.isDef() && nval.toDef()->pred() == PrimitiveMap::ALIAS) {
-        assert(nval.size() > 0);
+        assert(nval.toDef()->size() > 0);
         nval = nval.toDef()->arg(0);
       }
-      auto val = const_cast<Val*>(this);
-      val->destroy(interpreter);
-      val->_v = nval._v;
-      val->construct(interpreter);
+      auto mut_v = const_cast<Val&>(v);
+      mut_v.destroy(interpreter);
+      mut_v._v = nval._v;
+      mut_v.construct(interpreter);
+      return nval;
+    } else {
+      return v;
     }
   }
 
@@ -348,14 +353,13 @@ namespace MiniZinc {
       it = _table[i].find(key);
     } while (it == _table[i].end() && i > 0);
     if (it != _table[i].end()) {
-      Val& val = it->second.second;
-      val.remove_alias(interpreter);
+      Val val = Val::follow_alias(interpreter, it->second.second);
       BytecodeProc::Mode val_m = it->second.first;
       if (!val.exists()) {
         this->_table[i].erase(it);
         return {Val(), false};
       }
-      DBG_INTERPRETER("--- CSE hit! hash(" << CSEHasher()(key) << ") -> Mode: " << BytecodeProc::mode_to_string[val_m] << " Value: " << val.toString() << "\n");
+      DBG_INTERPRETER("--- CSE hit! hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[val_m] << " Value: " << val.toString() << "\n");
       auto convert = [&interpreter, val_m, mode](Val v) {
         assert(!v.isVec());
         if (BytecodeProc::is_neg(mode) != BytecodeProc::is_neg(val_m)) {
@@ -402,7 +406,7 @@ namespace MiniZinc {
 
   void CSETable::insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val) {
     assert(mode != BytecodeProc::RAW);
-    DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString() << "\n");
+    DBG_INTERPRETER("--- CSE add: hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString() << "\n");
     // If value is reference counted, flag that it's in CSE
     val.addToCSE(interpreter);
     auto insertion = _table.back().emplace(key, std::make_pair(mode, val));
@@ -872,10 +876,11 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
-          if (frame->reg[r1].isInt()) {
+          Val v = Val::follow_alias(this, frame->reg[r1]);
+          if (v.isInt()) {
             frame->reg.assign(this, r2, IntVal(1));
-          } else if (frame->reg[r1].isDef()) {
-            Definition* def = frame->reg[r1].toDef();
+          } else if (v.isDef()) {
+            Definition* def = v.toDef();
             if (def->domain().isInt()) {
               frame->reg.assign(this, r1, def->domain());
               frame->reg.assign(this, r2, IntVal(1));
@@ -915,8 +920,9 @@ namespace MiniZinc {
           assert(frame->reg[r2].isInt());
           assert(frame->reg[r2]() < frame->reg[r1].size());
           DBG_INTERPRETER("GET_VEC " << r1  << "(" << frame->reg[r1].toString() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, frame->reg[r1][frame->reg[r2]().toInt()]);
-          DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
+          Val v = Val::follow_alias(this, frame->reg[r1][frame->reg[r2]().toInt()]);
+          frame->reg.assign(this, r3, v);
+          DBG_INTERPRETER(" " << r3 <<  "(" << v.toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::RET:
@@ -984,8 +990,8 @@ namespace MiniZinc {
               break;
             }
           }
-          if (_procs[code].mode[mode].size() == 0) {
-            DBG_INTERPRETER("--- FZN Builtin\n");
+          if (_procs[code].mode[mode].size() == 0 || _procs[code].delay) {
+            DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
             // this is a FlatZinc builtin
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
             Definition* def = Definition::a(this,IntVal(0),code,mode,args,ident);
@@ -996,6 +1002,10 @@ namespace MiniZinc {
             if (cse_suited) {
               Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
               cse_insert(code, cse_key, mode, v);
+            }
+            if (_procs[code].delay) {
+              def->addWRef(this);
+              delayed_calls.push_back(def);
             }
           } else {
             _stack.emplace_back(_procs[code].mode[mode]);
@@ -1351,7 +1361,7 @@ namespace MiniZinc {
                 // INVARIANT: The result of aggregation is not referenced by any of the registers.
                 assert(std::none_of(frame->reg.cbegin(), frame->reg.cend(), [result](Val v) { return v.contains(Val(result)); }));
                 result->makeUniqueReference();
-                result->defs(defs);
+                result->defs(this, defs);
                 defs = result;
               }
             }
@@ -1499,6 +1509,7 @@ namespace MiniZinc {
     BytecodeProc::Mode cur_mode;
     BytecodeStream cur_code;
     int cur_proc_nargs;
+    bool cur_proc_delay;
     std::vector<std::pair<int,std::string> > cur_toPatch;
     std::vector<std::pair<int,std::string> > cur_labels;
     std::unordered_map<std::string, int> labels;
@@ -1536,6 +1547,7 @@ namespace MiniZinc {
             bcp.name = cur_proc;
             bcp.mode[cur_mode] = cur_code;
             bcp.nargs = cur_proc_nargs;
+            bcp.delay = cur_proc_delay;
             procs[cur_proc] = codes.size();
             toPatch.emplace_back(codes.size(), cur_mode, cur_toPatch);
             codes.push_back(bcp);
@@ -1564,7 +1576,14 @@ namespace MiniZinc {
         } else {
           cur_mode = BytecodeProc::FUN;
         }
-        cur_proc_nargs = std::stoi(line.substr(space+1));
+        size_t space2 = line.find(' ', space+1);
+        cur_proc_nargs = std::stoi(line.substr(space+1, space2-(space+1)));
+        cur_proc_delay = false;
+        if (space2 != std::string::npos) {
+          std::string d = line.substr(space2+1);
+          cur_proc_delay = (d == "d") || (d == "D");
+          assert(cur_proc_delay);
+        }
         continue;
       }
       
@@ -1817,6 +1836,7 @@ namespace MiniZinc {
         bcp.name = cur_proc;
         bcp.mode[cur_mode] = cur_code;
         bcp.nargs = cur_proc_nargs;
+        bcp.delay = cur_proc_delay;
         procs[cur_proc] = codes.size();
         toPatch.emplace_back(codes.size(), cur_mode, cur_toPatch);
         codes.push_back(bcp);
@@ -1846,7 +1866,7 @@ namespace MiniZinc {
   Model*
   Interpreter::toFZN() {
     if (!_agg.empty()) {
-      return Definition::toFZN(_agg.back().def_stack, _procs, true);
+      return Definition::toFZN(this, _agg.back().def_stack, _procs);
     }
     return nullptr;
   }
@@ -1865,16 +1885,16 @@ namespace MiniZinc {
   }
   
   void
-  Interpreter::call(int code, const BytecodeProc::Mode& mode0, const std::vector<Val>& args0) {
+  Interpreter::call(int code, const BytecodeProc::Mode& mode0, const std::vector<Val>& args0, bool delayed) {
     BytecodeProc::Mode mode = mode0;
     std::vector<Val> args = args0;
     assert(code >= 0);
     assert(code < _procs.size());
     int n = _procs[code].nargs;
-    DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
+    DBG_INTERPRETER("Interpreter::call " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
     // TODO: See if args is created when not necessary
     assert(n == args.size());
-    bool cse_suited = n < 5 && mode != BytecodeProc::RAW;
+    bool cse_suited = n < 5 && mode != BytecodeProc::RAW && !delayed;
     CSETable::Key cse_key;
     if (cse_suited) {
       cse_key = CSETable::Key(args);
@@ -1908,12 +1928,37 @@ namespace MiniZinc {
         pushAgg(Val(def), -1);
       }
     } else {
+      // Ensure the last RET is next on the program counter
+      _stack.back().pc--;
       _stack.emplace_back(_procs[code].mode[mode]);
       BytecodeFrame* newFrame = &_stack[_stack.size()-1];
-      newFrame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
+      newFrame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
       newFrame->reg.mov(this, args);
       run();
     }
+  }
+
+  bool Interpreter::runDelayed() {
+    std::vector<Definition*> wave = std::move(delayed_calls);
+    delayed_calls.clear();
+    for (auto def : wave) {
+      if (def->exists()) {
+        auto mode = static_cast<BytecodeProc::Mode>(def->mode());
+        std::vector<Val> args(def->size());
+        for (int i = 0; i < def->size(); ++i) {
+          args[i] = def->arg(i);
+        }
+        call(def->pred(), mode, args, true);
+        Val ret(1);
+        if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
+          ret = _agg.back().back();
+          assert(ret.isDef() || ret.isInt());
+        }
+        def->alias(this, ret);
+      }
+      RefCountedObject::rmWRef(this, def);
+    }
+    return !delayed_calls.empty();
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {

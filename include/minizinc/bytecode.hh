@@ -156,10 +156,10 @@ namespace MiniZinc {
     enum RCOType { VEC, DEF };
   protected:
     unsigned int _ref_count;
-    unsigned int _cse_ref_count : 31;
+    unsigned int _weak_ref_count : 31;
     unsigned int _rco_type : 1;
     int _timestamp;
-    RefCountedObject(const RCOType& t, int timestamp) : _ref_count(0), _cse_ref_count(0), _rco_type(t==VEC ? 1 : 0), _timestamp(timestamp) {}
+    RefCountedObject(const RCOType& t, int timestamp) : _ref_count(0), _weak_ref_count(0), _rco_type(t==VEC ? 1 : 0), _timestamp(timestamp) {}
   public:
     RCOType rcoType(void) const { return _rco_type==1 ? VEC : DEF; }
     const int timestamp() const { return _timestamp; }
@@ -168,9 +168,8 @@ namespace MiniZinc {
     static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
     bool exists() { return _ref_count > 0; }
 
-    void addCSE(Interpreter* interpreter) { assert(_ref_count > 0); _cse_ref_count++; }
-    static void rmCSE(Interpreter* interpreter, RefCountedObject* rco);
-    bool inCSE() { return _cse_ref_count > 0; }
+    void addWRef(Interpreter* interpreter) { assert(_ref_count > 0); _weak_ref_count++; }
+    static void rmWRef(Interpreter* interpreter, RefCountedObject* rco);
   };
   
 
@@ -182,6 +181,8 @@ namespace MiniZinc {
     // Bit 0: 0=int, 1=RefCountedObject
     void* _v;
   public:
+    static Val follow_alias(Interpreter* interpreter, const Val& v);
+
     bool isRCO(void) const {
       return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == static_cast<ptrdiff_t>(1);
     }
@@ -214,9 +215,6 @@ namespace MiniZinc {
       return false;
     }
 
-    inline
-    void remove_alias(Interpreter* interpreter) const;
-
     /// Access value as Definition
     Definition* toDef(void) const;
     /// Access value as IntVal
@@ -247,12 +245,12 @@ namespace MiniZinc {
     }
     void addToCSE(Interpreter* interpreter) {
       if (isRCO()) {
-        toRCO()->addCSE(interpreter);
+        toRCO()->addWRef(interpreter);
       }
     };
     void removeFromCSE(Interpreter* interpreter) {
       if (isRCO()) {
-        RefCountedObject::rmCSE(interpreter, toRCO());
+        RefCountedObject::rmWRef(interpreter, toRCO());
       }
     };
 
@@ -482,7 +480,12 @@ namespace MiniZinc {
     int size(void) const { return _size; }
     Val arg(int i) const { assert(i < _size); return _args[i]; }
     Definition* defs(void) const { return _defs; }
-    void defs(Definition* defs) { _defs = defs; }
+    void defs(Interpreter* interpreter, Definition* defs) {
+      if (!_defs) {
+        _defs = Definition::a(interpreter,IntVal(0),0,0,{},-1);
+      }
+      _defs->appendBefore(interpreter, defs);
+    }
     static Definition* a(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
       Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
       new (d) Definition(interpreter,domain,pred,mode,args,ident,ann);
@@ -490,7 +493,7 @@ namespace MiniZinc {
     }
     static void free(Definition* def) {
       // INVARIANT: def->destroy() should be called before free(def);
-      assert(def->_ref_count == 0 && def->_cse_ref_count == 0);
+      assert(def->_ref_count == 0 && def->_weak_ref_count == 0);
       if (def->_defs) {
         // destroy all linked definitions
         Definition* d = def->_defs;
@@ -500,7 +503,7 @@ namespace MiniZinc {
           d = d->next();
           finished = (cur == d);
           // INVARIANT: def->destroy() should ensure that no children with reference counts are still linked
-          assert(cur->_ref_count == 0 && cur->_cse_ref_count == 0);
+          assert(cur->_ref_count == 0 && cur->_weak_ref_count == 0);
           Definition::free(cur);
         }
       }
@@ -537,8 +540,8 @@ namespace MiniZinc {
       }
       return i;
     }
-    static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, bool ignoreHead=true, int indent=0);
-    static Model* toFZN(Definition* d, const std::vector<BytecodeProc>& bs, bool ignoreHead = true, Model* model = nullptr);
+    static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
+    static Model* toFZN(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model = nullptr);
   };
 
   class WeakVal {
@@ -613,6 +616,8 @@ namespace MiniZinc {
     std::string name;
     /// Number of arguments
     int nargs;
+    /// Delayed execution
+    bool delay;
     /// Modes
     enum Mode { RAW, ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
     static const std::string mode_to_string[MAX_MODE+1];
@@ -814,6 +819,7 @@ namespace MiniZinc {
     const std::vector<builtin>& _builtins;
     int _identCount;
     std::vector<CSETable> cse;
+    std::vector<Definition*> delayed_calls;
   public:
     Trail trail;
 
@@ -825,6 +831,7 @@ namespace MiniZinc {
     }
     ~Interpreter(void);
     void run(void);
+    bool runDelayed();
     void pushAgg(const Val& v, int stackOffset);
     void pushDef(Definition* d);
     std::pair<Val, bool> cse_lookup(int proc, const CSETable::Key& key, BytecodeProc::Mode& mode) {
@@ -837,7 +844,7 @@ namespace MiniZinc {
     int currentIdent(void) const { return _identCount; }
     void dumpState(std::ostream& os);
     Model* toFZN();
-    void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args);
+    void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
   };
 
   inline
@@ -855,7 +862,7 @@ namespace MiniZinc {
       }
       if (interpreter->trail.is_trailed(rco)) {
         interpreter->trail(rco);
-      } else if (rco->_cse_ref_count==0) {
+      } else if (rco->_weak_ref_count==0) {
         // INVARIANT: All children of a definition are already promoted, cut, or freed.
         assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());
         free(rco);
@@ -863,8 +870,8 @@ namespace MiniZinc {
     }
   }
   inline
-  void RefCountedObject::rmCSE(Interpreter* interpreter, RefCountedObject* rco) {
-    if(--rco->_cse_ref_count == 0 && !interpreter->trail.is_trailed(rco) && rco->_ref_count == 0) {
+  void RefCountedObject::rmWRef(Interpreter* interpreter, RefCountedObject* rco) {
+    if(--rco->_weak_ref_count == 0 && !interpreter->trail.is_trailed(rco) && rco->_ref_count == 0) {
       // INVARIANT: All children of a definition are already promoted, cut, or freed.
       assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());
       free(rco);
