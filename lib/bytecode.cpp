@@ -239,7 +239,7 @@ namespace MiniZinc {
   bool Val::operator==(const Val &rhs) const {
     if ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(3)) != (reinterpret_cast<ptrdiff_t>(rhs._v) & static_cast<ptrdiff_t>(3))) {
       return false;
-    } else if (isVec()) {
+    } else if (isVec() && rhs.isVec()) {
       return (*toVec()) == (*rhs.toVec());
     } else {
       return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v);
