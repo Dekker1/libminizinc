@@ -227,10 +227,10 @@ struct _FOREACH {
     int lblH(GET_LABEL(cg));
     int lblE(GET_LABEL(cg));
     // Set up the iterators
-    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(rB));
+    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(rB));
     PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r), CG::r(rE));
     // Check if the vec is non-empty
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rB), CG::r(rE), CG::r(rV));
+    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(rB), CG::r(rE), CG::r(rV));
     PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(rV), CG::l(lblE));
     PUSH_LABEL(frag, lblH);
     // Dereference the iterator
@@ -239,7 +239,7 @@ struct _FOREACH {
     e(rV)(cg, frag);
     // Now increment and loop back.
     PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(rB));
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rB), CG::r(rE), CG::r(rV));
+    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(rB), CG::r(rE), CG::r(rV));
     PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(rV), CG::l(lblH));
     PUSH_LABEL(frag, lblE);
   }
@@ -261,10 +261,10 @@ struct _FOREACH2 {
     int lblH(GET_LABEL(cg));
     int lblE(GET_LABEL(cg));
     // Set up the iterators
-    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(rB));
+    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(rB));
     PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r), CG::r(rE));
     // Check if the vec is non-empty
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rB), CG::r(rE), CG::r(rV1));
+    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(rB), CG::r(rE), CG::r(rV1));
     PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(rV1), CG::l(lblE));
     PUSH_LABEL(frag, lblH);
     // Dereference the iterator
@@ -275,8 +275,8 @@ struct _FOREACH2 {
     // Emit code for the body
     e(rV1, rV2)(cg, frag);
     // Now increment and loop back.
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rB), CG::r(rE), CG::r(rV1));
-    PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::l(lblH));
+    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(rB), CG::r(rE), CG::r(rV1));
+    PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(rV1), CG::l(lblH));
     PUSH_LABEL(frag, lblE);
   }
 };
@@ -297,7 +297,7 @@ struct _FORRANGE {
     int rC(GET_REG(cg));
     // Check if the range is non-empty.
     PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(rL), CG::r(rU), CG::r(rC));
-    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::l(lblE));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(rC), CG::l(lblE));
     PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(rL), CG::r(rV));
     PUSH_LABEL(frag, lblH);
     // Emit code for the body
@@ -383,7 +383,7 @@ struct Forrange {
   void emit_pre(CG_Builder& frag) {
      // Check if the range is non-empty.
     PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(rL), CG::r(rU), CG::r(rC));
-    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::l(lblE));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(rC), CG::l(lblE));
     PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(rL), CG::r(rV));
     PUSH_LABEL(frag, lblH);
   }

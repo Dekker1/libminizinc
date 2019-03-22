@@ -64,6 +64,10 @@ int main(int argc, const char** argv) {
       }
 
       Model* m(r.read());
+
+      Env env(m, std::cout, std::cerr);
+      std::vector<TypeError> typeErrors;
+      typecheck(env, m, typeErrors, true /* ignoreUndefinedParameters */ , false /* allowMultiAssignment */, false /* isFlatZinc */);
       // debugprint(m);
 
       CodeGen cg;

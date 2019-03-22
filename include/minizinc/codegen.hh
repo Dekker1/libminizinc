@@ -125,11 +125,19 @@ public:
     , available_csts(std::move(o.available_csts))
     , occurs(std::move(o.occurs)), p(o.p), sz(o.sz) { }
 
+
+  class NotFound : public std::exception {
+  public:
+    NotFound(void) { }
+  };
+ 
   T lookup(const ASTString& s) const {
     auto it(bindings.find(s));
     if(it != bindings.end())
       return (*it).second;
-    assert(p);
+    if(!p)
+      throw NotFound();
+
     return p->lookup(s);
   }
 
@@ -356,6 +364,7 @@ struct CG {
   static void eval(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
 
   static int locate_par(ArrayAccess* a, CodeGen& cg, CG_Builder& frag);
+  static int locate_par(ArrayLit* a, CodeGen& cg, CG_Builder& frag);
   static int locate_par(ITE* ite, CodeGen& cg, CG_Builder& frag);
   static int locate_par(BinOp* op, CodeGen& cg, CG_Builder& frag);
   static int locate_par(UnOp* op, CodeGen& cg, CG_Builder& frag);
@@ -372,13 +381,55 @@ struct CG_Proc {
 };
 */
 struct CG_Proc {
-  CG_Proc(std::string _ident, int _arity, CG::Mode _m)
-    : ident(_ident), arity(_arity), m(_m) { }
+  typedef std::vector<CG_Instr> body_t;
 
+  static unsigned char mode_mask(BytecodeProc::Mode m) {
+    return 1<<(static_cast<unsigned char>(m));
+  }
+  struct mode_iterator {
+    mode_iterator(unsigned int _x) : x(_x) { }
+    bool operator!=(const mode_iterator& o) const { return x != o.x; }
+    BytecodeProc::Mode operator*(void) const { assert(x); return static_cast<BytecodeProc::Mode>(__builtin_ctz(x)); }
+    mode_iterator& operator++(void) { x &= (x-1); return *this; }
+
+    unsigned int x;
+  };
+  mode_iterator begin(void) { return mode_iterator(available_modes); }
+  mode_iterator end(void) { return mode_iterator(0); }
+
+  CG_Proc(std::string _ident, int _arity)
+    : ident(_ident), arity(_arity), available_modes(0) { }
+
+  CG_Proc(CG_Proc&& o)
+    : ident(o.ident), arity(o.arity), available_modes(o.available_modes) {
+    unsigned char rm(available_modes);
+    while(rm) {
+      unsigned char m(__builtin_ctz(rm));
+      rm &= (rm-1);
+      new (_body + m) body_t(std::move(o._body[m]));  
+      o._body[m].~body_t();
+    }
+    o.available_modes = 0;
+  }
+  
   std::string ident;
   unsigned int arity;
-  CG::Mode m;
-  std::vector<CG_Instr> body;
+
+  bool is_available(BytecodeProc::Mode m) const { return available_modes & mode_mask(m); }
+
+  std::vector<CG_Instr>& body(BytecodeProc::Mode m) {
+    static_assert(BytecodeProc::MAX_MODE < 8 * sizeof(unsigned char),
+      "Too many modes to to represent as unsigned char.");
+
+    if(!(available_modes & mode_mask(m))) {
+      available_modes |= mode_mask(m);
+      new (_body + m) body_t();
+    }
+    return _body[m];
+  }
+
+  unsigned char available_modes;
+  std::vector<CG_Instr> _body[BytecodeProc::MAX_MODE+1];
 };
 
 // For identifying a call...
@@ -416,19 +467,50 @@ struct SigMap {
   typedef std::unordered_map<CallSig, T, CallSig::HashSig, CallSig::EqSig> t;
 };
 
+// Handle for dealing with function stuff.
+class CG_FunID {
+  friend class CodeGen;
+  CG_FunID(int _f) : f(_f) { }
+
+  int f;
+};
+
+struct CG_FunInfo {
+  CG_FunInfo(FunctionI* _def)
+    : def(_def), is_total(false), available_modes(0) 
+  { }
+
+  FunctionI* def;
+  bool is_total;
+  unsigned char available_modes; // Bit-vector of instantiated modes.
+  std::vector<CG_Instr> bodies[BytecodeProc::MAX_MODE+1];
+};
+
 struct CodeGen {
   typedef unsigned int proc_id;
   typedef unsigned int reg_id;
   CodeGen(void)
     : /*entry_proc(0)
     ,*/ current_env(new CG_Env<Loc>())
+    , num_globals(0)
     , current_reg_count(0), current_label_count(0), temporary_reg(-1) {
-    bytecode.push_back(CG_Proc("main", 0, BytecodeProc::ROOT));
+    bytecode.push_back(CG_Proc("main", 0));
     register_builtins();
   }
 
-  void append(int proc, CG_Builder& b) {
-    bytecode[proc].body.insert(bytecode[proc].body.end(),
+  // Analysis results.
+  struct ExInfo {
+    std::vector<Expression*> hoistees;
+    // Which sub-expressions of the current expressions can be hoisted?
+
+    bool is_total;
+    // Is the given expression total, or partial?
+  };
+
+  void append(int proc, BytecodeProc::Mode m, CG_Builder& b) {
+    std::vector<CG_Instr>& body(bytecode[proc].body(m));
+
+    body.insert(body.end(),
       b.instrs.begin(), b.instrs.end());
     b.clear();
   }
@@ -445,7 +527,14 @@ struct CodeGen {
   bool cache_lookup(Expression* e, Loc& out);
   void cache_store(Expression* e, Loc l);
 
-  // CG_Value find_builtin(CG::Builtin::T builtin);
+  // Function resolution
+  void register_function(FunctionI* f);
+  CG_ProcID resolve_val_fun(Call* c);
+  CG_ProcID resolve_pred_fun(Call* c, BytecodeProc::Mode m);
+
+  CG_FunID resolve_fun(FunctionI* f);
+  CG_ProcID resolve_val_def(FunctionI* f);
+  CG_ProcID resolve_pred_def(FunctionI* f, BytecodeProc::Mode m);
 
   std::vector< CG_Proc > bytecode; // Bytecode we've built
 
@@ -456,6 +545,7 @@ struct CodeGen {
 
   // proc_id current_proc; // Procedure we're currently building
   CG_Env<Loc>* current_env; // Where are things in scope?
+  int num_globals;
 
   unsigned int current_reg_count; // How many registers have been used?
   unsigned int current_label_count;
