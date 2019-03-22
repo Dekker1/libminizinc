@@ -617,57 +617,75 @@ namespace MiniZinc {
     BytecodeStream mode[MAX_MODE+1];
   };
 
-  typedef std::pair<size_t, WeakVal*> CSEKey;
-  // TODO: Currently not used. Was used for CSE as an Hashtable
-  struct CSEHasher {
-    size_t operator()(const CSEKey& v) const;
-  };
-  // TODO: Currently not used. Was used for CSE as an Hashtable
-  struct CSEEquals {
-    bool operator()(const CSEKey& lhs, const CSEKey& rhs) const {
-      if (lhs.first != rhs.first) {
-        return false;
-      }
-      for (int i = 0; i < lhs.first; ++i) {
-        if (lhs.second[i] != rhs.second[i]) {
-          return false;
-        }
-      }
-      return true;
-    }
-  };
-
-  struct CSECompare {
-    bool operator()(const CSEKey& lhs, const CSEKey& rhs) const {
-      if (lhs.first != rhs.first) {
-        return lhs.first < rhs.first;
-      } else {
-        for (int i = 0; i < lhs.first; ++i) {
-          if (lhs.second[i] != rhs.second[i]) {
-            return lhs.second[i] < rhs.second[i];
-          }
-        }
-        return false;
-      }
-    }
-  };
   /// CSE table: Saved results of historical executions
   class CSETable {
   public:
-//      typedef std::unordered_map<CSEKey, std::pair<Mode, Val>, CSEHasher, CSEEquals> impl;
-    typedef std::map<CSEKey, std::pair<BytecodeProc::Mode, Val>, CSECompare> impl;
+    class Key {
+    private:
+      size_t _size;
+      WeakVal* _vals;
+    public:
+      Key() : _size(0), _vals(nullptr) {}
+      explicit Key(const std::vector<Val>& vec);
+      // INVARIANT: Key is not used after destroy is called
+      void destroy() const { free(_vals); }
+
+      const size_t& size() const { return _size; }
+      const WeakVal& operator [](int i) const { assert(i < _size); return _vals[i]; }
+      const bool operator==(const Key& rhs) const {
+        if (size() != rhs.size()) {
+          return false;
+        }
+        for (int i = 0; i < size(); ++i) {
+          if (operator[](i) != rhs[i]) {
+            return false;
+          }
+        }
+        return true;
+      }
+      const bool operator<(const Key& rhs) const {
+        if (size() != rhs.size()) {
+          return size() < rhs.size();
+        } else {
+          for (int i = 0; i < size(); ++i) {
+            if (operator[](i) != rhs[i]) {
+              return operator[](i) < rhs[i];
+            }
+          }
+          return false;
+        }
+      }
+      const size_t hash() const {
+        auto combine = [](size_t& incumbent, size_t h) { incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2); };
+        size_t hash = 0;
+        for (int i = 0; i < size(); ++i) {
+          combine(hash, operator[](i).hash());
+        }
+        return hash;
+      }
+    };
+    struct Hash { size_t operator()(const Key& key) const {
+      return key.hash();
+    }};
+    struct Equals { bool operator()(const Key& lhs, const Key& rhs) const {
+      return lhs == rhs;
+    }};
+    struct Less { bool operator()(const Key& lhs, const Key& rhs) const {
+      return lhs < rhs;
+    }};
+//    typedef std::unordered_map<Key, std::pair<BytecodeProc::Mode, Val>, Hash, Equals> impl;
+    typedef std::map<Key, std::pair<BytecodeProc::Mode, Val>> impl;
     typedef impl::iterator iterator;
-    std::pair<Val, bool> lookup(Interpreter* interpreter, const CSEKey& key, BytecodeProc::Mode& mode);
-    void insert(Interpreter* interpreter, const CSEKey& key, const BytecodeProc::Mode& mode, Val& val);
-    static CSEKey cse_key(const std::vector<Val>& vec);
+    std::pair<Val, bool> lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode);
+    void insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val);
   protected:
     std::vector<impl> _table = std::vector<impl>(1);
   public:
-    ~CSETable() { assert(_table.size() == 1 && _table[0].size() == 0); }
+    ~CSETable() { assert(_table.size() == 1 && _table[0].empty()); }
     void destroy(Interpreter* interpreter) {
       for (auto &table : _table) {
         for(auto &item : table) {
-          free(item.first.second);
+          item.first.destroy();
           item.second.second.removeFromCSE(interpreter);
         }
       }
@@ -676,7 +694,7 @@ namespace MiniZinc {
     void push() { _table.emplace_back(); }
     void pop(Interpreter* interpreter) {
       for (auto& item : _table.back()) {
-        free(item.first.second);
+        item.first.destroy();
         item.second.second.removeFromCSE(interpreter);
       }
       _table.pop_back();
@@ -691,7 +709,7 @@ namespace MiniZinc {
     
     // CSE information for RET statement
     // <proc, mode, cse_key, stack size>
-    typedef std::tuple<int,BytecodeProc::Mode, CSEKey, size_t> CSEInfo;
+    typedef std::tuple<int,BytecodeProc::Mode, CSETable::Key, size_t> CSEInfo;
     std::vector<CSEInfo> cse_info;
 
     BytecodeFrame(const BytecodeStream& bs0) :
@@ -804,10 +822,10 @@ namespace MiniZinc {
     void run(void);
     void pushAgg(const Val& v, int stackOffset);
     void pushDef(Definition* d);
-    std::pair<Val, bool> cse_lookup(int proc, const CSEKey& key, BytecodeProc::Mode& mode) {
+    std::pair<Val, bool> cse_lookup(int proc, const CSETable::Key& key, BytecodeProc::Mode& mode) {
       return cse[proc].lookup(this, key, mode);
     }
-    void cse_insert(int proc, const CSEKey& key, BytecodeProc::Mode& mode, Val& val) {
+    void cse_insert(int proc, CSETable::Key& key, BytecodeProc::Mode& mode, Val& val) {
       return cse[proc].insert(this, key, mode, val);
     }
     int newIdent(void) { return _identCount++; }

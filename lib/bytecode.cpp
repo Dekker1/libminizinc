@@ -246,42 +246,32 @@ namespace MiniZinc {
     }
   }
 
-  CSEKey CSETable::cse_key(const std::vector<Val> &vec) {
-    size_t size = vec.size();
+  CSETable::Key::Key(const std::vector<Val> &vec) {
+    _size = vec.size();
     for (const auto& val : vec) {
       if (val.isVec() && val.size() <= 3) {
-        size += val.size();
+        _size += val.size();
       }
     }
-    auto nvec = (WeakVal*) malloc(size*sizeof(WeakVal));
-    size_t i = 0;
-    for (const auto& val : vec) {
-      if (val.isVec() && val.size() <= 3) {
-        nvec[i++] = WeakVal(Val(val.size()));
-        for (int j = 0; j < val.size(); ++j) {
-          assert(!val[j].isVec());
-          nvec[i++] = WeakVal(val[j]);
+    if (_size > 0) {
+     _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
+      size_t i = 0;
+      for (const auto& val : vec) {
+        if (val.isVec() && val.size() <= 3) {
+          _vals[i++] = WeakVal(Val(val.size()));
+          for (int j = 0; j < val.size(); ++j) {
+            assert(!val[j].isVec());
+            _vals[i++] = WeakVal(val[j]);
+          }
+        } else {
+          _vals[i++] = WeakVal(val);
         }
-      } else {
-        nvec[i++] = WeakVal(val);
       }
+      assert(i == _size);
     }
-    assert(i == size);
-    return std::make_pair(size, nvec);
   }
 
-  void cmb_hash(size_t& incumbent, const size_t h) {
-    incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2);
-  }
-  size_t CSEHasher::operator()(const CSEKey& vec) const {
-    size_t hash = 0;
-    for (int i = 0; i < vec.first; ++i) {
-      cmb_hash(hash, vec.second[i].hash());
-    }
-    return hash;
-  }
-
-  std::pair<Val, bool> CSETable::lookup(Interpreter* interpreter, const CSEKey& key, BytecodeProc::Mode& mode) {
+  std::pair<Val, bool> CSETable::lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode) {
     assert(mode != BytecodeProc::RAW);
     iterator it;
     size_t i = _table.size();
@@ -305,9 +295,7 @@ namespace MiniZinc {
             assert(v().toInt() == 0 || v().toInt() == 1);
             new_val = Val(1 - v().toInt());
           } else {
-            auto ptr = (WeakVal*) malloc(sizeof(WeakVal));
-            *ptr = WeakVal(v);
-            auto nkey = CSEKey({1, ptr});
+            Key nkey({v});
             bool found;
             auto cmode = BytecodeProc::FUN;
             std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
@@ -316,6 +304,8 @@ namespace MiniZinc {
               interpreter->pushDef(d);
               new_val = Val(d);
               interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
+            } else {
+              nkey.destroy();
             }
           }
           return new_val;
@@ -341,7 +331,7 @@ namespace MiniZinc {
     return {Val(), false};
   }
 
-  void CSETable::insert(Interpreter* interpreter, const CSEKey& key, const BytecodeProc::Mode& mode, Val& val) {
+  void CSETable::insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val) {
     assert(mode != BytecodeProc::RAW);
     DBG_INTERPRETER("--- CSE add: hash(" << CSEHasher()(key) << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString() << "\n");
     // If value is reference counted, flag that it's in CSE
@@ -351,7 +341,7 @@ namespace MiniZinc {
       CSETable::iterator& it = insertion.first;
       // We are replacing another entry within the CSE table.
       assert(it->first == key && it->second.first != mode);
-      free(it->first.second);
+      it->first.destroy();
       it->second.second.removeFromCSE(interpreter);
       if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
         // TODO: Replace all occurences of previous value by true / false
@@ -846,7 +836,7 @@ namespace MiniZinc {
           assert(!frame->cse_info.empty());
           
           for (auto& entry : frame->cse_info) {
-            if (std::get<2>(entry).first != 0) {
+            if (std::get<2>(entry).size() != 0) {
               if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
                 Val v = Val(1);
                 cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), v);
@@ -854,7 +844,7 @@ namespace MiniZinc {
                 Val ret = _agg[_agg.size()-1].back();
                 cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
               } else {
-                free(std::get<2>(entry).second);
+                std::get<2>(entry).destroy();
               }
             }
           }
@@ -881,13 +871,13 @@ namespace MiniZinc {
             int r = frame->bs->reg(frame->pc);
             args[i] = frame->reg[r];
           }
-          CSEKey cse_key = {0, nullptr};
+          CSETable::Key cse_key;
           if (cse_suited) {
-            cse_key = CSETable::cse_key(args);
+            cse_key = CSETable::Key(args);
             // Lookup item in CSE
             auto cse = cse_lookup(code, cse_key, mode);
             if (cse.second) {
-              ::free(cse_key.second);
+              cse_key.destroy();
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(cse.first.isInt());
                 if (cse.first().toInt() != 1) {
@@ -916,7 +906,7 @@ namespace MiniZinc {
           } else {
             _stack.emplace_back(_procs[code].mode[mode]);
             BytecodeFrame* newFrame = &_stack[_stack.size()-1];
-            newFrame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
+            newFrame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
             newFrame->reg.mov(this, args);
             frame = newFrame;
           }
@@ -953,13 +943,14 @@ namespace MiniZinc {
           for (int i = 0; i < args.size(); ++i) {
             args[i] = frame->reg[i];
           }
-          CSEKey cse_key = {0, nullptr};
+          CSETable::Key cse_key;
           if (cse_suited) {
-            cse_key = CSETable::cse_key(args);
+            cse_key = CSETable::Key(args);
             bool found;
             Val ret;
             std::tie(ret, found) = cse_lookup(code, cse_key, mode);
             if (found) {
+              cse_key.destroy();
               // RET with CSE found value
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(ret.isInt());
@@ -971,14 +962,8 @@ namespace MiniZinc {
                 pushAgg(ret, -1);
               }
               for (auto& entry : frame->cse_info) {
-                if (std::get<2>(entry).first != 0) {
-                  if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
-                    Val v = Val(1);
-                    cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), v);
-                  } else if (std::get<3>(entry) == _agg.back().size()-1) {
-                    Val ret = _agg[_agg.size()-1].back();
-                    cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
-                  }
+                if (std::get<2>(entry).size() != 0) {
+                  cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
                 }
               }
               _stack.back().destroy(this);
@@ -989,7 +974,7 @@ namespace MiniZinc {
           }
           // Replace frame with new procedure
           frame->bs = &_procs[code].mode[mode];
-          frame->cse_info.emplace_back(code, mode, std::move(cse_key), _agg.back().size());
+          frame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
           frame->pc = 0;
         }
           break;
@@ -1796,12 +1781,13 @@ namespace MiniZinc {
     // TODO: See if args is created when not necessary
     assert(n == args.size());
     bool cse_suited = n < 5 && mode != BytecodeProc::RAW;
-    CSEKey cse_key = {0, nullptr};
+    CSETable::Key cse_key;
     if (cse_suited) {
-      cse_key = CSETable::cse_key(args);
+      cse_key = CSETable::Key(args);
       // Lookup item in CSE
       auto cse = cse_lookup(code, cse_key, mode);
       if (cse.second) {
+        cse_key.destroy();
         if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
           assert(cse.first.isInt());
           if (cse.first().toInt() != 1) {
