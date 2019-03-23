@@ -198,16 +198,68 @@ namespace MiniZinc {
     return fzn;
   }
 
+  void Definition::alias(Interpreter* interpreter, Val v) {
+    assert(size() >= 1);
+    // Destroy old definition
+    auto store_count = _ref_count;
+    _ref_count = (1u<<31u)-1u;
+    if (_defs) {
+      // destroy all linked definitions
+      Definition* d = _defs;
+      bool finished = false;
+      Definition* ndefs = nullptr; // Children remaining after destroy operation
+      while (!finished) {
+        Definition* cur = d;
+        d = d->next();
+        finished = (cur == d);
+        if (cur->_ref_count > 0) {
+          // Promote cur to parent level
+          cur->unlink(interpreter);
+          cur->insertBefore(interpreter, this->next());
+        } else {
+          cur->destroy(interpreter);
+          if(cur->_cse_ref_count > 0) {
+            // Cut cur: it is kept alive for a CSE entry
+            cur->unlink(interpreter);
+          } else if (!interpreter->trail.is_trailed(this)) {
+            // Free cur: it will not be used again
+            ::free(cur);
+          } else if (!ndefs) {
+            ndefs = cur;
+          }
+        }
+      }
+      if (ndefs != _defs) {
+        interpreter->trail(this, &_defs);
+        _defs = ndefs;
+      }
+    }
+
+    _domain.destroy(interpreter);
+    _ann.destroy(interpreter);
+    for (unsigned int i=0; i<_size; i++) {
+      _args[i].destroy(interpreter);
+    }
+    _ref_count = store_count;
+
+    // TODO: Add aliasing to Trail
+    // Set Alias
+    _pred = PrimitiveMap::ALIAS;
+    _size = 1;
+    _args[0] = v;
+    v.construct(interpreter);
+  }
+
 
   PrimitiveMap::PrimitiveMap(void)
-  : _s({ {"bool_not", {BOOLNOT,1}}, {"clause",{CLAUSE,2}}, {"forall",{FORALL,1}}, {"exists",{EXISTS,1}}, {"int_sum",{INT_SUM,1}}, {"int_times",{INT_TIMES,2}}, {"lin_exp",{LINEXP,3}} }) {
+  : _s({ {"<alias>", {ALIAS, 1}}, {"bool_not", {BOOLNOT,1}}, {"clause",{CLAUSE,2}}, {"forall",{FORALL,1}}, {"exists",{EXISTS,1}}, {"int_sum",{INT_SUM,1}}, {"int_times",{INT_TIMES,2}}, {"lin_exp",{LINEXP,3}} }) {
     _n.resize(_s.size());
     for (auto& entry : _s) {
       _n[entry.second.ident] = entry.first;
     }
   }
 
-  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { {BOOLNOT,1}, {CLAUSE,2}, {FORALL,1}, {EXISTS,1}, {INT_SUM,1}, {INT_TIMES,2}, {LINEXP,3} };
+  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { {ALIAS, 1}, {BOOLNOT,1}, {CLAUSE,2}, {FORALL,1}, {EXISTS,1}, {INT_SUM,1}, {INT_TIMES,2}, {LINEXP,3} };
   
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   
@@ -217,8 +269,8 @@ namespace MiniZinc {
     if (isInt()) {
       oss << (*this)();
     } else if (isDef()) {
-      if (toDef()->timestamp() >= 0) {
-        oss << "X" << toDef()->timestamp() << "(";
+      if (timestamp() >= 0) {
+        oss << "X" << timestamp() << "(";
       }
       oss << toDef();
       if (toDef()->timestamp() >= 0) {
@@ -246,7 +298,21 @@ namespace MiniZinc {
     }
   }
 
-  CSETable::Key::Key(const std::vector<Val> &vec) {
+  void Val::follow_aliases(Interpreter* interpreter) {
+    if (isDef() && toDef()->pred() == PrimitiveMap::ALIAS) {
+      Val nval = *this;
+      while(nval.isDef() && nval.toDef()->pred() == PrimitiveMap::ALIAS) {
+        assert(nval.size() > 0);
+        nval = nval.toDef()->arg(0);
+      }
+      this->destroy(interpreter);
+      _v = nval._v;
+      this->construct(interpreter);
+    }
+  }
+
+
+    CSETable::Key::Key(const std::vector<Val> &vec) {
     _size = vec.size();
     for (const auto& val : vec) {
       if (val.isVec() && val.size() <= 3) {
@@ -280,7 +346,8 @@ namespace MiniZinc {
       it = _table[i].find(key);
     } while (it == _table[i].end() && i > 0);
     if (it != _table[i].end()) {
-      Val val = it->second.second;
+      Val& val = it->second.second;
+      val.follow_aliases(interpreter);
       BytecodeProc::Mode val_m = it->second.first;
       if (!val.exists()) {
         this->_table[i].erase(it);
@@ -321,7 +388,7 @@ namespace MiniZinc {
         DBG_INTERPRETER("--- Run call in " + BytecodeProc::mode_to_string[mode] + " context\n");
         return {Val(), false};
       } else if (val_m == BytecodeProc::IMP || val_m == BytecodeProc::IMP_NEG) {
-        mode = BytecodeProc::is_neg(mode) ? BytecodeProc::FUN_NEG : BytecodeProc::FUN;
+        mode = BytecodeProc::FUN;
         DBG_INTERPRETER("--- Run call in " + BytecodeProc::mode_to_string[mode] + " context\n");
         return {Val(), false};
       } else {
@@ -342,12 +409,37 @@ namespace MiniZinc {
       // We are replacing another entry within the CSE table.
       assert(it->first == key && it->second.first != mode);
       it->first.destroy();
-      it->second.second.removeFromCSE(interpreter);
+      Val& oldVal = it->second.second;
+      BytecodeProc::Mode& oldMode = it->second.first;
       if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-        // TODO: Replace all occurences of previous value by true / false
+        if (oldVal.isDef()) {
+          Definition* d = oldVal.toDef();
+          d->alias(interpreter, BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode) ? Val(IntVal(1)) : Val(IntVal(0)));
+        }
       } else if (mode == BytecodeProc::FUN || mode == BytecodeProc::FUN_NEG) {
-        // TODO: Replace all occurences of previous value by val / ~val
+        if (oldVal.isDef()) {
+          Definition* d = oldVal.toDef();
+          if (BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode)) {
+            d->alias(interpreter, val);
+          } else {
+            Key nkey({val});
+            bool found;
+            auto cmode = BytecodeProc::FUN;
+            Val new_val;
+            std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
+            if (!found) {
+              auto negation = Definition::a(interpreter, IntVal(0), PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent());
+              interpreter->pushDef(negation);
+              new_val = Val(negation);
+              interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
+            } else {
+              nkey.destroy();
+            }
+            d->alias(interpreter, new_val);
+          }
+        }
       }
+      oldVal.removeFromCSE(interpreter);
       it->second = std::make_pair(mode, val);
     }
   }

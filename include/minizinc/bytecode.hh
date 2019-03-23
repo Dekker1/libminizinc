@@ -214,6 +214,8 @@ namespace MiniZinc {
       return false;
     }
 
+    void follow_aliases(Interpreter*);
+
     /// Access value as Definition
     Definition* toDef(void) const;
     /// Access value as IntVal
@@ -227,7 +229,7 @@ namespace MiniZinc {
         return -(static_cast<long long int>(i>>2));
       }
     }
-    int timestamp() {
+    int timestamp() const {
       assert(isRCO());
       return toRCO()->timestamp();
     }
@@ -522,6 +524,7 @@ namespace MiniZinc {
     void unlink(Interpreter* interpreter);
     /// Set the reference count to 1
     void makeUniqueReference(void) { _ref_count = 1; }
+    void alias(Interpreter* interpreter, Val v);
     Definition* prev(void) const { return _prev; }
     Definition* next(void) const { return _next; }
     int listSize(void) const {
@@ -730,6 +733,7 @@ namespace MiniZinc {
   class PrimitiveMap {
   public:
     enum Id {
+      ALIAS,
       BOOLNOT,
       CLAUSE,
       FORALL,
