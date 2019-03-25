@@ -214,7 +214,8 @@ namespace MiniZinc {
       return false;
     }
 
-    void follow_aliases(Interpreter*);
+    inline
+    void remove_alias(Interpreter* interpreter) const;
 
     /// Access value as Definition
     Definition* toDef(void) const;

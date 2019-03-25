@@ -298,16 +298,18 @@ namespace MiniZinc {
     }
   }
 
-  void Val::follow_aliases(Interpreter* interpreter) {
+  inline
+  void Val::remove_alias(Interpreter* interpreter) const {
     if (isDef() && toDef()->pred() == PrimitiveMap::ALIAS) {
       Val nval = *this;
       while(nval.isDef() && nval.toDef()->pred() == PrimitiveMap::ALIAS) {
         assert(nval.size() > 0);
         nval = nval.toDef()->arg(0);
       }
-      this->destroy(interpreter);
-      _v = nval._v;
-      this->construct(interpreter);
+      auto val = const_cast<Val*>(this);
+      val->destroy(interpreter);
+      val->_v = nval._v;
+      val->construct(interpreter);
     }
   }
 
@@ -347,7 +349,7 @@ namespace MiniZinc {
     } while (it == _table[i].end() && i > 0);
     if (it != _table[i].end()) {
       Val& val = it->second.second;
-      val.follow_aliases(interpreter);
+      val.remove_alias(interpreter);
       BytecodeProc::Mode val_m = it->second.first;
       if (!val.exists()) {
         this->_table[i].erase(it);
