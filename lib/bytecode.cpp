@@ -612,7 +612,7 @@ namespace MiniZinc {
           break;
         case BytecodeStream::TCALL:
         {
-          BytecodeProc::Mode m = static_cast<BytecodeProc::Mode>(chr(pc));
+          auto m = static_cast<BytecodeProc::Mode>(chr(pc));
           int p = reg(pc);
           
           if (procs.empty()) {
@@ -928,7 +928,7 @@ namespace MiniZinc {
         case BytecodeStream::RET:
         {
           DBG_INTERPRETER("RET\n");
-          assert(_stack.size() >= 1);
+          assert(!_stack.empty());
           if (_stack.size()==1) {
             // Always leave final frame on the stack
             return;
@@ -1121,7 +1121,7 @@ namespace MiniZinc {
           assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
           if (r==AggregationCtx::VCTX_OTHER || r==AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
             // Push a new aggregation context
-            _agg.push_back(AggregationCtx(this, r));
+            _agg.emplace_back(this, r);
           } else {
             // Increment depth counter for current aggregation context
             _agg.back().n_symbols++;
@@ -1159,14 +1159,14 @@ namespace MiniZinc {
                   case PrimitiveMap::LINEXP:
                   {
                     for (unsigned int i=0; i<cur->arg(0).size(); i++) {
-                      defs.push_back(std::make_pair(coeff*cur->arg(0)[i](), cur->arg(1)[i]));
+                      defs.emplace_back(coeff*cur->arg(0)[i](), cur->arg(1)[i]);
                     }
                     d += coeff*cur->arg(2)();
                   }
                     break;
                   case PrimitiveMap::INT_SUM:
                     for (unsigned int i=0; i<cur->arg(0).size(); i++) {
-                      defs.push_back(std::make_pair(coeff,cur->arg(0)[i]));
+                      defs.emplace_back(coeff,cur->arg(0)[i]);
                     }
                     break;
                   case PrimitiveMap::INT_TIMES:
@@ -1175,25 +1175,25 @@ namespace MiniZinc {
                         // both constants, compute result
                         d += coeff*cur->arg(0)()*cur->arg(1)();
                       } else {
-                        defs.push_back(std::make_pair(coeff*cur->arg(0)(), cur->arg(1)));
+                        defs.emplace_back(coeff*cur->arg(0)(), cur->arg(1));
                       }
                     } else if (cur->arg(1).isInt()) {
                       if (cur->arg(0).isInt()) {
                         // both constants, compute result
                         d += coeff*cur->arg(0)()*cur->arg(1)();
                       } else {
-                        defs.push_back(std::make_pair(coeff*cur->arg(1)(), cur->arg(0)));
+                        defs.emplace_back(coeff*cur->arg(1)(), cur->arg(0));
                       }
                     } else {
                       // Variable multiplication, don't aggregate
-                      coeffs.push_back(coeff);
-                      vars.push_back(Val(cur));
+                      coeffs.emplace_back(coeff);
+                      vars.emplace_back(cur);
                       idx.push_back(idx.size());
                     }
                     break;
                   default:
-                    coeffs.push_back(coeff);
-                    vars.push_back(Val(cur));
+                    coeffs.emplace_back(coeff);
+                    vars.emplace_back(cur);
                     idx.push_back(idx.size());
                     break;
                 }
@@ -1205,7 +1205,7 @@ namespace MiniZinc {
               class CmpValIdx {
               public:
                 std::vector<Val>& x;
-                CmpValIdx(std::vector<Val>& x0) : x(x0) {}
+                explicit CmpValIdx(std::vector<Val>& x0) : x(x0) {}
                 bool operator ()(int i, int j) const {
                   return x[i].timestamp() < x[j].timestamp();
                 }
@@ -1379,7 +1379,7 @@ namespace MiniZinc {
     }
   }
     
-  bool startsWith(const std::string s, const std::string t) {
+  bool startsWith(const std::string& s, const std::string& t) {
     if (s.size()<t.size())
       return false;
     for (unsigned int i=0; i<t.size(); i++) {
@@ -1487,8 +1487,8 @@ namespace MiniZinc {
       int code;
       BytecodeProc::Mode mode;
       std::vector<std::pair<int,std::string>> patch;
-      Patch(int code0, BytecodeProc::Mode mode0, const std::vector<std::pair<int,std::string>>& patch0)
-      : code(code0), mode(mode0), patch(patch0) {}
+      Patch(int code0, BytecodeProc::Mode mode0, std::vector<std::pair<int, std::string>> patch0)
+      : code(code0), mode(mode0), patch(std::move(patch0)) {}
     };
     
     std::vector<Patch> toPatch;
@@ -1506,10 +1506,10 @@ namespace MiniZinc {
 
     std::istringstream iss(s);
     std::string cur_proc;
-    BytecodeProc::Mode cur_mode;
+    BytecodeProc::Mode cur_mode = BytecodeProc::RAW;
     BytecodeStream cur_code;
-    int cur_proc_nargs;
-    bool cur_proc_delay;
+    int cur_proc_nargs = 0;
+    bool cur_proc_delay = false;
     std::vector<std::pair<int,std::string> > cur_toPatch;
     std::vector<std::pair<int,std::string> > cur_labels;
     std::unordered_map<std::string, int> labels;
@@ -1770,8 +1770,8 @@ namespace MiniZinc {
           throw Error("Invalid mode:\n"+line+"\n");
         }
         std::string n0 = n.substr(n.find(' ')+1);
-        std::string rs = n0.substr(0, n0.find(' '));
-        cur_toPatch.emplace_back(cur_code.size(), rs);
+        std::string rs1 = n0.substr(0, n0.find(' '));
+        cur_toPatch.emplace_back(cur_code.size(), rs1);
         cur_code.addSmallInt(0); // placeholder
       } else if (instrR(line,"TRACE",r1)) {
         cur_code.addInstr(BytecodeStream::TRACE);
