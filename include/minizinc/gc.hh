@@ -38,11 +38,15 @@ namespace MiniZinc {
     unsigned int _flag_1 : 1;
     /// Flag
     unsigned int _flag_2 : 1;
-    
+    /// Flag
+    unsigned int _flag_3 : 1;
+    /// Flag
+    unsigned int _flag_4 : 1;
+
     enum BaseNodes { NID_FL, NID_CHUNK, NID_VEC, NID_END = NID_VEC };
 
     /// Constructor
-    ASTNode(unsigned int id) : _gc_mark(0), _id(id) {}
+    ASTNode(unsigned int id) : _gc_mark(0), _id(id), _flag_1(0), _flag_2(0), _flag_3(0), _flag_4(0)  {}
 
   public:
     /// Allocate node
@@ -60,6 +64,15 @@ namespace MiniZinc {
 
     /// Delete node (no-op)
     void operator delete(void*) throw() {}
+    
+    /// Return state of first user-defined flag
+    bool user_flag0(void) const { return _flag_3; }
+    /// Set state of first user-defined flag
+    void user_flag0(bool b) { _flag_3 = b; }
+    /// Return state of second user-defined flag
+    bool user_flag1(void) const { return _flag_4; }
+    /// Set state of second user-defined flag
+    void user_flag1(bool b) { _flag_4 = b; }
   };
     
   /**
