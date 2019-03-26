@@ -10,10 +10,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <minizinc/bytecode.hh>
+#include <minizinc/bytecode_primitives.hh>
 
 #include <minizinc/model.hh>
 #include <minizinc/prettyprinter.hh>
-
 
 #include <iostream>
 #include <sstream>
@@ -48,12 +48,32 @@ namespace MiniZinc {
           os << ", ";
       }
       os << ")\n";
+      if (!d->subscriptions().empty()) {
+        os << "   subscriptions: ";
+        for (auto& s : d->subscriptions()) {
+          os << s.first << " ";
+        }
+        os << "\n";
+      }
       if (d->defs())
         dump(d->defs(),bs,os,indent+2);
       d = d->next();
     }
   }
 
+  Definition::Definition(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann)
+  : RefCountedObject(RefCountedObject::DEF,ident), _prev(this), _next(this),
+  _domain(domain), _ann(ann), _defs(nullptr), _pred(pred), _size(args.size()), _flag(0), _mode(mode) {
+    _domain.construct(interpreter);
+    _ann.construct(interpreter);
+    for (unsigned int i=0; i<args.size(); i++) {
+      new (&_args[i]) Val(args[i]);
+      _args[i].construct(interpreter);
+    }
+    interpreter->subscribe(this);
+  }
+
+  
   void Definition::destroy(MiniZinc::Interpreter* interpreter)  {
     assert(_ref_count == 0);
     _ref_count = (1u<<31u)-1u;
@@ -91,6 +111,7 @@ namespace MiniZinc {
 
     _domain.destroy(interpreter);
     _ann.destroy(interpreter);
+    interpreter->unsubscribe(this);
     for (unsigned int i=0; i<_size; i++) {
       _args[i].destroy(interpreter);
     }
@@ -101,6 +122,18 @@ namespace MiniZinc {
     _next->_prev = _prev;
   }
 
+  void Definition::reconstruct(Interpreter* interpreter) {
+    assert(_ref_count == 0);
+    for (int i = 0; i < _size; ++i) {
+      _args[i].construct(interpreter);
+    }
+    interpreter->subscribe(this);
+    _ann.construct(interpreter);
+    _domain.construct(interpreter);
+    _ref_count = 0;
+  }
+
+  
   void Definition::insertBefore(Interpreter* interpreter, Definition* d) {
     assert(_prev==_next);
     interpreter->trail(this, &_prev);
@@ -245,6 +278,19 @@ namespace MiniZinc {
     }
     _ref_count = store_count;
 
+    if (!_subscriptions.empty()) {
+      // Transfer subscriptions to new value and schedule propagators
+      Definition* nv = v.isDef() ? v.toDef() : nullptr;
+      for (auto& s : _subscriptions) {
+        if (nv) {
+          nv->subscribe(s.first, s.second);
+        }
+        if (s.second==SES_VALUNIFY || s.second==SES_ANY) {
+          interpreter->schedule(s.first, SEV_UNIFY);
+        }
+      }
+    }
+    
     // TODO: Add aliasing to Trail
     // Set Alias
     _pred = PrimitiveMap::ALIAS;
@@ -252,17 +298,37 @@ namespace MiniZinc {
     _args[0] = v;
     v.construct(interpreter);
   }
-
-
-  PrimitiveMap::PrimitiveMap(void)
-  : _s({ {"<alias>", {ALIAS, 1}}, {"bool_not", {BOOLNOT,1}}, {"clause",{CLAUSE,2}}, {"forall",{FORALL,1}}, {"exists",{EXISTS,1}}, {"int_sum",{INT_SUM,1}}, {"int_times",{INT_TIMES,2}}, {"lin_exp",{LINEXP,3}} }) {
-    _n.resize(_s.size());
-    for (auto& entry : _s) {
-      _n[entry.second.ident] = entry.first;
+  
+  void
+  Definition::subscribe(Definition* d, const SubscriptionEventSet& events) {
+    Definition* sub = this;
+    while (sub && sub->pred()==PrimitiveMap::ALIAS) {
+      if (sub->arg(0).isDef()) {
+        sub = sub->arg(0).toDef();
+      } else {
+        sub = nullptr;
+      }
+    }
+    if (sub) {
+      sub->_subscriptions.insert(std::make_pair(d,events));
+    }
+  }
+  /// Remove \a d from set of subscribed constraints
+  void
+  Definition::unsubscribe(Definition* d) {
+    Definition* sub = this;
+    while (sub && sub->pred()==PrimitiveMap::ALIAS) {
+      if (sub->arg(0).isDef()) {
+        sub = sub->arg(0).toDef();
+      } else {
+        sub = nullptr;
+      }
+    }
+    if (sub) {
+      sub->_subscriptions.erase(d);
     }
   }
 
-  const PrimitiveMap::Primitive PrimitiveMap::ALL[] = { {ALIAS, 1}, {BOOLNOT,1}, {CLAUSE,2}, {FORALL,1}, {EXISTS,1}, {INT_SUM,1}, {INT_TIMES,2}, {LINEXP,3} };
   
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   
@@ -695,6 +761,44 @@ namespace MiniZinc {
   }
   
   void
+  Interpreter::subscribe(Definition* d) {
+    if (d->pred() < primitiveMap().size()) {
+      primitiveMap()[d->pred()]->subscribe(*this, d);
+    }
+  }
+  void
+  Interpreter::unsubscribe(Definition* d) {
+    if (d->pred() < _builtins.size()) {
+      primitiveMap()[d->pred()]->unsubscribe(*this, d);
+    }
+  }
+  void
+  Interpreter::schedule(Definition* d, const Definition::SubscriptionEvent& ev) {
+    if (!d->flag()) {
+      _propQueue.push_back(d);
+      d->flag(true);
+    }
+  }
+  void
+  Interpreter::deschedule(Definition* d) {
+    if (d->flag()) {
+      auto it = std::find(_propQueue.begin(), _propQueue.end(), d);
+      if (it != _propQueue.end()) {
+        _propQueue.erase(it);
+      }
+    }
+  }
+  void
+  Interpreter::propagate(void) {
+    while (!_propQueue.empty()) {
+      Definition* d = _propQueue.front();
+      _propQueue.pop_front();
+      d->flag(false);
+      primitiveMap()[d->pred()]->propagate(*this, d);
+    }
+  }
+  
+  void
   Interpreter::run(void) {
     BytecodeFrame* frame = &_stack.back();
     for (;;) {
@@ -1028,7 +1132,7 @@ namespace MiniZinc {
             int r = frame->bs->reg(frame->pc);
             args[i].assign(this, frame->reg[r]);
           }
-          _builtins[code](*this, args);
+          _builtins[code]->execute(*this, args);
         }
           break;
         case BytecodeStream::TCALL:
@@ -1493,15 +1597,14 @@ namespace MiniZinc {
     
     std::vector<Patch> toPatch;
 
-    PrimitiveMap pm;
     // Initialise first slots with
-    for (const PrimitiveMap::Primitive& p : PrimitiveMap::ALL) {
+    for (PrimitiveMap::Primitive* p : primitiveMap()) {
       BytecodeProc bcp;
-      bcp.name = pm[p];
-      bcp.nargs = p.n_args;
-      DBG_INTERPRETER("add primitive " << bcp.name << " " << p.ident << " " << p.n_args << "\n");
+      bcp.name = p->name();
+      bcp.nargs = p->n_args();
+      DBG_INTERPRETER("add primitive " << bcp.name << " " << p->ident << " " << p->n_args() << "\n");
       codes.push_back(bcp);
-      procs.emplace(bcp.name, p.ident);
+      procs.emplace(bcp.name, p->ident());
     }
 
     std::istringstream iss(s);
@@ -2007,4 +2110,9 @@ namespace MiniZinc {
       table.pop(interpreter);
     }
   }
+  
+  void
+  Interpreter::optimize(void) {
+  }
+  
 }

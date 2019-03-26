@@ -14,7 +14,9 @@
 
 #include <map>
 #include <vector>
+#include <deque>
 #include <iostream>
+#include <unordered_set>
 
 #include <minizinc/values.hh>
 #include <minizinc/ast.hh>
@@ -258,7 +260,7 @@ namespace MiniZinc {
     const Val& operator [](int i) const;
     /// Access value as vector, return size
     size_t size(void) const;
-  protected:
+    /// Access value as vector
     Vec* toVec(void) const;
   public:
     Val(const IntVal& i=IntVal(0)) {
@@ -443,35 +445,25 @@ namespace MiniZinc {
     }
   };
 
-  class CallVal {
-  public:
-    int pred;
-    char mode;
-    Val args;
-    CallVal(int pred0, char mode0, Val args0) : pred(pred0), mode(mode0), args(args0) {}
-  };
-  
   class Definition : public RefCountedObject {
+  public:
+    enum SubscriptionEvent { SEV_VAL, SEV_UNIFY, SEV_DOM, SEV };
+    /// Event sets propagators can subscribe to: only value events, value+unification, or any change
+    enum SubscriptionEventSet { SES_VAL, SES_VALUNIFY, SES_ANY };
+    typedef std::unordered_map<Definition*, SubscriptionEventSet> Subscriptions;
   protected:
-    int _size;
     Definition* _prev;
     Definition* _next;
     Val _domain;
     Val _ann;
     Definition* _defs;
-    int _pred;
-    char _mode;
+    int _pred : 32;
+    int _size : 31;
+    unsigned int _flag : 1;
+    char _mode : 8;
+    Subscriptions _subscriptions;
     Val _args[1];
-    Definition(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann)
-    : RefCountedObject(RefCountedObject::DEF,ident), _size(args.size()), _prev(this), _next(this),
-    _domain(domain), _ann(ann), _defs(nullptr), _pred(pred), _mode(mode) {
-      _domain.construct(interpreter);
-      _ann.construct(interpreter);
-      for (unsigned int i=0; i<args.size(); i++) {
-        new (&_args[i]) Val(args[i]);
-        _args[i].construct(interpreter);
-      }
-    }
+    Definition(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
   public:
     Val domain(void) const { return _domain; }
     Val ann(void) const { return _ann; }
@@ -512,15 +504,7 @@ namespace MiniZinc {
     ~Definition(void) = delete;
     /// Destroy and unlink this definition
     void destroy(Interpreter* interpreter);
-    void reconstruct(Interpreter* interpreter) {
-      assert(_ref_count == 0);
-      for (int i = 0; i < _size; ++i) {
-        _args[i].construct(interpreter);
-      }
-      _ann.construct(interpreter);
-      _domain.construct(interpreter);
-      _ref_count = 0;
-    }
+    void reconstruct(Interpreter* interpreter);
     /// Insert singleton element into list before \a d
     void insertBefore(Interpreter* interpreter, Definition* d);
     /// Append list to other list before \a d
@@ -540,8 +524,29 @@ namespace MiniZinc {
       }
       return i;
     }
+
     static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
     static Model* toFZN(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model = nullptr);
+
+    // Propagation interface
+    
+    /// Flag whether definition is currently scheduled
+    bool flag(void) const { return _flag==1; }
+    /// Set flag whether definition is currently scheduled
+    void flag(bool f) { _flag = f; }
+    /// Add \a d to set of subscribed constraints
+    void subscribe(Definition* d, const SubscriptionEventSet& events);
+    /// Remove \a d from set of subscribed constraints
+    void unsubscribe(Definition* d);
+    /// Return subscribed definitions
+    const Subscriptions& subscriptions(void) const {
+      return _subscriptions;
+    }
+    /// Return subscribed definitions
+    Subscriptions& subscriptions(void) {
+      return _subscriptions;
+    }
+    
   };
 
   class WeakVal {
@@ -599,7 +604,6 @@ namespace MiniZinc {
     }
     /// Destroy stack values
     void destroyStack(Interpreter* interpreter) {
-      int i=0;
       for (auto& v : stack) {
         v.destroy(interpreter);
       }
@@ -735,36 +739,6 @@ namespace MiniZinc {
     }
   };
 
-
-  class PrimitiveMap {
-  public:
-    enum Id {
-      ALIAS,
-      BOOLNOT,
-      CLAUSE,
-      FORALL,
-      EXISTS,
-      INT_SUM,
-      INT_TIMES,
-      LINEXP
-    };
-    struct Primitive {
-      Id ident;
-      int n_args;
-      Primitive(void) {}
-      Primitive(const Id& ident0, int n_args0) : ident(ident0), n_args(n_args0) {}
-    };
-    static const Primitive ALL[];
-  protected:
-    std::unordered_map<std::string,Primitive> _s;
-    std::vector<std::string> _n;
-  public:
-    PrimitiveMap(void);
-    Primitive operator [](const std::string& s) { return _s[s]; }
-    std::string operator [](Primitive p) { return _n[p.ident]; }
-    int size(void) const { return _n.size(); }
-  };
-
   class Trail {
   protected:
     std::vector<std::pair<Definition**, Definition*>> hedge_trail;
@@ -807,24 +781,30 @@ namespace MiniZinc {
     size_t save_state(Interpreter* interpreter);
     void untrail(Interpreter* interpreter);
   };
+
+  class Builtin {
+  public:
+    virtual void execute(Interpreter& i, const std::vector<Val>& args) const = 0;
+  };
   
   class Interpreter {
     friend class Trail;
   public:
-    typedef void (*builtin) (Interpreter& i, std::vector<Val> args);
+    
   protected:
     std::vector<BytecodeFrame> _stack;
     std::vector<AggregationCtx> _agg;
     std::vector<BytecodeProc>& _procs;
-    const std::vector<builtin>& _builtins;
+    const std::vector<Builtin*>& _builtins;
     int _identCount;
     std::vector<CSETable> cse;
     std::vector<Definition*> delayed_calls;
+    std::deque<Definition*> _propQueue;
   public:
     Trail trail;
 
     Interpreter(std::vector<BytecodeProc>& procs,
-                const std::vector<builtin>& builtins,
+                const std::vector<Builtin*>& builtins,
                 const BytecodeFrame& f) : _procs(procs), _builtins(builtins), _identCount(0), cse(procs.size())
     {
       _stack.push_back(f);
@@ -840,11 +820,19 @@ namespace MiniZinc {
     void cse_insert(int proc, CSETable::Key& key, BytecodeProc::Mode& mode, Val& val) {
       return cse[proc].insert(this, key, mode, val);
     }
+    void subscribe(Definition* d);
+    void unsubscribe(Definition* d);
     int newIdent(void) { return _identCount++; }
     int currentIdent(void) const { return _identCount; }
     void dumpState(std::ostream& os);
+    void schedule(Definition* d, const Definition::SubscriptionEvent& ev);
+    void deschedule(Definition* d);
+    void propagate(void);
     Model* toFZN();
     void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
+    
+    /// Perform optimizatin by basic propagation on generated FlatZinc
+    void optimize(void);
   };
 
   inline

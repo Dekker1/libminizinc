@@ -112,6 +112,7 @@ add_library(minizinc_compiler
   lib/astvec.cpp
   lib/builtins.cpp
   lib/bytecode.cpp
+  lib/bytecode_primitives.cpp
   lib/copy.cpp
   lib/chain_compressor.cpp
   lib/eval_par.cpp
@@ -162,6 +163,7 @@ add_library(minizinc_compiler
   include/minizinc/astvec.hh
   include/minizinc/builtins.hh
   include/minizinc/bytecode.hh
+  include/minizinc/bytecode_primitives.hh
   include/minizinc/config.hh.in
   include/minizinc/chain_compressor.hh
   include/minizinc/copy.hh
