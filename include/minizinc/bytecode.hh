@@ -446,6 +446,7 @@ namespace MiniZinc {
   };
 
   class Definition : public RefCountedObject {
+    friend class Trail;
   public:
     enum SubscriptionEvent { SEV_VAL, SEV_UNIFY, SEV_DOM, SEV };
     /// Event sets propagators can subscribe to: only value events, value+unification, or any change
@@ -743,8 +744,10 @@ namespace MiniZinc {
   protected:
     std::vector<std::pair<Definition**, Definition*>> hedge_trail;
     std::vector<RefCountedObject*> obj_trail;
-    // <Obj trail size, Hedge trail size>
-    std::vector<std::pair<size_t, size_t>> trail_size;
+    // <Definition, procedure, size, arg(0)>
+    std::vector<std::tuple<Definition*, int, int, Val>> alias_trail;
+    // <Hedge trail size, Obj trail size, Alias trial size>
+    std::vector<std::tuple<size_t, size_t, size_t>> trail_size;
     std::vector<int> timestamp_trail;
   public:
     Trail() = default;
@@ -760,22 +763,31 @@ namespace MiniZinc {
     };
 
     size_t len() { return trail_size.size(); }
+    inline
     bool is_trailed(RefCountedObject* rco) { return (!trail_size.empty() && timestamp_trail.back() > rco->timestamp()); }
 
     // Trail hedge pointer change
-    inline bool operator() (Definition* def, Definition** member) {
-      if (trail_size.empty() || timestamp_trail.back() <= def->timestamp()) {
+    inline bool trail_ptr(Definition* def, Definition** member) {
+      if (!is_trailed(def)) {
         return false;
       }
       hedge_trail.emplace_back(member, *member);
       return true;
     }
     // Trail Reference Counted Object removal
-    inline bool operator() (RefCountedObject* obj) {
-      if (trail_size.empty() || timestamp_trail.back() <= obj->timestamp()) {
+    inline bool trail_removal(RefCountedObject* obj) {
+      if (!is_trailed(obj)) {
         return false;
       }
       obj_trail.push_back(obj);
+      return true;
+    }
+    // Trail definition aliasing
+    inline bool trail_alias(Definition* def) {
+      if (!is_trailed(def)) {
+        return false;
+      }
+      alias_trail.emplace_back(def, def->pred(), def->size(), def->arg(0));
       return true;
     }
     size_t save_state(Interpreter* interpreter);
@@ -849,7 +861,7 @@ namespace MiniZinc {
           assert(false);
       }
       if (interpreter->trail.is_trailed(rco)) {
-        interpreter->trail(rco);
+        interpreter->trail.trail_removal(rco);
       } else if (rco->_weak_ref_count==0) {
         // INVARIANT: All children of a definition are already promoted, cut, or freed.
         assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());

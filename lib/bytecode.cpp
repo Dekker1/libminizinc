@@ -78,14 +78,8 @@ namespace MiniZinc {
     assert(_ref_count == 0);
     _ref_count = (1u<<31u)-1u;
     if (_defs) {
-      // destroy all linked definitions
-      Definition* d = _defs;
-      bool finished = false;
-      Definition* ndefs = nullptr; // Children remaining after destroy operation
-      while (!finished) {
-        Definition* cur = d;
-        d = d->next();
-        finished = (cur == d);
+      Definition* cur = _defs->next();
+      while (cur != _defs) {
         if (cur->_ref_count > 0) {
           // Promote cur to parent level
           cur->unlink(interpreter);
@@ -98,16 +92,18 @@ namespace MiniZinc {
           } else if (!interpreter->trail.is_trailed(this)) {
             // Free cur: it will not be used again
             ::free(cur);
-          } else if (!ndefs) {
-            ndefs = cur;
           }
         }
+        cur = cur->next();
       }
-      if (ndefs != _defs) {
-        interpreter->trail(this, &_defs);
-        _defs = ndefs;
+      if (_defs->next() == _defs) {
+        if (!interpreter->trail.trail_ptr(this, &_defs)) {
+          ::free(_defs);
+        }
+        _defs = nullptr;
       }
     }
+    assert(_defs == nullptr || interpreter->trail.is_trailed(this));
 
     _domain.destroy(interpreter);
     _ann.destroy(interpreter);
@@ -116,9 +112,9 @@ namespace MiniZinc {
       _args[i].destroy(interpreter);
     }
     _ref_count = 0;
-    interpreter->trail(_prev, &(_prev->_next));
+    interpreter->trail.trail_ptr(_prev, &(_prev->_next));
     _prev->_next = _next;
-    interpreter->trail(_next, &(_next->_prev));
+    interpreter->trail.trail_ptr(_next, &(_next->_prev));
     _next->_prev = _prev;
   }
 
@@ -136,37 +132,37 @@ namespace MiniZinc {
   
   void Definition::insertBefore(Interpreter* interpreter, Definition* d) {
     assert(_prev==_next);
-    interpreter->trail(this, &_prev);
+    interpreter->trail.trail_ptr(this, &_prev);
     _prev = d->_prev;
-    interpreter->trail(this, &_next);
+    interpreter->trail.trail_ptr(this, &_next);
     _next = d;
-    interpreter->trail(d->_prev, &d->_prev->_next);
+    interpreter->trail.trail_ptr(d->_prev, &d->_prev->_next);
     d->_prev->_next = this;
-    interpreter->trail(d, &d->_prev);
+    interpreter->trail.trail_ptr(d, &d->_prev);
     d->_prev = this;
   }
 
   void Definition::appendBefore(Interpreter* interpreter, Definition* d) {
     Definition* e1 = _prev;
     Definition* e2 = d->_prev;
-    interpreter->trail(d, &d->_prev);
+    interpreter->trail.trail_ptr(d, &d->_prev);
     d->_prev = e1;
-    interpreter->trail(e1, &e1->_next);
+    interpreter->trail.trail_ptr(e1, &e1->_next);
     e1->_next = d;
-    interpreter->trail(e2, &e2->_next);
+    interpreter->trail.trail_ptr(e2, &e2->_next);
     e2->_next = this;
-    interpreter->trail(this, &_prev);
+    interpreter->trail.trail_ptr(this, &_prev);
     _prev = e2;
   }
 
   void Definition::unlink(Interpreter* interpreter) {
-    interpreter->trail(_prev, &_prev->_next);
+    interpreter->trail.trail_ptr(_prev, &_prev->_next);
     _prev->_next = _next;
-    interpreter->trail(_prev, &_next->_prev);
+    interpreter->trail.trail_ptr(_prev, &_next->_prev);
     _next->_prev = _prev;
-    interpreter->trail(this, &_next);
+    interpreter->trail.trail_ptr(this, &_next);
     _next = this;
-    interpreter->trail(this, &_prev);
+    interpreter->trail.trail_ptr(this, &_prev);
     _prev = this;
   }
 
@@ -237,17 +233,11 @@ namespace MiniZinc {
   void Definition::alias(Interpreter* interpreter, Val v) {
     assert(size() >= 1);
     // Destroy old definition
-    auto store_count = _ref_count;
+    auto ref_count = _ref_count;
     _ref_count = (1u<<31u)-1u;
     if (_defs) {
-      // destroy all linked definitions
-      Definition* d = _defs;
-      bool finished = false;
-      Definition* ndefs = nullptr; // Children remaining after destroy operation
-      while (!finished) {
-        Definition* cur = d;
-        d = d->next();
-        finished = (cur == d);
+      Definition* cur = _defs->next();
+      while (cur != _defs) {
         if (cur->_ref_count > 0) {
           // Promote cur to parent level
           cur->unlink(interpreter);
@@ -260,23 +250,25 @@ namespace MiniZinc {
           } else if (!interpreter->trail.is_trailed(this)) {
             // Free cur: it will not be used again
             ::free(cur);
-          } else if (!ndefs) {
-            ndefs = cur;
           }
         }
+        cur = cur->next();
       }
-      if (ndefs != _defs) {
-        interpreter->trail(this, &_defs);
-        _defs = ndefs;
+      if (_defs->next() == _defs) {
+        if (!interpreter->trail.trail_ptr(this, &_defs)) {
+          ::free(_defs);
+        }
+        _defs = nullptr;
       }
     }
+    assert(_defs == nullptr || interpreter->trail.is_trailed(this));
 
     _domain.destroy(interpreter);
     _ann.destroy(interpreter);
     for (unsigned int i=0; i<_size; i++) {
       _args[i].destroy(interpreter);
     }
-    _ref_count = store_count;
+    _ref_count = ref_count;
 
     if (!_subscriptions.empty()) {
       // Transfer subscriptions to new value and schedule propagators
@@ -291,8 +283,8 @@ namespace MiniZinc {
       }
     }
     
-    // TODO: Add aliasing to Trail
     // Set Alias
+    interpreter->trail.trail_alias(this);
     _pred = PrimitiveMap::ALIAS;
     _size = 1;
     _args[0] = v;
@@ -2065,7 +2057,7 @@ namespace MiniZinc {
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
-    trail_size.emplace_back(obj_trail.size(), hedge_trail.size());
+    trail_size.emplace_back(hedge_trail.size(), obj_trail.size(), alias_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
     for (auto &table : interpreter->cse) {
       table.push();
@@ -2075,10 +2067,12 @@ namespace MiniZinc {
 
   void Trail::untrail(MiniZinc::Interpreter* interpreter) {
     assert(len() > 0);
-    size_t ot_size, ht_size;
-    std::tie(ot_size, ht_size) = trail_size.back(); trail_size.pop_back();
+    assert(interpreter->_stack.size() == 1);
+    size_t ht_size, ot_size, at_size;
+    std::tie(ht_size, ot_size, at_size) = trail_size.back(); trail_size.pop_back();
     int timestamp = timestamp_trail.back(); timestamp_trail.pop_back();
     Definition* back = interpreter->_agg[0].def_stack;
+    // Reconstruct destroyed items
     while(obj_trail.size() > ot_size) {
       auto obj = obj_trail.back();
       switch (obj->rcoType()) {
@@ -2093,22 +2087,36 @@ namespace MiniZinc {
       }
       obj_trail.pop_back();
     }
+    // Restore hedge pointers back to their previous versions
     while (hedge_trail.size() > ht_size) {
       auto entry = hedge_trail.back();
       *entry.first = entry.second;
       hedge_trail.pop_back();
     }
-    assert(interpreter->_stack.size() == 1);
+    // Restore original definitions for created aliases
+    while (alias_trail.size() > at_size) {
+      Definition* def;
+      int proc, size;
+      Val arg0;
+      std::tie(def, proc, size, arg0) = alias_trail.back();
+      def->_pred = proc;
+      def->_size = size;
+      def->_args[0] = arg0;
+      alias_trail.pop_back();
+    }
+    // Remove all additions/changes to the CSE table
+    for (auto &table : interpreter->cse) {
+      table.pop(interpreter);
+    }
+    // Remove all newly created definitions
     while (back->timestamp() > timestamp) {
       Definition* rem = back;
       back = back->prev();
       rem->destroy(interpreter);
       free(rem);
     }
+    // Reset the timestamp count to its previous value
     interpreter->_identCount = timestamp;
-    for (auto &table : interpreter->cse) {
-      table.pop(interpreter);
-    }
   }
   
   void
