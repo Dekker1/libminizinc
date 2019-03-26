@@ -389,7 +389,7 @@ struct CG_Proc {
   struct mode_iterator {
     mode_iterator(unsigned int _x) : x(_x) { }
     bool operator!=(const mode_iterator& o) const { return x != o.x; }
-    BytecodeProc::Mode operator*(void) const { assert(x); return static_cast<BytecodeProc::Mode>(__builtin_ctz(x)); }
+    BytecodeProc::Mode operator*(void) const { assert(x); return static_cast<BytecodeProc::Mode>(find_lsb(x)); }
     mode_iterator& operator++(void) { x &= (x-1); return *this; }
 
     unsigned int x;
@@ -404,7 +404,7 @@ struct CG_Proc {
     : ident(o.ident), arity(o.arity), available_modes(o.available_modes) {
     unsigned char rm(available_modes);
     while(rm) {
-      unsigned char m(__builtin_ctz(rm));
+      unsigned char m(find_lsb(rm));
       rm &= (rm-1);
       new (_body + m) body_t(std::move(o._body[m]));  
       o._body[m].~body_t();
@@ -486,6 +486,88 @@ struct CG_FunInfo {
   std::vector<CG_Instr> bodies[BytecodeProc::MAX_MODE+1];
 };
 
+struct CG_FunMap {
+  struct CG_FunDefn {
+    CG_FunDefn(ASTString _id)
+      : id(_id) { }
+
+    ASTString id;
+    std::vector<FunctionI*> bodies;
+  };
+
+  
+  ASTStringMap<unsigned int>::t id_map;
+  std::vector<CG_FunDefn> functions;
+  
+  void add_body(FunctionI* f) {
+    unsigned int fun_id;
+    ASTString id(f->id());
+    auto it(id_map.find(id));
+    if(it != id_map.end()) {
+      fun_id = (*it).second;
+    } else {
+      fun_id = functions.size();
+      id_map.insert(std::make_pair(id, fun_id));
+      functions.push_back(CG_FunDefn(id));
+    }
+    functions[fun_id].bodies.push_back(f);
+  }
+
+  void filter_bodies(std::vector<FunctionI*>::iterator& dest, std::vector<FunctionI*>::iterator b, std::vector<FunctionI*>::iterator e, int arg, int sz) {
+    if(!(b != e)) // Empty partition
+      return;
+    if(arg == sz) {
+      // Find the best candidate between b and e, add it to the output.
+      // FIXME
+      (*dest) = (*b);
+      ++dest;
+      return;
+    }
+    // Otherwise, partition the arguments and recurse.
+    std::vector<FunctionI*>::iterator mid = std::partition(b, e, [arg](FunctionI* b) { return b->params()[arg]->type().ispar(); });
+    filter_bodies(dest, b, mid, arg+1, sz);
+    filter_bodies(dest, mid, e, arg+1, sz);
+  }
+
+  std::vector<FunctionI*> get_bodies(unsigned int fun_id, std::vector<Type>& args) {
+    CG_FunDefn& defn(functions[fun_id]);
+
+    // First, restrict consideration to feasible specialisations.
+    std::vector<FunctionI*> candidates;
+    int sz = args.size();
+    for(FunctionI* b : defn.bodies) {
+      ASTExprVec<VarDecl> b_params(b->params());
+      if(b_params.size() == sz) {
+        for(int pi = 0; pi < sz; ++pi) {
+          if(!args[pi].isSubtypeOf(b_params[pi]->type(), false)) // CHECK
+            goto get_bodies_continue;
+        }
+        // Can coerce args to b_params.
+        candidates.push_back(b);
+      }
+  get_bodies_continue:
+      continue;
+    }
+    // Now collect the relevant par-based refinements.
+    std::vector<FunctionI*>::iterator dest(candidates.begin()); 
+    filter_bodies(dest, candidates.begin(), candidates.end(), 0, sz);
+    candidates.erase(dest, candidates.end());
+    return candidates;
+  }
+
+  std::vector<FunctionI*> get_bodies(Call* call) {
+    auto it(id_map.find(call->id()));
+    if(it == id_map.end())
+      throw InternalError("Attempted to call function not in CG_FunMap.");
+    unsigned int fun_id((*it).second);
+    std::vector<Type> args;
+    int sz(call->n_args());
+    for(int ii = 0; ii < sz; ++ii)
+      args.push_back(call->arg(ii)->type());
+    return get_bodies(fun_id, args);
+  }
+};
+
 struct CodeGen {
   typedef unsigned int proc_id;
   typedef unsigned int reg_id;
@@ -528,7 +610,8 @@ struct CodeGen {
   void cache_store(Expression* e, Loc l);
 
   // Function resolution
-  void register_function(FunctionI* f);
+  void register_function(FunctionI* f) { fun_map.add_body(f); }
+
   CG_ProcID resolve_val_fun(Call* c);
   CG_ProcID resolve_pred_fun(Call* c, BytecodeProc::Mode m);
 
@@ -554,7 +637,10 @@ struct CodeGen {
   // Helper information. For an expression, which variables does it refer to?
   ASTStSet scope(Expression* e);
   ExprMap<ASTStSet>::t _exp_scope;
-
+  
+  bool is_total(Expression* e);
+  ExprMap<bool> _exp_is_total;
+  
   // Procedure information
   void register_builtins(void);
   void register_builtin(std::string s, unsigned int p);
@@ -563,6 +649,7 @@ struct CodeGen {
   std::unordered_map<std::string, CG_ProcID> _proc_map;
 
   // Procedures yet to be emitted.
+  CG_FunMap fun_map;
   /*
   std::vector< std::pair<Expression*, unsigned int> > let_queue;
   std::vector< std::pair<FunctionI*, unsigned int> > fun_queue;

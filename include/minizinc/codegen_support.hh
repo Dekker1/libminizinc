@@ -18,6 +18,12 @@
 
 #include <minizinc/bytecode.hh>
 
+#ifdef _MSC_VER
+// Include header for _BitScanForward intrinsic.
+#include <intrin.h>
+#pragma intrinsic(_BitScanForward)
+#endif
+ 
 // Support data structures for code generation.
 // Maps/tables/etc.
 namespace MiniZinc {
@@ -47,6 +53,16 @@ struct ExprMap {
   typedef std::unordered_map<Expression*, T, hash_Expression, eq_Expression> t;
 };
 
+#ifdef _MSC_VER
+inline unsigned int find_lsb(unsigned int x) {
+  unsigned long p;
+  _BitScanForward(&p, x);
+  return p;
+}
+#else
+// Assuming GCC or clang
+inline unsigned int find_lsb(unsigned int x) { return __builtin_ctz(x); }
+#endif
 
 };
 

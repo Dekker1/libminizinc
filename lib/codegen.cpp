@@ -204,6 +204,7 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
   }
 }
 
+/*
 CG_ProcID find_op(CodeGen& cg, BinOpType op) {
   return CG_ProcID::proc(0xbeef);
 }
@@ -211,12 +212,180 @@ CG_ProcID find_op(CodeGen& cg, BinOpType op) {
 CG_ProcID find_op(CodeGen& cg, UnOpType op) {
   return CG_ProcID::proc(0xfeed);
 }
+*/
 CG_ProcID find_call_fun(CodeGen& cg, Call* c) {
   return CG_ProcID::proc(0xdead);
 }
 CG_ProcID find_call_pred(CodeGen& cg, Call* c) {
   return CG_ProcID::proc(0xbead);
 }
+
+// Analyse an expression (and sub-expressions) for partiality
+#if 0
+struct ClearFlags : public EVisitor {
+  bool enter(Expression* e) {
+    if(!e->isUnboxedVal() && e->_flag_3) {
+      e->_flag_3 = e->_flag_4 = 0;
+      return true;
+    }
+    return false;
+  }
+  // FIXME: We need to identify call bodies.
+  void vCall(const Call&) {}
+
+  static void clear(Expression* e) {
+    ClearFlags cf;
+    TopDownIterator<ClearFlags> td(cf);
+    td.run(e);
+  }
+};
+
+struct Partiality {
+  // We use _flag_3 to track whether something is already on the
+  // stack, and _flag_4 to track whether it is eliminated as true.
+  bool is_partial(Expression* e) {
+    if(e->isUnboxedVal())
+      return false;
+    // Either on the call stack and still open, or completed.
+    // In either case, check whether the partiality-flag is set.
+    if(e->_flag_3)
+      return e->_flag_4;
+    // Otherwise, mark it as pending, and enter it.
+    e->_flag_3 = 1;
+    return e->_flag_4 = _is_partial(e);
+  }
+
+  bool _is_partial(Expression* e) {
+    // First, Boolean expressions are always total.
+    if(e->type().isbool())
+      return false;
+    // Otherwise, look at the 
+    switch(e->eid()) {
+      case Expression::E_INTLIT:
+      case Expression::E_FLOATLIT:
+      case Expression::E_SETLIT:
+      case Expression::E_BOOLLIT:
+      case Expression::E_STRINGLIT:
+      case Expression::E_ID:
+        return false;
+      case Expression::E_ARRAYLIT: {
+        ArrayLit* a(e->template cast<ArrayLit>());
+        int sz(a->size());
+        for(int ii = 0; ii < sz; ++ii) {
+          if(is_partial((*a)[ii]))
+            return true;
+        }
+        return true;
+      }
+      case Expression::E_ARRAYACCESS: {
+        /*
+        ArrayAccess* a(e->template cast<ArrayAccess>());
+        if(is_partial(a->v()))
+          return true;
+        ASTExprVec<Expression> idx(a->idx());
+        int sz(idx.size());
+        for(int ii = 0; ii < sz; ++ii) {
+          if(is_partial(idx[ii]))
+            return true;
+        }
+        break;
+        */
+        // FIXME: Needs an analysis to determine whether
+        // dom(a->v) subseteq index_set(A).
+        return true;
+      }
+      case Expression::E_COMP: {
+        // A comprehension is total if all its generators
+        // and its body are total.
+        // Don't need to look in the where clauses, because
+        // they're Boolean, and therefore total.
+        Comprehension* c(e->template cast<Comprehension>());
+        int sz = c->n_generators();
+        for(int g = 0; g < c->n_generators(); ++g) {
+          if(is_partial(c->in(g)))
+            return true;
+        }
+        return is_partial(c->e());
+      }
+      case Expression::E_ITE: {
+        // The conditions are Boolean, so must be total.
+        // Look at the values.
+        ITE* ite(e->template cast<ITE>());
+        int sz(ite->size());
+        if(is_partial(ite->e_else()))
+          return false;
+        for(int ii = 0; ii < sz; ++ii) {
+          if(is_partial(ite->e_then(ii)))
+            return false;
+        }
+        return true;
+      }
+      case Expression::E_BINOP: {
+        BinOp* b(e->template cast<BinOp>());
+        // First, check if the op is itself partial.
+        // TODO: (Eventually) add a pass to determine whether we can exclude
+        // 0 from the domain of b->rhs().
+        if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD)
+          return true;
+        return is_partial(b->lhs()) || is_partial(b->rhs());
+      }
+      case Expression::E_UNOP:
+        return is_partial(e->template cast<UnOp>()->e());
+
+      case Expression::E_CALL: {
+        Call* call(e->template cast<Call>());
+        int sz = call->n_args();
+        // Check if any of its arguments are partial.
+        for(int ii = 0; ii < sz; ++ii) {
+          if(is_partial(call->arg(ii)))
+            return true;
+        }
+        // FIXME: Identify the relevant call body, recursively
+        // check for partiality.
+        // return false;
+        return true;
+      }
+      case Expression::E_LET: {
+        Let* let(e->template cast<Let>());
+        
+        // Check if any of the expressions are partial.
+        ASTExprVec<Expression> bindings(let->let());
+        for(Expression* item : bindings) {
+          if (VarDecl* vd = e->dyn_cast<VarDecl>()) {
+            if(vd->e()) {
+              // If both a domain and a definition are given,
+              // the domain might be constraining.
+              if (vd->ti()->domain())
+                return true;
+              if(is_partial(vd->e()))
+                return true;
+            }
+          } else {
+            // If there's some item that isn't a binding, it must be a constriant
+            return true;
+          }
+        }
+        return is_partial(let->in());
+      }
+      case Expression::E_ANON:
+      case Expression::E_VARDECL:
+      case Expression::E_TI:
+      case Expression::E_TIID:
+        throw InternalError("Bytecode generator encountered unexpected expression type.");
+    }
+  }
+
+  void reset_flags(Expression* e) {
+    /*
+    if(!e->isUnboxedVal()) {
+      if(e->_flag_3) {
+        e->_flag_3 = e->_flag_4 = 0;
+      }
+    }
+    */
+  }
+};
+#endif
 
 ASTStSet CodeGen::scope(Expression* e) {
   // Is it already cached?
@@ -395,6 +564,7 @@ private:
       std::cerr << "%% F: "; debugprint(f);
     }
     */
+    cg.register_function(f);
   }
 
   CodeGen& cg;
@@ -1746,6 +1916,12 @@ void CG::eval(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     r_arg[ii] = CG::r(CG::locate(call->arg(ii), c_ctx, cg, frag, frag_tl));
   }
   // And finally, add the call itself
+  auto bodies(cg.fun_map.get_bodies(call));
+  std::cerr << "%% Found " << bodies.size() << " definitions matching ";
+  debugprint(call);
+//  for(auto b : bodies)
+//    debugprint(b);
+
   PUSH_INSTR(frag_tl, BytecodeStream::CALL, c_ctx, find_call_fun(cg, call), r_arg);
   close_conj(ctx, frag_tl);
   frag.append(frag_tl);
