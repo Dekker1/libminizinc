@@ -78,7 +78,7 @@ int main(int argc, const char** argv) {
     interpreter.run();
     bool delayed;
     do {
-      bool delayed = interpreter.runDelayed();
+      delayed = interpreter.runDelayed();
     } while (delayed);
     if (verbose) {
       std::cerr << "Done\n";
