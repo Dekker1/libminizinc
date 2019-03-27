@@ -786,7 +786,17 @@ namespace MiniZinc {
       Definition* d = _propQueue.front();
       _propQueue.pop_front();
       d->flag(false);
-      primitiveMap()[d->pred()]->propagate(*this, d);
+      auto ps = primitiveMap()[d->pred()]->propagate(*this, d);
+      switch (ps) {
+        case PrimitiveMap::Primitive::PS_OK:
+          break;
+        case PrimitiveMap::Primitive::PS_FAILED:
+          // TODO: fail entire interpreter state
+          break;
+        case PrimitiveMap::Primitive::PS_ENTAILED:
+          // TODO: remove definition
+          break;
+      }
     }
   }
   
