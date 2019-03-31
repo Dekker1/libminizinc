@@ -13,6 +13,7 @@
 #include <minizinc/bytecode.hh>
 #include <minizinc/codegen.hh>
 #include <../lib/codegen/codegen_internal.hpp>
+#include <../lib/codegen/analysis.hpp>
 
 namespace MiniZinc {
 
@@ -221,11 +222,12 @@ CG_ProcID find_call_pred(CodeGen& cg, Call* c) {
 }
 
 // Analyse an expression (and sub-expressions) for partiality
-#if 0
+#if 1
 struct ClearFlags : public EVisitor {
   bool enter(Expression* e) {
-    if(!e->isUnboxedVal() && e->_flag_3) {
-      e->_flag_3 = e->_flag_4 = 0;
+    if(!e->isUnboxedVal() && e->user_flag0()) {
+      e->user_flag0(0);
+      e->user_flag1(0);
       return true;
     }
     return false;
@@ -241,6 +243,8 @@ struct ClearFlags : public EVisitor {
 };
 
 struct Partiality {
+  Partiality(CodeGen& _cg) : cg(_cg) { }
+
   // We use _flag_3 to track whether something is already on the
   // stack, and _flag_4 to track whether it is eliminated as true.
   bool is_partial(Expression* e) {
@@ -248,11 +252,14 @@ struct Partiality {
       return false;
     // Either on the call stack and still open, or completed.
     // In either case, check whether the partiality-flag is set.
-    if(e->_flag_3)
-      return e->_flag_4;
+    if(e->user_flag0())
+      return e->user_flag1();
     // Otherwise, mark it as pending, and enter it.
-    e->_flag_3 = 1;
-    return e->_flag_4 = _is_partial(e);
+    e->user_flag0(1);
+    bool p = _is_partial(e);
+    // Record the result, and return.
+    e->user_flag1(p);
+    return p;
   }
 
   bool _is_partial(Expression* e) {
@@ -343,7 +350,14 @@ struct Partiality {
         // FIXME: Identify the relevant call body, recursively
         // check for partiality.
         // return false;
-        return true;
+        for(FunctionI* b : cg.fun_map.get_bodies(call)) {
+          // Boolean-typed values are always total
+          if(b->ti()->type().isbool())
+            continue;
+          if(!b->e())
+            return true;
+        }
+        return false;
       }
       case Expression::E_LET: {
         Let* let(e->template cast<Let>());
@@ -384,6 +398,9 @@ struct Partiality {
     }
     */
   }
+   
+  CodeGen& cg;
+
 };
 #endif
 
@@ -538,19 +555,29 @@ private:
   /// Visit variable declaration
   void vVarDeclI(VarDeclI* vdi) {
     VarDecl* vd(vdi->e());
-    if(!vd->type().isvar() && !vd->type().isann()) {
-      // std::cerr << "%%%% Binding " << vd->id()->str() << " at g" << slot << std::endl;
-      // std::cerr << "%%%% "; debugprint(vd);
-      if(!vd->e()) {
-        // debugprint(vd);
-        cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
-        ++cg.num_globals;
+    if(!vd->type().isann()) {
+      if(!vd->type().isvar()) {
+        // std::cerr << "%%%% Binding " << vd->id()->str() << " at g" << slot << std::endl;
+        // std::cerr << "%%%% "; debugprint(vd);
+        if(!vd->e()) {
+          // debugprint(vd);
+          cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
+          ++cg.num_globals;
+        } else {
+          // Evaluate the definition
+          cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
+          ++cg.num_globals;
+        }
       } else {
-        // Evaluate the definition
-        cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
-        ++cg.num_globals;
+        // If it's a var with a body, feed it into the mode analyser.
+        if(vd->e()) {
+          modes.def(vd->e(), BytecodeProc::ROOT);
+        }
       }
     }
+  }
+  void vConstraintI(ConstraintI* c) {
+    modes.use(c->e(), BytecodeProc::ROOT);
   }
   /// Visit assign item
   void vAssignI(AssignI* ass) {
@@ -568,10 +595,15 @@ private:
   }
 
   CodeGen& cg;
+  ModeAnalysis modes;
 public:
   static void run(CodeGen& cg, Model* m) {
     EnvInit eb(cg);
     iterItems(eb, m);
+    cg.mode_map = std::move(eb.modes.extract());
+    for(auto p : cg.mode_map) {
+      std::cerr << mode_name(p.second) << "[" << p.first << "] "; debugprint(p.first);
+    }
   }
 };
 

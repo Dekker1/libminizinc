@@ -222,13 +222,44 @@ public:
   unsigned int sz;
 };
 
-struct CG {
-  struct Builtin {
-    enum T { MAKE_VAR, CLAUSE, ELEMENT, EQ, LE };
+struct CG_Cond {
+  struct PredCall {
+    CG_ProcID p;
+    BytecodeProc::Mode m;
+    std::vector<int> args;
   };
 
+  class CondVal {
+  public:
+    enum CondKind { C_Reg, C_Call };
+
+    CondKind kind;
+    union {
+      int reg;
+      PredCall call;
+    } _u;
+  };
+};
+
+
+struct CG {
   struct Mode {
+    enum Strength { Root = 0, Imp = 1, Fun = 2 };
     Mode(BytecodeProc::Mode _m) : m(_m) { }
+    Mode(Strength s, bool is_neg) {
+      switch(s) {
+        case Root:
+          m = is_neg ? BytecodeProc::ROOT_NEG : BytecodeProc::ROOT; 
+          break;
+        case Imp:
+          m = is_neg ? BytecodeProc::IMP_NEG : BytecodeProc::IMP; 
+          break;
+        case Fun:
+          m = is_neg ? BytecodeProc::FUN_NEG : BytecodeProc::FUN; 
+          break;
+      }
+    }
+
     bool is_neg(void) const {
       switch(m) {
         case BytecodeProc::ROOT_NEG:
@@ -239,61 +270,53 @@ struct CG {
           return false;
       }
     }
-    bool is_root(void) const {
+
+    Strength strength(void) const {
       switch(m) {
         case BytecodeProc::ROOT:
         case BytecodeProc::ROOT_NEG:
-          return true;
-        default:
-          return false;
+          return Root;
+        case BytecodeProc::IMP:
+        case BytecodeProc::IMP_NEG:
+          return Imp;
+        case BytecodeProc::FUN:
+        case BytecodeProc::FUN_NEG:
+          return Imp;
+      default:
+        throw InternalError("Unexpected mode.");
       }
     }
+    bool is_root(void) const { return strength() == Root; }
 
+    Mode join(Mode o) {
+      if(m == BytecodeProc::RAW) return o.m;
+      if(o.m == BytecodeProc::RAW) return m;
+      if(is_neg() != o.is_neg())
+        return BytecodeProc::FUN;
+      return Mode(std::max(strength(), o.strength()), is_neg());
+    }
+    bool is_submode(Mode o) {
+      if(m == BytecodeProc::RAW) return true;
+      if(o.m == BytecodeProc::RAW) return false;
+      return is_neg() == o.is_neg() && strength() <= o.strength();
+    }
     
     // Half
     Mode operator+(void) const {
-      switch(m) {
-        case BytecodeProc::ROOT:
-        case BytecodeProc::IMP:
-          return BytecodeProc::IMP;
-        case BytecodeProc::ROOT_NEG:
-        case BytecodeProc::IMP_NEG:
-          return BytecodeProc::IMP_NEG; 
-        case BytecodeProc::RAW:
-          throw InternalError("Half-reified invalid mode.");
-        default: // Already functional.
-          return m;
-      }
+      if(m == BytecodeProc::RAW) return m;
+      return Mode(strength() == Root ? Imp : strength(), is_neg());
     }
-
     Mode operator-(void) const {
-      switch(m) {
-        case BytecodeProc::ROOT: return BytecodeProc::ROOT_NEG;
-        case BytecodeProc::IMP: return BytecodeProc::IMP_NEG;
-        case BytecodeProc::FUN: return BytecodeProc::FUN_NEG;
-        case BytecodeProc::ROOT_NEG: return BytecodeProc::ROOT;
-        case BytecodeProc::IMP_NEG: return BytecodeProc::IMP;
-        case BytecodeProc::FUN_NEG: return BytecodeProc::FUN;
-        default:
-          throw InternalError("Negated invalid mode.");
-      }
+      if(m == BytecodeProc::RAW) return m;
+      return Mode(strength(), !is_neg());
     }
     
     // Switch the current mode to functional.
     Mode operator*(void) const {
-      switch(m) {
-        case BytecodeProc::ROOT:
-        case BytecodeProc::IMP:
-        case BytecodeProc::FUN:
-          return BytecodeProc::FUN;
-        case BytecodeProc::ROOT_NEG:
-        case BytecodeProc::IMP_NEG:
-        case BytecodeProc::FUN_NEG:
-          return BytecodeProc::FUN_NEG;
-        default:
-          throw InternalError("Reified invalid mode."); 
-      }
+      if(m ==BytecodeProc::RAW) return m;
+      return Mode(Fun, is_neg());
     }
+
     operator BytecodeProc::Mode() const { return m; }
 
     BytecodeProc::Mode m;
@@ -580,15 +603,6 @@ struct CodeGen {
     register_builtins();
   }
 
-  // Analysis results.
-  struct ExInfo {
-    std::vector<Expression*> hoistees;
-    // Which sub-expressions of the current expressions can be hoisted?
-
-    bool is_total;
-    // Is the given expression total, or partial?
-  };
-
   void append(int proc, BytecodeProc::Mode m, CG_Builder& b) {
     std::vector<CG_Instr>& body(bytecode[proc].body(m));
 
@@ -637,6 +651,8 @@ struct CodeGen {
   // Helper information. For an expression, which variables does it refer to?
   ASTStSet scope(Expression* e);
   ExprMap<ASTStSet>::t _exp_scope;
+
+  ExprMap<CG::Mode>::t mode_map;
   
   bool is_total(Expression* e);
   ExprMap<bool> _exp_is_total;
