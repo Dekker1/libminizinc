@@ -2070,8 +2070,9 @@ namespace MiniZinc {
     trail_size.emplace_back(hedge_trail.size(), obj_trail.size(), alias_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
     for (auto &table : interpreter->cse) {
-      table.push();
+      table.push(interpreter, !last_operation_pop);
     }
+    last_operation_pop = false;
     return len();
   }
 
@@ -2127,6 +2128,7 @@ namespace MiniZinc {
     }
     // Reset the timestamp count to its previous value
     interpreter->_identCount = timestamp;
+    last_operation_pop = true;
   }
   
   void

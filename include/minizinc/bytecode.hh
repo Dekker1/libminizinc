@@ -705,7 +705,22 @@ namespace MiniZinc {
       }
       _table = std::vector<impl>(1);
     }
-    void push() { _table.emplace_back(); }
+    void push(Interpreter* interpreter, bool cleanup) {
+      if (cleanup) {
+        auto& table = _table.back();
+        auto it = table.begin();
+        while (it != table.end()) {
+          if (!it->second.second.exists()) {
+            it->first.destroy();
+            it->second.second.removeFromCSE(interpreter);
+            it = table.erase(it);
+          } else {
+            ++it;
+          }
+        }
+      }
+      _table.emplace_back();
+    }
     void pop(Interpreter* interpreter) {
       for (auto& item : _table.back()) {
         item.first.destroy();
@@ -749,6 +764,7 @@ namespace MiniZinc {
     // <Hedge trail size, Obj trail size, Alias trial size>
     std::vector<std::tuple<size_t, size_t, size_t>> trail_size;
     std::vector<int> timestamp_trail;
+    bool last_operation_pop = false;
   public:
     Trail() = default;
     virtual ~Trail() {
