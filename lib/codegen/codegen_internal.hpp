@@ -143,11 +143,13 @@ void PUSH_LABEL(CG_Builder& frag, unsigned int label) { std::cerr << label << ":
 // Basic generator manipulation.
 inline int GET_LABEL(CodeGen& cg) { return cg.current_label_count++; }
 inline int GET_REG(CodeGen& cg) { return cg.current_reg_count++; }
+/*
 inline int TEMP_REG(CodeGen& cg) {
   if(cg.temporary_reg == (unsigned int) -1)
     cg.temporary_reg = GET_REG(cg);
   return cg.temporary_reg;
 }
+*/
 
 struct REG {
   REG(int _r) : r(_r) { }
@@ -155,6 +157,7 @@ struct REG {
   int r;
 };
 
+/*
 struct LOC {
   LOC(Loc _l) : l(_l) { }
   void operator()(CodeGen& cg, CG_Builder& frag) {
@@ -162,13 +165,15 @@ struct LOC {
     if(!l.is_global()) {
       r = l.index();
     } else {
-      r = TEMP_REG(cg);
+      // r = TEMP_REG(cg);
+      r = GET_REG(cg);
       PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(l.index()), CG::r(r));
     }
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r)); 
   }
   Loc l;
 };
+*/
 
 // Combinators for slightly safer code generation.
 struct PUSH_REG {
@@ -330,9 +335,16 @@ _FORSET<V, E> FORSET(V&& v, E&& e) { return _FORSET<V, E>(std::move(v), std::mov
 // Non-combinator versions of the iteration generators.
 // Less safe, because they don't automatically resolve containment, but more convenient
 // if, say, we need unbounded 
-struct Foreach {
-  Foreach(CodeGen& cg, int _r, int k = 1)
-    : lblH(GET_LABEL(cg)), lblE(GET_LABEL(cg))
+
+struct EmitPost {
+  virtual ~EmitPost(void) { };
+  virtual void emit_post(CG_Builder& frag) = 0;
+  virtual int cont(void) = 0;
+};
+
+struct Foreach : public EmitPost {
+  Foreach(CodeGen& _cg, int _r, int k = 1)
+    : cg(_cg), lblCont(-1), lblH(GET_LABEL(cg)), lblE(GET_LABEL(cg))
     , r(_r), rB(GET_REG(cg)), rE(GET_REG(cg)) {
     assert(k > 0);
     for(int ii = 0; ii < k; ++ii)
@@ -356,13 +368,23 @@ struct Foreach {
 
   void emit_post(CG_Builder& frag) {
     // Now increment and loop back.
+    if(lblCont != -1)
+      PUSH_LABEL(frag, lblCont);
     PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rB), CG::r(rE), CG::r(rVS[0]));
     PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(rVS[0]), CG::l(lblH));
     PUSH_LABEL(frag, lblE);
   }
 
+  int val(void) const { return rVS[0]; }
   int val(int i) const { return rVS[i]; }
+  int cont(void) {
+    if(lblCont == -1)
+      lblCont = GET_LABEL(cg);
+    return lblCont;
+  }
 
+  CodeGen& cg;
+  int lblCont;
   int lblH;
   int lblE;
   int r;
@@ -371,7 +393,7 @@ struct Foreach {
   std::vector<int> rVS; 
 };
 
-struct Forrange {
+struct Forrange : public EmitPost {
   Forrange(CodeGen& _cg, int _rL, int _rU)
     : cg(_cg)
     , lblH(GET_LABEL(cg)), lblE(GET_LABEL(cg)), lblCont(-1)
@@ -414,7 +436,7 @@ struct Forrange {
   int rC;
 };
 
-struct Forset {
+struct Forset : public EmitPost {
   Forset(CodeGen& cg, int r)
     : ranges(cg, r, 2), values(cg, ranges.val(0), ranges.val(1)) { }
 

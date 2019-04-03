@@ -159,8 +159,13 @@ public:
     // Start from the def_map, and add any Boolean uses.
     ExprMap<CG::Mode>::t fused(def_map);
     for(auto p : use_map) {
+      /*
       if(p.first->type().isbool())
         fused.insert(p);  
+        */
+      // If we haven't stored a def-mode, we should
+      // apply the use-mode.
+      fused.insert(p);
     }
     return fused;
   }

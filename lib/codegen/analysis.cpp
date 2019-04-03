@@ -39,6 +39,9 @@ namespace MiniZinc {
     if(o == Def) {
       int g_n(comp.n_generators());
       for(int gg = 0; gg < g_n; ++gg) {
+        int d_n(comp.n_decls(gg));
+        for(int d = 0; d < d_n; ++d)
+          update(comp.decl(gg, d), o, m);
         update(comp.in(gg), o, m);
         if(comp.where(gg))
           update(comp.where(gg), Use, BytecodeProc::FUN);
@@ -151,11 +154,15 @@ namespace MiniZinc {
       for(Expression* e : bindings) {
         // Check whether this is a decl with a def.
         if (VarDecl* vd = e->dyn_cast<VarDecl>()) {
+          if(!vd->type().isbool())
+            update(vd, Def, m);
+            /*
           if(Expression* v_e = vd->e()) {
             if(!v_e->type().isbool()) {
               update(v_e, Def, m);
             }
           }
+          */
         } else {
           // Must be a constraint, so it's a use.
           assert(e->type().isbool());
@@ -171,6 +178,10 @@ namespace MiniZinc {
   }
 /// Visit variable declaration
   void ModeAnalysis::vVarDecl(VarDecl& decl, Occurrence o, CG::Mode m) {
+    if(Id* x = decl.id())
+      update(x, o, m);
+    if(Expression* d = decl.ti()->domain())
+      update(d, o, m);
     if(Expression* e = decl.e())
       update(e, o, m);
   }

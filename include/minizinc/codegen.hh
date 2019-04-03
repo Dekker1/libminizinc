@@ -161,23 +161,22 @@ public:
   }
 
   // Check whether e is already available in an enclosing environment.
-  bool cache_lookup(Expression* e, ASTStSet e_scope, T& ret) {
+  T cache_lookup(Expression* e, ASTStSet e_scope) {
     auto it(available.find(e));
     // Anything in the current table is hasn't been invalidated.
     if(it != available.end()) {
-      ret = (*it).second;
-      return true; 
+      return (*it).second;
     }
-    if(!p) return false;
+    if(!p) throw NotFound();
 
     // If there's a parent table, check whether we've re-bound
     // something in its scope.
     for(auto p : bindings) {
       if(e_scope.find(p.first) != e_scope.end())
-        return false;
+        throw NotFound();
     }
     // If the scope hasn't been invalidated, check the parent.
-    return p->cache_lookup(e, e_scope, ret);
+    return p->cache_lookup(e, e_scope);
   }
 
   void cache_store(Expression* e, ASTStSet e_scope, T val) {
@@ -206,7 +205,7 @@ public:
     return CG_Env(o);
   }
   */
-  static CG_Env* spawn(CG_Env* p) { return new CG_Env<Loc>(p); }
+  static CG_Env* spawn(CG_Env* p) { return new CG_Env<T>(p); }
 
   unsigned int size(void) const { return sz; }
 
@@ -222,27 +221,154 @@ public:
   unsigned int sz;
 };
 
+// When we bind a non-Boolean expression, we also construct
+// a set of conditions we need to insert into any use-contexts.
+
+// We use CG_Cond to track the conditionality of values.
 struct CG_Cond {
-  struct PredCall {
+  // FIXME: Currently not GC'd, so this will leak a bunch of memory.
+  enum Kind { CC_Reg, CC_Call, CC_And, CC_Or };
+  class C_Reg;
+  class C_Call;
+  class C_And;
+  class C_Or;
+
+  class T {
+  public:
+    int is_root : 1;
+    int is_seen : 1;
+    int reg : 30;
+
+    T(void) : is_root(0), is_seen(0), reg(-1) { }
+    T(int _reg) : is_root(0), is_seen(0), reg(_reg) { }
+
+    virtual Kind kind(void) const = 0;
+  };
+
+  class C_Reg : public T {
+  public:
+    static const Kind _kind = CC_Reg;
+    Kind kind(void) const { return _kind; }
+    C_Reg(int reg) : T(reg) { }
+  };
+  class C_Call : public T {
+  public:
+    static const Kind _kind = CC_Call;
+    Kind kind(void) const { return _kind; }
+
+    C_Call(CG_ProcID _p, BytecodeProc::Mode _m, std::vector<CG_Value>& _params)
+      : p(_p), m(_m), params(_params) { }
+    
     CG_ProcID p;
     BytecodeProc::Mode m;
-    std::vector<int> args;
+    std::vector<CG_Value>& params;
   };
-
-  class CondVal {
+  class C_And : public T {
   public:
-    enum CondKind { C_Reg, C_Call };
+    static const Kind _kind = CC_And;
+    Kind kind(void) const { return _kind; }
 
-    CondKind kind;
-    union {
-      int reg;
-      PredCall call;
-    } _u;
+    C_And(BytecodeProc::Mode _m, std::vector<CG_Cond::T*>& _children)
+      : m(_m), children(_children) { } 
+
+    BytecodeProc::Mode m;
+    std::vector<CG_Cond::T*> children;
   };
+  class C_Or : public T {
+  public:
+    static const Kind _kind = CC_Or;
+    Kind kind(void) const { return _kind; }
+
+    C_Or(BytecodeProc::Mode _m, std::vector<CG_Cond::T*>& _children)
+      : m(_m), children(_children) { }
+
+    BytecodeProc::Mode m;
+    std::vector<CG_Cond::T*> children;
+  };
+
+  static T* reg(int r) {
+    return new C_Reg(r);
+  }
+
+  template<typename ...Args>
+  static T* call(CG_ProcID p, BytecodeProc::Mode m, Args... args) {
+    std::vector<CG_Value> params;
+    return _call(p, m, params, args...);
+  }
+  static T* call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params) { return _call(p, m, params); }
+
+  template<typename ...Args>
+  static T* _call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params, CG_Value next, Args... rest) {
+    params.push_back(next);
+    return _call(p, m, params, rest...);
+  }
+  static T* _call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params) {
+    return new C_Call(p, m, params);
+  }
+
+  static void dedup(std::vector<CG_Cond::T*>& args) {
+    auto dest(args.begin());
+    for(CG_Cond::T* e : args) {
+      if(!e->is_seen) {
+        e->is_seen = 1;
+        *dest = e;
+        ++dest;
+      }
+    }
+    args.erase(dest, args.end());
+    for(CG_Cond::T* e : args)
+      e->is_seen = 0;
+  }
+
+  template<typename ...Args>
+  static T* _forall(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args, CG_Cond::T* next, Args... rest) {
+    args.push_back(next);
+    return _forall(m, args, rest...);
+  }
+  static T* _forall(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) {
+    if(args.size() == 0)
+      return nullptr;
+    dedup(args);
+    if(args.size() == 1)
+      return args[0];
+    return new C_And(m, args);
+  }
+  template<typename ...Args>
+  static T* forall(BytecodeProc::Mode m, Args... args) {
+    std::vector<CG_Cond::T*> vec;
+    return _forall(m, vec, args...);
+  }
+  static T* forall(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) { return _forall(m, args); }
+
+  template<typename ...Args>
+  static T* _exists(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args, CG_Cond::T* next, Args... rest) {
+    args.push_back(next);
+    return _exists(m, args, rest...);
+  }
+  static T* _exists(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) {
+    assert(args.size() > 0);
+    dedup(args);
+    for(CG_Cond::T* e : args) {
+      if(!e)
+        return nullptr;
+    }
+    if(args.size() == 1)
+      return args[0];
+    return new C_Or(m, args);
+  }
+  template<typename ...Args>
+  static T* exists(BytecodeProc::Mode m, Args... args) {
+    std::vector<CG_Cond::T*> vec;
+    return _exists(m, vec, args...);
+  }
+  static T* exists(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) { return _exists(m, args); }
 };
 
-
 struct CG {
+  typedef std::pair<int, CG_Cond::T*> Binding;
+
+  // This is currently (probably) sound, but unnecessarily weak. If an expression ever appears in
+  // root context, the root appearance should dominate.
   struct Mode {
     enum Strength { Root = 0, Imp = 1, Fun = 2 };
     Mode(BytecodeProc::Mode _m) : m(_m) { }
@@ -327,11 +453,18 @@ struct CG {
   inline static CG_Value i(int i) { return CG_Value::immi(i); }
   inline static CG_Value l(int l) { return CG_Value::label(l); }
 
+  // Place a non-Boolean value in a register, and collect its partiality.
+  static Binding bind(Expression* e, CodeGen& cg, CG_Builder& frag);
+  // Compile a Boolean expression into a condition.
+  static CG_Cond::T* compile(Expression* e, CodeGen& cg, CG_Builder& frag);
+  // Reify a condion, putting it in a register.
+  static int force(CG_Cond::T* cond, CodeGen& cg, CG_Builder& frag);
+
   static void run(CodeGen& cg, Model* m);
 
   // static void run(CodeGen& cg, Expression* e, BCtx ctx);
 
-  // Expressions which are inherently total.
+  /*
   static void eval(IntLit* z, CodeGen& cg, CG_Builder& frag);
   static void eval(FloatLit* f, CodeGen& cg, CG_Builder& frag);
   static void eval(SetLit* s, CodeGen& cg, CG_Builder& frag);
@@ -343,9 +476,11 @@ struct CG {
   // emitting the negated form.
   static void eval(BoolLit* b, Mode ctx, CodeGen& cg, CG_Builder& frag);
   static void eval(Id* id, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  */
   
   static int locate_immi(int x, CodeGen& cg, CG_Builder& frag);
 
+  /*
   static int locate(IntLit* id, CodeGen& cg, CG_Builder& frag);
   static int locate(FloatLit* f, CodeGen& cg, CG_Builder& frag);
   static int locate(SetLit* s, CodeGen& cg, CG_Builder& frag);
@@ -369,7 +504,29 @@ struct CG {
   static int locate(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
 
   static int locate(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
+  */
 
+  static Binding bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static Binding bind(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
+
+  static CG_Cond::T* compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T* compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T* compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T* compile(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T* compile(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T* compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T* compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T* compile(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
+
+  /*
   static void eval(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
   static void eval(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
   static void eval(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
@@ -394,6 +551,7 @@ struct CG {
   static int locate_par(Call* call, CodeGen& cg, CG_Builder& frag);
   static int locate_par(Let* let, CodeGen& cg, CG_Builder& frag);
   static int locate_par(Comprehension* let, CodeGen& cg, CG_Builder& frag);
+  */
 };
 
 // Partially compiled bytecode.
@@ -594,11 +752,12 @@ struct CG_FunMap {
 struct CodeGen {
   typedef unsigned int proc_id;
   typedef unsigned int reg_id;
+  typedef std::pair<int, CG_Cond::T*> Binding;
   CodeGen(void)
     : /*entry_proc(0)
-    ,*/ current_env(new CG_Env<Loc>())
+    ,*/ current_env(new CG_Env<Binding>())
     , num_globals(0)
-    , current_reg_count(0), current_label_count(0), temporary_reg(-1) {
+    , current_reg_count(0), current_label_count(0) /*, temporary_reg(-1) */ {
     bytecode.push_back(CG_Proc("main", 0));
     register_builtins();
   }
@@ -611,17 +770,17 @@ struct CodeGen {
     b.clear();
   }
 
-  void env_push(void) { current_env = CG_Env<Loc>::spawn(current_env); }
+  void env_push(void) { current_env = CG_Env<Binding>::spawn(current_env); }
   void env_pop(void) {
     assert(current_env);
-    CG_Env<Loc>* c(current_env);
+    CG_Env<Binding>* c(current_env);
     current_env = current_env->p;
     delete c;
   }
 
   // Consult/update the available expressions in the current environment.
-  bool cache_lookup(Expression* e, Loc& out);
-  void cache_store(Expression* e, Loc l);
+  Binding cache_lookup(Expression* e);
+  void cache_store(Expression* e, Binding l);
 
   // Function resolution
   void register_function(FunctionI* f) { fun_map.add_body(f); }
@@ -638,15 +797,17 @@ struct CodeGen {
   // Procedures
   // std::vector<std::pair<proc_id, CallSig> > proc_queue; // Typed calls yet to be compiled
   // std::unordered_map<CallSig, proc_id> proc_map; // call -> proc
-  inline CG_Env<Loc>& env(void) { return *current_env; }
+  inline CG_Env<Binding>& env(void) { return *current_env; }
 
   // proc_id current_proc; // Procedure we're currently building
-  CG_Env<Loc>* current_env; // Where are things in scope?
+  CG_Env<Binding>* current_env; // Where are things in scope?
+  ASTStringMap<int>::t globals_env;
   int num_globals;
 
+  std::vector<unsigned int> reg_trail;
   unsigned int current_reg_count; // How many registers have been used?
   unsigned int current_label_count;
-  unsigned int temporary_reg; // Which, if any, register is used for transient stuff.
+  // unsigned int temporary_reg; // Which, if any, register is used for transient stuff.
 
   // Helper information. For an expression, which variables does it refer to?
   ASTStSet scope(Expression* e);
