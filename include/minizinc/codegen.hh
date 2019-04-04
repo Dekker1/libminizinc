@@ -462,49 +462,7 @@ struct CG {
 
   static void run(CodeGen& cg, Model* m);
 
-  // static void run(CodeGen& cg, Expression* e, BCtx ctx);
-
-  /*
-  static void eval(IntLit* z, CodeGen& cg, CG_Builder& frag);
-  static void eval(FloatLit* f, CodeGen& cg, CG_Builder& frag);
-  static void eval(SetLit* s, CodeGen& cg, CG_Builder& frag);
-  static void eval(StringLit* s, CodeGen& cg, CG_Builder& frag);
-  static void eval(AnonVar* v, CodeGen& cg, CG_Builder& frag);
-  static void eval(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  
-  // For Id and BoolLit, we need the context, to know whether we're
-  // emitting the negated form.
-  static void eval(BoolLit* b, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(Id* id, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  */
-  
   static int locate_immi(int x, CodeGen& cg, CG_Builder& frag);
-
-  /*
-  static int locate(IntLit* id, CodeGen& cg, CG_Builder& frag);
-  static int locate(FloatLit* f, CodeGen& cg, CG_Builder& frag);
-  static int locate(SetLit* s, CodeGen& cg, CG_Builder& frag);
-  static int locate(StringLit* s, CodeGen& cg, CG_Builder& frag);
-
-  static int locate(BoolLit* b, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static int locate(Id* id, Mode ctx, CodeGen& cg, CG_Builder& frag);
-
-  // For Boolean expressions
-  static void eval(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static int locate(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag);
-
-  // When we know an expression is par. (And total?)
-  static int locate_par(Expression* e, CodeGen& cg, CG_Builder& frag);
-
-  // For other, possibly partial, expressions.
-  static void eval(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
-  // FIXME: Locate always binds the result in the partial fragment, so the result is available
-  // in following calls. So the [value] argument is ignored.
-  // GKG: Check that this behaves correctly for comprehensions.
-  static int locate(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value);
-
-  static int locate(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  */
 
   static Binding bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag);
   static Binding bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag);
@@ -525,42 +483,9 @@ struct CG {
   static CG_Cond::T* compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
   static CG_Cond::T* compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
   static CG_Cond::T* compile(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
-
-  /*
-  static void eval(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(Call* call, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(Let* let, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-  static void eval(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& cond, CG_Builder& value);
-
-  static void eval(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static void eval(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
-
-  static int locate_par(ArrayAccess* a, CodeGen& cg, CG_Builder& frag);
-  static int locate_par(ArrayLit* a, CodeGen& cg, CG_Builder& frag);
-  static int locate_par(ITE* ite, CodeGen& cg, CG_Builder& frag);
-  static int locate_par(BinOp* op, CodeGen& cg, CG_Builder& frag);
-  static int locate_par(UnOp* op, CodeGen& cg, CG_Builder& frag);
-  static int locate_par(Call* call, CodeGen& cg, CG_Builder& frag);
-  static int locate_par(Let* let, CodeGen& cg, CG_Builder& frag);
-  static int locate_par(Comprehension* let, CodeGen& cg, CG_Builder& frag);
-  */
 };
 
 // Partially compiled bytecode.
-/*
-struct CG_Proc {
-  std::string ident; 
-  CG_Builder body[BytecodeProc::MAX_MODE+1];
-};
-*/
 struct CG_Proc {
   typedef std::vector<CG_Instr> body_t;
 

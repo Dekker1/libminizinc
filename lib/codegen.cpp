@@ -119,6 +119,7 @@ inline void TODO(void) {
 void CodeGen::register_builtins(void) {
   register_builtin("mk_intvar", 1);
 
+  register_builtin("bool_not", 1);
   register_builtin("bool_clause", 2);
   
   register_builtin("int_eq", 2);
@@ -126,6 +127,7 @@ void CodeGen::register_builtins(void) {
   register_builtin("int_le", 2);
 
   register_builtin("int_plus", 2);
+  register_builtin("int_minus", 2);
   register_builtin("int_times", 2);
   register_builtin("int_pow", 2);
   register_builtin("int_div", 2);
@@ -144,8 +146,11 @@ void OPEN_AGG(CodeGen& cg, CG_Builder& frag, AggregationCtx::Symbol ctx) {
 }
 void CLOSE_AGG(CodeGen& cg, CG_Builder& frag) {
   assert(cg.reg_trail.size() > 0);
+  int old_reg_count = cg.current_reg_count;
   cg.current_reg_count = cg.reg_trail.back();
   cg.reg_trail.pop_back();
+  for(int ii = cg.current_reg_count; ii < old_reg_count; ++ii)
+    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(ii));
   PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
 }
 
@@ -181,6 +186,8 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_le"), CG::r(r_lhs), CG::r(r_rhs));
       return;
     case BOT_PLUS:
+      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_plus"), CG::r(r_lhs), CG::r(r_rhs));
+    case BOT_MINUS:
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_plus"), CG::r(r_lhs), CG::r(r_rhs));
       return;
     case BOT_MULT:
@@ -231,6 +238,93 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
   }
 }
 
+int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r_rhs) {
+  int r;
+  switch(op) {
+    // Actual builtins
+    case BOT_EQ:
+    case BOT_EQUIV:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_NQ:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
+      return r;
+    case BOT_LE:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_LQ:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_GR:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
+      return r;
+    case BOT_GQ:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
+      return r;
+    case BOT_XOR:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::XOR, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
+      return r;
+    case BOT_AND:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::AND, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_OR:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_IMPL:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_lhs), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_RIMPL:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_rhs), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::XOR, CG::r(r_lhs), CG::r(r), CG::r(r));
+      return r;
+    case BOT_PLUS:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::ADDI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_MINUS:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_MULT:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::MULI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_DOTDOT:
+      // The values in r_lhs and r_rhs had better be IMMIs.
+      OPEN_OTHER(cg, frag);
+      OPEN_VEC(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_lhs));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_rhs));
+      CLOSE_AGG(cg, frag);
+      CLOSE_AGG(cg, frag);
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      return r;
+    default:
+      TODO();
+    /*
+    // BOT_PLUS, BOT_MINUS, BOT_MULT, BOT_DIV, BOT_IDIV, BOT_MOD, BOT_POW,
+    // BOT_LE, BOT_LQ, BOT_GR, BOT_GQ, BOT_EQ, BOT_NQ,
+    // BOT_IN, BOT_SUBSET, BOT_SUPERSET, BOT_UNION, BOT_DIFF, BOT_SYMDIFF,
+    // BOT_INTERSECT,
+    // BOT_PLUSPLUS,
+    */
+  }
+}
+
 CG_Cond::T* binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs) {
   switch(op) {
     // Actual builtins
@@ -264,15 +358,6 @@ CG_Cond::T* binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs
   throw InternalError("Unexpected fall-through in binop_cond.");
 }
 
-/*
-CG_ProcID find_op(CodeGen& cg, BinOpType op) {
-  return CG_ProcID::proc(0xbeef);
-}
-
-CG_ProcID find_op(CodeGen& cg, UnOpType op) {
-  return CG_ProcID::proc(0xfeed);
-}
-*/
 CG_ProcID find_call_fun(CodeGen& cg, Call* c) {
   return CG_ProcID::proc(0xdead);
 }
@@ -281,7 +366,7 @@ CG_ProcID find_call_pred(CodeGen& cg, Call* c) {
 }
 
 // Analyse an expression (and sub-expressions) for partiality
-#if 1
+#if 0
 struct ClearFlags : public EVisitor {
   bool enter(Expression* e) {
     if(!e->isUnboxedVal() && e->user_flag0()) {
@@ -594,28 +679,6 @@ void CodeGen::cache_store(Expression* e, CodeGen::Binding l) {
   env().cache_store(e, scope(e), l); 
 }
 
-/*
-struct EVAL {
-  EVAL(Expression* _e, Mode _ctx) : e(_e), ctx(_ctx) { }
-
-  void operator()(CodeGen& cg, CG_Builder& frag) { CG::eval(e, ctx, cg, frag); }
-
-  Expression* e;
-  Mode ctx;
-};
-*/
-
-/*
-struct EVAL_COND {
-  EVAL_COND(Expression* _e, BCtx _ctx) : e(_e), ctx(_ctx) { }
-
-  void operator()(CodeGen& cg) { CG::run_condition(cg, e, ctx); }
-
-  Expression* e;
-  BCtx ctx;
-};
-*/
-
 // Manipulating conditions
 void force_and_leaves(std::vector<int>& leaves, CG_Cond::T* child, CodeGen& cg, CG_Builder& frag) {
   if(!child)
@@ -718,6 +781,7 @@ private:
           // debugprint(vd);
           // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
           cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
+          std::cout << "%% " << vd->id()->v() << " ~> " << cg.num_globals << std::endl;
           // FIXME
           ++cg.num_globals;
         } else {
@@ -758,9 +822,11 @@ public:
     EnvInit eb(cg);
     iterItems(eb, m);
     cg.mode_map = std::move(eb.modes.extract());
+    /*
     for(auto p : cg.mode_map) {
       std::cerr << mode_name(p.second) << "[" << p.first << "] "; debugprint(p.first);
     }
+    */
   }
 };
 
@@ -931,6 +997,7 @@ private:
       }
       // Now copy it into a global, and add it to the env.
       PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r_var), CG::g(cg.num_globals));
+      std::cout << "%% " << vd->id()->v() << cg.num_globals << std::endl;
       // cg.env().bind(vd->id()->v(), Loc::global(cg.env().size()));
       cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
       ++cg.num_globals;
@@ -951,6 +1018,7 @@ private:
         PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r), CG::g(cg.num_globals));
         // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
         cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
+        // std::cout << "%% " << vd->id()->v() << cg.num_globals << std::endl;
         // FIXME
         ++cg.num_globals;
       }
@@ -1059,113 +1127,17 @@ void CG::run(CodeGen& cg, Model* m) {
   Compile::run(cg, m); 
 }
 
-/*
-int relocate_expression(Expression* e, CodeGen& cg, CG_Builder& frag) {
-  try {
-    Loc l(cg.cache_lookup(e));
-    if(l.is_reg()) {
-      return l.index();
-    } else {
-      // If a global, put it in a register, and update the cached value.
-      int r = GET_REG(cg); 
-      PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(l.index()), CG::r(r));
-      cg.cache_store(e, Loc::reg(r));
-      return r;
-    }
-  } catch(const CG_Env<Loc>::NotFound& exn) {
-    return -1;
-  }
-}
-
-bool retrieve_expression(Expression* e, CodeGen& cg, CG_Builder& frag) {
-  int r(relocate_expression(e, cg, frag));
-  if(r < 0)
-    return false;
-  
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-  return true;
-}
-*/
-
-// Evaluate an expression, place it on the value stack.
-#if 0
-void CG::eval(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // If the value is already available in a register somewhere, just push it.
-  if(retrieve_expression(e, cg, frag))
-    return;
-
-  switch (e->eid()) {
-  case Expression::E_INTLIT:
-    CG::eval(e->template cast<IntLit>(), cg, frag);
-    break;
-  case Expression::E_FLOATLIT:
-    CG::eval(e->template cast<FloatLit>(), cg, frag);
-    break;
-  case Expression::E_SETLIT:
-    CG::eval(e->template cast<SetLit>(), cg, frag);
-    break;
-  case Expression::E_BOOLLIT:
-    CG::eval(e->template cast<BoolLit>(), ctx, cg, frag);
-    break;
-  case Expression::E_STRINGLIT:
-    CG::eval(e->template cast<StringLit>(), cg, frag);
-    break;
-  case Expression::E_ID:
-    CG::eval(e->template cast<Id>(), ctx, cg, frag);
-    break;
-  case Expression::E_ANON:
-    CG::eval(e->template cast<AnonVar>(), cg, frag);
-    break;
-  case Expression::E_ARRAYLIT:
-    CG::eval(e->template cast<ArrayLit>(), ctx, cg, frag);
-    break;
-  case Expression::E_ARRAYACCESS:
-    CG::eval(e->template cast<ArrayAccess>(), ctx, cg, frag);
-    break;
-  case Expression::E_COMP:
-    CG::eval(e->template cast<Comprehension>(), ctx, cg, frag);
-    break;
-  case Expression::E_ITE:
-    CG::eval(e->template cast<ITE>(), ctx, cg, frag);
-    break;
-  case Expression::E_BINOP:
-    CG::eval(e->template cast<BinOp>(), ctx, cg, frag);
-    break;
-  case Expression::E_UNOP:
-    CG::eval(e->template cast<UnOp>(), ctx, cg, frag);
-    break;
-  case Expression::E_CALL:
-    CG::eval(e->template cast<Call>(), ctx, cg, frag);
-    break;
-  case Expression::E_LET:
-    CG::eval(e->template cast<Let>(), ctx, cg, frag);
-    break;
-    /*
-  case Expression::E_VARDECL:
-    CG::eval(cg, e->template cast<VarDecl>());
-    break;
-  case Expression::E_TI:
-    CG::eval(cg, e->template cast<TypeInst>());
-    break;
-  case Expression::E_TIID:
-    CG::eval(cg, e->template cast<TIId>());
-    break;
-    */
-  case Expression::E_VARDECL:
-  case Expression::E_TI:
-  case Expression::E_TIID:
-    throw InternalError("Bytecode generator encountered unexpected expression type.");
-  }
-}
-#endif
-
 // For a non-Boolean value, place it in a register and collect its partiality.
 std::pair<int, CG_Cond::T*> _bind(Expression* e, CodeGen& cg, CG_Builder& frag) {
   // Look up the mode we need to compile e in.
   /*
   debugprint(e);
   */
-  CG::Mode ctx(cg.mode_map.at(e));
+  // FIXME: Figure out why some expressions don't have a mode attached.
+  CG::Mode ctx(BytecodeProc::FUN);
+  try {
+    ctx = cg.mode_map.at(e);
+  } catch(const std::out_of_range& exn) { }
 
   switch (e->eid()) {
   case Expression::E_INTLIT:
@@ -1220,669 +1192,12 @@ CG::Binding CG::bind(Expression* e, CodeGen& cg, CG_Builder& frag) {
   // return _bind(e, cg, frag); // FIXME
 }
 
-// Evaluate an expression, place it on the value stack.
-#if 0
-int CG::locate_par(Expression* e, CodeGen& cg, CG_Builder& frag) {
-  // If the value is already available in a register somewhere, just push it.
-  int r = relocate_expression(e, cg, frag);
-  if(r >= 0)
-    return r;
-  switch (e->eid()) {
-  case Expression::E_INTLIT:
-    r = CG::locate(e->template cast<IntLit>(), cg, frag);
-    break;
-  case Expression::E_FLOATLIT:
-    r = CG::locate(e->template cast<FloatLit>(), cg, frag);
-    break;
-  case Expression::E_SETLIT:
-    r = CG::locate(e->template cast<SetLit>(), cg, frag);
-    break;
-  case Expression::E_BOOLLIT:
-    r = CG::locate(e->template cast<BoolLit>(), BytecodeProc::ROOT, cg, frag);
-    break;
-  case Expression::E_STRINGLIT:
-    r = CG::locate(e->template cast<StringLit>(), cg, frag);
-    break;
-  case Expression::E_ID:
-    r = CG::locate(e->template cast<Id>(), BytecodeProc::ROOT, cg, frag);
-    break;
-  case Expression::E_ANON:
-    // FIXME.
-    TODO();
-    break;
-  case Expression::E_ARRAYLIT:
-    r = CG::locate_par(e->template cast<ArrayLit>(), cg, frag);
-    break;
-  case Expression::E_ARRAYACCESS:
-    r = CG::locate_par(e->template cast<ArrayAccess>(), cg, frag);
-    break;
-  case Expression::E_COMP:
-    r = CG::locate_par(e->template cast<Comprehension>(), cg, frag);
-    break;
-  case Expression::E_ITE:
-    r = CG::locate_par(e->template cast<ITE>(), cg, frag);
-    break;
-  case Expression::E_BINOP:
-    r = CG::locate_par(e->template cast<BinOp>(), cg, frag);
-    break;
-  case Expression::E_UNOP:
-    r = CG::locate_par(e->template cast<UnOp>(), cg, frag);
-    break;
-  case Expression::E_CALL:
-    r = CG::locate_par(e->template cast<Call>(), cg, frag);
-    break;
-  case Expression::E_LET:
-    r = CG::locate_par(e->template cast<Let>(), cg, frag);
-    break;
-  case Expression::E_VARDECL:
-  case Expression::E_TI:
-  case Expression::E_TIID:
-    throw InternalError("Bytecode generator encountered unexpected expression type.");
-  }
-  cg.cache_store(e, Loc::reg(r));
-  return r;
-}
-
-// Evaluate an expression, place it on the value stack.
-// NOTE: Changed evaluation order: we evaluate the value of an expression first, before
-// imposing the partiality constraints.
-void CG::eval(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  switch (e->eid()) {
-  case Expression::E_INTLIT:
-    CG::eval(e->template cast<IntLit>(), cg, value);
-    break;
-  case Expression::E_FLOATLIT:
-    CG::eval(e->template cast<FloatLit>(), cg, value);
-    break;
-  case Expression::E_SETLIT:
-    CG::eval(e->template cast<SetLit>(), cg, value);
-    break;
-  case Expression::E_BOOLLIT:
-    CG::eval(e->template cast<BoolLit>(), ctx, cg, value);
-    break;
-  case Expression::E_STRINGLIT:
-    CG::eval(e->template cast<StringLit>(), cg, value);
-    break;
-  case Expression::E_ID:
-    CG::eval(e->template cast<Id>(), ctx, cg, value);
-    break;
-  case Expression::E_ANON:
-    CG::eval(e->template cast<AnonVar>(), cg, value);
-    break;
-  case Expression::E_ARRAYLIT:
-    CG::eval(e->template cast<ArrayLit>(), ctx, cg, value);
-    break;
-  case Expression::E_ARRAYACCESS:
-    CG::eval(e->template cast<ArrayAccess>(), ctx, cg, value, pred);
-    break;
-  case Expression::E_COMP:
-    // Assuming comprehensions are total
-    CG::eval(e->template cast<Comprehension>(), ctx, cg, value);
-    break;
-  case Expression::E_ITE:
-    CG::eval(e->template cast<ITE>(), ctx, cg, value, pred);
-    break;
-  case Expression::E_BINOP:
-    CG::eval(e->template cast<BinOp>(), ctx, cg, value, pred);
-    break;
-  case Expression::E_UNOP:
-    CG::eval(e->template cast<UnOp>(), ctx, cg, value, pred);
-    break;
-  case Expression::E_CALL:
-    CG::eval(e->template cast<Call>(), ctx, cg, value, pred);
-    break;
-  case Expression::E_LET:
-    CG::eval(e->template cast<Let>(), ctx, cg, value, pred);
-    break;
-    /*
-  case Expression::E_VARDECL:
-    CG::eval(cg, e->template cast<VarDecl>());
-    break;
-  case Expression::E_TI:
-    CG::eval(cg, e->template cast<TypeInst>());
-    break;
-  case Expression::E_TIID:
-    CG::eval(cg, e->template cast<TIId>());
-    break;
-    */
-  case Expression::E_VARDECL:
-  case Expression::E_TI:
-  case Expression::E_TIID:
-    throw InternalError("Bytecode generator encountered unexpected expression type.");
-  }
-}
-
-int CG::locate(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  if(e->type().ispar())
-    return CG::locate_par(e, cg, frag);
-
-  try {
-    Loc l(cg.cache_lookup(e));
-    if(l.is_reg()) {
-      return l.index();
-    } else {
-      // Otherwise, move the result into a register, and update the cache entry.
-      int r = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(l.index()), CG::r(r));
-      cg.cache_store(e, Loc::reg(r));
-      return r;
-    }
-  } catch(const CG_Env<Loc>::NotFound& exn) {
-    int r;
-    switch (e->eid()) {
-    case Expression::E_INTLIT:
-      r = CG::locate(e->template cast<IntLit>(), cg, frag);
-      break;
-    case Expression::E_FLOATLIT:
-      r = CG::locate(e->template cast<FloatLit>(), cg, frag);
-      break;
-    case Expression::E_BOOLLIT:
-      r = CG::locate(e->template cast<BoolLit>(), ctx, cg, frag);
-      break;
-    case Expression::E_STRINGLIT:
-      r = CG::locate(e->template cast<StringLit>(), cg, frag);
-      break;
-    case Expression::E_ID:
-      r = CG::locate(e->template cast<Id>(), ctx, cg, frag);
-      break;
-    case Expression::E_ARRAYACCESS:
-      r = CG::locate(e->template cast<ArrayAccess>(), ctx, cg, frag);
-      break;
-    case Expression::E_VARDECL:
-    case Expression::E_TI:
-    case Expression::E_TIID:
-      throw InternalError("Bytecode generator encountered unexpected expression type.");
-      break;
-    default: {
-      PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_OTHER);
-      CG::eval(e, ctx, cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-      CLOSE_AGG(cg, frag);
-      r = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-      break;
-    }
-    }
-    // Now save it in the cache.
-    cg.cache_store(e, Loc::reg(r));
-    return r;
-  }
-}
-
-int CG::locate(Expression* e, Mode ctx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  if(e->type().ispar())
-    return CG::locate_par(e, cg, value);
-
-  switch (e->eid()) {
-  case Expression::E_INTLIT:
-    return CG::locate(e->template cast<IntLit>(), cg, value);
-    break;
-  case Expression::E_FLOATLIT:
-    return CG::locate(e->template cast<FloatLit>(), cg, value);
-    break;
-  case Expression::E_BOOLLIT:
-    return CG::locate(e->template cast<BoolLit>(), ctx, cg, value);
-    break;
-  case Expression::E_STRINGLIT:
-    return CG::locate(e->template cast<StringLit>(), cg, value);
-    break;
-  case Expression::E_ID:
-    return CG::locate(e->template cast<Id>(), ctx, cg, value);
-    break;
-  case Expression::E_ARRAYACCESS:
-    return CG::locate(e->template cast<ArrayAccess>(), ctx, cg, value, pred);
-    break;
-  case Expression::E_VARDECL:
-  case Expression::E_TI:
-  case Expression::E_TIID:
-    throw InternalError("Bytecode generator encountered unexpected expression type.");
-    break;
-  default: {
-    // We always bind 
-    PUSH_INSTR(value, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_OTHER);
-    CG::eval(e, ctx, cg, value, pred);
-    CLOSE_AGG(cg, value);
-    int r = GET_REG(cg);
-    PUSH_INSTR(value, BytecodeStream::POP, CG::r(r));
-
-    cg.cache_store(e, Loc::reg(r));
-    return r;
-    break;
-  }
-  }
-}
-
-int CG::locate_par(ArrayAccess* a, CodeGen& cg, CG_Builder& frag) {
-  // int A = locate_par(a->); 
-  TODO();
-  return 0;
-}
-
-int CG::locate_par(Comprehension* c, CodeGen& cg, CG_Builder& frag) {
-  // We're building up a vector.
-  PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_VEC);
-  std::vector<Forset> nesting;
-  std::vector< std::pair<ASTString, Loc> > trail;
-
-  int g = c->n_generators();
-  for(int g = 0; g < c->n_generators(); ++g) {
-    // Bind the in-expression to a register.
-    int r = CG::locate_par(c->in(g), cg, frag);
-    // Open the bindings.
-    cg.env_push();
-    for(int d = 0; d < c->n_decls(g); ++d) {
-      Forset iter(cg, r);
-      nesting.push_back(iter);
-      iter.emit_pre(frag);
-      // Bind vd->id() to iter.val()
-      VarDecl* vd(c->decl(g, d));
-      ASTString id(vd->id()->str());
-      cg.env().bind(id, Loc::reg(iter.val()));
-    }
-    // Now emit the where-clause
-    Expression* where(c->where(g));
-    if(where) {
-      int lblCont(nesting.back().cont());
-      int rC = CG::locate_par(where, cg, frag);
-      // ASSUMING PAR HERE.
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(rC), CG::l(lblCont));
-    }
-  }
-  // We're now in the deepest scope. Generate code for the body.
-  int r_e = CG::locate_par(c->e(), cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_e));
-  // Now close the iterators _in reverse order_, and restore the environment.
-  for(int ii = nesting.size()-1; ii >= 0; --ii) {
-    nesting[ii].emit_post(frag);
-    cg.env_pop();
-  }
-  CLOSE_AGG(cg, frag);
-  int r(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-  return r;
-}
-
-int CG::locate_par(ITE* ite, CodeGen& cg, CG_Builder& frag) {
-  int l_end(GET_LABEL(cg));
-  int r(GET_REG(cg));
-  // Expression availability cascades; anything in the first condition
-  // available everywhere, anything in the second is available to [2,...], etc.
-  cg.env_push();
-  for(int ii = 0; ii < ite->size(); ++ii) {
-    int l_next(GET_LABEL(cg));
-    int r_cond = CG::locate_par(ite->e_if(ii), cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_next));
-    cg.env_push();
-    int r_then = CG::locate_par(ite->e_then(ii), cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_then), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
-    cg.env_pop();
-    PUSH_LABEL(frag, l_next);
-  }
-  int r_else = CG::locate_par(ite->e_else(), cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_else), CG::r(r));
-  cg.env_pop();
-  PUSH_LABEL(frag, l_end);
-  return r;
-}
-
-int CG::locate_par(BinOp* b, CodeGen& cg, CG_Builder& frag) {
-  int r_lhs = CG::locate_par(b->lhs(), cg, frag);
-  int r_rhs = CG::locate_par(b->rhs(), cg, frag);
-  int r(GET_REG(cg));
-  switch(b->op()) {
-  case BOT_PLUS:
-    PUSH_INSTR(frag, BytecodeStream::ADDI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-    break;
-  case BOT_MINUS:
-    PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-    break;
-  case BOT_MULT:
-    PUSH_INSTR(frag, BytecodeStream::MULI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-    break;
-  case BOT_DIV:
-    TODO(); // No floats yet.
-    PUSH_INSTR(frag, BytecodeStream::MULI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-    break;
-  case BOT_IDIV:
-    PUSH_INSTR(frag, BytecodeStream::DIVI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-    break;
-  case BOT_MOD:
-  case BOT_POW:
-  case BOT_LE:
-    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-    break;
-  case BOT_LQ:
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-    break;
-  case BOT_GR:
-    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
-    break;
-  case BOT_GQ:
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
-    break;
-  case BOT_EQ:
-  case BOT_EQUIV:
-    PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
-    break;
-  case BOT_NQ:
-    PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
-    break;
-  case BOT_OR:
-    PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
-    break;
-  case BOT_AND:
-    PUSH_INSTR(frag, BytecodeStream::AND, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
-    break;
-  case BOT_XOR:
-    PUSH_INSTR(frag, BytecodeStream::XOR, CG::r(r_rhs), CG::r(r_lhs), CG::r(r));
-    break;
-  case BOT_IMPL:
-    PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_lhs), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r), CG::r(r_rhs), CG::r(r));
-    break;
-  case BOT_RIMPL:
-    PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_rhs), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r_lhs), CG::r(r), CG::r(r));
-    break;
-  case BOT_DOTDOT:
-    PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_VEC);
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_lhs));
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_rhs));
-    CLOSE_AGG(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-    break;
-  case BOT_IN:
-  case BOT_SUBSET:
-  case BOT_SUPERSET:
-  case BOT_UNION:
-  case BOT_DIFF:
-  case BOT_SYMDIFF:
-  case BOT_INTERSECT:
-  case BOT_PLUSPLUS:
-    TODO();
-  }
-  return r;
-}
-int CG::locate_par(UnOp* u, CodeGen& cg, CG_Builder& frag) {
-  int r_e = CG::locate_par(u->e(), cg, frag);
-  switch(u->op()) {
-  case UOT_NOT: {
-    int r(GET_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_e), CG::r(r));
-    return r;
-  }
-  case UOT_PLUS:
-    return r_e;
-  case UOT_MINUS: {
-    int r(GET_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r), CG::r(r_e), CG::r(r));
-    return r;
-  }
-  }
-}
-
-int CG::locate_par(Call* call, CodeGen& cg, CG_Builder& frag) {
-  // Call 
-  TODO();
-  return 0;
-}
-int CG::locate_par(Let* let, CodeGen& cg, CG_Builder& frag) {
-  TODO(); 
-  return 0;
-}
-
-void CG::eval(IntLit* z, CodeGen& cg, CG_Builder& frag) {
-  int x(z->v().toInt());
-  int r(TEMP_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(x), CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-}
-#endif
-
+//
 int CG::locate_immi(int x, CodeGen& cg, CG_Builder& frag) {
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(x), CG::r(r));
   return r;
 }
-
-#if 0
-int CG::locate(IntLit* z, CodeGen& cg, CG_Builder& frag) {
-  return locate_immi(z->v().toInt(), cg, frag);
-}
-
-int CG::locate(BoolLit* z, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  int v(ctx.is_neg() ? !z->v() : z->v());
-  return CG::locate_immi(v, cg, frag);
-}
-
-void CG::eval(FloatLit* f, CodeGen& cg, CG_Builder& frag) { throw InternalError("FloatLit not yet supported by bytecode generator."); }
-int CG::locate(FloatLit* f, CodeGen& cg, CG_Builder& frag) { throw InternalError("FloatLit not yet supported by bytecode generator."); }
-
-void CG::eval(SetLit* l, CodeGen& cg, CG_Builder& frag) {
-  PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_VEC); 
-  IntSetVal* s(l->isv());
-  assert(s);
-  int r(TEMP_REG(cg));
-  for(int ii = 0; ii < s->size(); ++ii) {
-    int l(s->min(ii).toInt());
-    int u(s->max(ii).toInt());
-    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(l), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(u), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-  }
-  CLOSE_AGG(cg, frag);
-}
-
-int CG::locate(SetLit* l, CodeGen& cg, CG_Builder& frag) {
-  eval(l, cg, frag);
-  int r(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-  return r;
-}
-
-void CG::eval(BoolLit* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  int r(TEMP_REG(cg));
-  bool v = ctx.is_neg() ? !b->v() : b->v();
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(v), CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-}
-
-void CG::eval(StringLit* s, CodeGen& cg, CG_Builder& frag) { throw InternalError("StringLit not yet handled by bytecode generator."); }
-int CG::locate(StringLit* s, CodeGen& cg, CG_Builder& frag) { throw InternalError("StringLit not yet handled by bytecode generator."); }
-
-void CG::eval(Id* id, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // Look up the identifier in the environment.
-  LOC(cg.env().lookup(id->v()))(cg, frag);
-  if(id->type().isbool() && ctx.is_neg()) {
-    int r(TEMP_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("bool_neg"), CG::r(r));
-  }
-}
-
-int CG::locate(Id * id, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // Look up the identifier in the environment.
-  try {
-    Loc l(cg.env().lookup(id->v()));
-    if(l.is_global()) {
-      int r = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(l.index()), CG::r(r));
-      return r;
-    } else {
-      return l.index();
-    }
-  } catch(const CG_Env<Loc>::NotFound& exn) {
-    if(id == constants().absent->template cast<Id>()) {
-      // Special case for absent literal.
-      int r(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_OTHER);
-      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("absent"), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-      cg.env().bind(id->v(), Loc::reg(r));
-      return r;
-    }
-    throw InternalError("Unexpected identifier.");
-  }
-}
-
-void CG::eval(AnonVar* v, CodeGen& cg, CG_Builder& frag) { throw InternalError("AnonVar not yet handled by bytecode generator."); }
-
-void CG::eval(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // Build up the array.
-  // FIXME: Also need to deal with the indexing structure.
-  PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_VEC);
-  int sz(a->size());
-  for(int ii = 0; ii < sz; ++ii)
-    CG::eval((*a)[ii], ctx, cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-}
-int CG::locate_par(ArrayLit* a, CodeGen& cg, CG_Builder& frag) {
-  // Build up the array.
-  PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_VEC);
-  int sz(a->size());
-  for(int ii = 0; ii < sz; ++ii) {
-    int r = CG::locate_par((*a)[ii], cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-  }
-  PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-  int r(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-  return r;
-}
-
-void vec_get_ith(int r_A, int pos, CodeGen& cg, CG_Builder& frag, int r) {
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(pos), CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r), CG::r(r));
-}
-int vec_get_ith(int r_A, int pos, CodeGen& cg, CG_Builder& frag) {
-  int r = GET_REG(cg);
-  vec_get_ith(r_A, pos, cg, frag, r);
-  return r;
-}
-
-void eval_element_1d(int r_A, int r_idx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  // Get the array indices.
-  int r_temp = GET_REG(cg);
-  vec_get_ith(r_A, 0, cg, value, r_temp);
-  // PUSH_INSTR(pred, BytecodeStream::CALL, CG::builtins.set_in(), r_idx, r_iset);
-
-  // Get the array contents.
-  vec_get_ith(r_A, 1, cg, value, r_temp);
-  // PUSH_INSTR(value, BytecodeStream::CALL, CG::builtins.element_1d(), r_A, r_temp);
-  PUSH_INSTR(value, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("int_element"), CG::r(r_A), CG::r(r_temp));
-}
-void eval_element_1d(int r_A, int r_idx, CodeGen& cg, CG_Builder& frag) {
-  CG_Builder frag_val;
-  PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_AND);
-  eval_element_1d(r_A, r_idx, cg, frag, frag_val);
-  PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-  frag.append(frag_val);
-}
-
-void eval_element_nd(int r_A, std::vector<int>& r_idxs, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  // Two parts: first, add constraints on the indices, then compute the indexing information,
-  // then emit the lookup.
-  int r_value = GET_REG(cg);
-  for(int ii = 0; ii < r_idxs.size(); ++ii) {
-    vec_get_ith(r_A, ii, cg, value, r_value);
-    // PUSH_INSTR(value, BytecodeStream::CALL, CG::builtins.set_in(), r_idx, r_value);
-  }
-  // FIXME
-}
-
-void CG::eval(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // If the array elements are Boolean, we need to check for partiality
-  // in the indices, and that the accesses are within-range.
-  ASTExprVec<Expression> idx(a->idx());
-  Expression* A(a->v());
-
-  // Evaluate the indices, put them in registers.
-  // Indices might be partial, so we need to add the index constraints.
-  int sz(idx.size());
-  std::vector<int> r_idxs(sz);;
-
-  // Create a separate fragment so the indices can get evaluated before the context is opened.
-  CG_Builder frag_tl;
-  Mode c_ctx = open_conj(ctx, frag_tl);
-  for(int ii = 0; ii < sz; ++ii)
-    r_idxs[ii] = locate(idx[ii], BytecodeProc::FUN, cg, frag, frag_tl);
-  int r_A = CG::locate(A, +c_ctx, cg, frag, frag_tl);
-  eval_element_nd(r_A, r_idxs, cg, frag, frag_tl);
-  close_conj(ctx, frag_tl);
-  frag.append(frag_tl);
-}
-
-// General (non-Boolean) version. Roughly the same shape as the Boolean case, except we separate
-// the Boolean and integer context.
-void CG::eval(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  // If the array elements are Boolean, we need to check for partiality
-  // in the indices, and that the accesses are within-range.
-  ASTExprVec<Expression> idx(a->idx());
-  Expression* A(a->v());
-
-  // Evaluate the indices, put them in registers.
-  // Indices might be partial, so they get evaluated in the predicate fragment.
-  int sz(idx.size());
-  std::vector<int> r_idxs(sz);
-  Mode c_ctx(open_conj(ctx, pred));
-  for(int ii = 0; ii < sz; ++ii)
-    r_idxs[ii] = CG::locate(idx[ii], BytecodeProc::FUN, cg, value, pred);
-
-  // Now evaluate the array body, and emit the indices.
-  int r_A = CG::locate(A, +c_ctx, cg, value, pred);
-  // At the end of pred_val, everything is available, so we can
-  // evaluate the partiality of A[i1, ...].
-  eval_element_nd(r_A, r_idxs, cg, value, pred);
-  close_conj(ctx, pred);
-}
-
-// Evaluate a comprehension, pushing all the generated values onto the
-// value stack.
-// Currently assumes in- and where- expressions are par, and therefore total.
-void execute_comprehension(Comprehension* c, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-   // Build up the object to build the generator.
-  std::vector<Forset> nesting;
-  std::vector< std::pair<ASTString, Loc> > trail;
-
-  int g = c->n_generators();
-  for(int g = 0; g < c->n_generators(); ++g) {
-    // Bind the in-expression to a register.
-    assert(c->in(g)->type().ispar());
-    int r = CG::locate_par(c->in(g), cg, frag);
-    // Open the bindings.
-    cg.env_push();
-    for(int d = 0; d < c->n_decls(g); ++d) {
-      Forset iter(cg, r);
-      nesting.push_back(iter);
-      iter.emit_pre(frag);
-      // Bind vd->id() to iter.val()
-      VarDecl* vd(c->decl(g, d));
-      ASTString id(vd->id()->str());
-      cg.env().bind(id, Loc::reg(iter.val()));
-    }
-    // Now emit the where-clause
-    Expression* where(c->where(g));
-    if(where) {
-      int lblCont(nesting.back().cont());
-      assert(where->type().ispar());
-      int rC = CG::locate_par(where, cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(rC), CG::l(lblCont));
-    }
-  }
-  // We're now in the deepest scope. Generate code for the body.
-  CG::eval(c->e(), ctx, cg, frag);
-  // Now close the iterators _in reverse order_, and restore the environment.
-  for(int ii = nesting.size()-1; ii >= 0; --ii) {
-    nesting[ii].emit_post(frag);
-    cg.env_pop();
-  }
-}
-#endif
 
 // Modified version of execute-comprehension, but using bind.
 void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -1940,51 +1255,6 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
     cg.env_pop();
   }
 }
-
-#if 0
-void CG::eval(Comprehension* c, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_VEC);
-  execute_comprehension(c, ctx, cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-}
-
-void CG::eval(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // Successively evaluate the <condition, result> pairs.
-  std::vector<int> r_cond;
-  std::vector<int> r_res;
-
-  int sz(ite->size());
-  for(int ii = 0; ii < sz; ++ii) {
-    r_cond.push_back(CG::locate(ite->e_if(ii), BytecodeProc::FUN, cg, frag));
-    r_res.push_back(CG::locate(ite->e_then(ii), +ctx, cg, frag));
-  }
-  int r_final = CG::locate(ite->e_else(), +ctx, cg, frag);
-
-  PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_AND);
-  // Post c_1 || ... || c_{k-1} || ~c_k || v_k, for k in 1..n.
-  PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-}
-void CG::eval(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& pred, CG_Builder& value) {
-  // Successively evaluate the <condition, result> pairs.
-#if 0
-  std::vector<int> r_cond;
-  std::vector<int> r_res;
-
-  int sz(ite->size());
-  for(int ii = 0; ii < sz; ++ii) {
-    r_cond.push_back(CG::locate(ite->e_if(ii), C_MIX, cg, frag));
-    r_res.push_back(CG::locate(ite->e_then(ii), +ctx, cg, frag));
-  }
-  int r_final = CG::locate(ite->e_else(), +ctx, cg, frag);
-
-  PUSH_INSTR(cg, BytecodeStream::OPEN_AGGREGATION, VCTX_AND);
-  // Post c_1 || ... || c_{k-1} || ~c_k || v_k, for k in 1..n.
-
-  PUSH_INSTR(cg, BytecodeStream::CLOSE_AGGREGATION);
-#endif
-  TODO();
-}
-#endif
 
 // Special case implementation of folds where body is a generator.
 CG_Cond::T* eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -2097,19 +1367,17 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG_Cond::T* eval_assert_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->arg(0)->type().ispar());
+  // Evaluate the assertion, abort if it fails.
   /*
-  int r_cond = CG::locate_par(call->arg(0), cg, frag);
+  int r_cond = CG::force(CG::compile(call->arg(0), cg, frag), cg, frag);
   int l_okay(GET_LABEL(cg));
   PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_cond), CG::l(l_okay));
   PUSH_INSTR(frag, BytecodeStream::ABORT);
   PUSH_LABEL(frag, l_okay);
   */
+  // Otherwise, evaluate as usual.
   if(call->n_args() == 2) {
-    /*
-    int r = CG::locate_immi(!ctx.is_neg(), cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-    */
-    // FIXME
     return nullptr;
   } else {
     assert(call->n_args() == 3);
@@ -2119,13 +1387,14 @@ CG_Cond::T* eval_assert_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
 CG::Binding bind_assert_g(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 3);
-  // int r_cond = CG::locate_par(call->arg(0), cg, frag);
   assert(call->arg(0)->type().ispar());
+  /*
   int r_cond = CG::force(CG::compile(call->arg(0), cg, frag), cg, frag);
   int l_okay(GET_LABEL(cg));
   PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_cond), CG::l(l_okay));
   PUSH_INSTR(frag, BytecodeStream::ABORT);
   PUSH_LABEL(frag, l_okay);
+  */
   return CG::bind(call->arg(2), cg, frag);
 }
 
@@ -2142,227 +1411,6 @@ builtin_table& builtins(void) {
   static builtin_table tbl(init_builtins());
   return tbl;
 }
-
-#if 0
-void CG::eval(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // Check whether this is a transition Bool -> Value.
-  switch(b->op()) {
-    case BOT_LE:
-    case BOT_LQ:
-    case BOT_GR:
-    case BOT_GQ:
-    case BOT_EQ:
-    case BOT_NQ: {
-      // Potentially partial.
-      // TODO: Convert into canonical form.
-      CG_Builder frag_tl;
-      Mode c_ctx(open_conj(ctx, frag_tl));
-      int r_lhs(CG::locate(b->lhs(), c_ctx, cg, frag, frag_tl));
-      int r_rhs(CG::locate(b->rhs(), c_ctx, cg, frag, frag_tl));
-      call_binop(cg, frag_tl, ctx, b->op(), r_lhs, r_rhs);
-      close_conj(ctx, frag_tl);
-      frag.append(frag_tl);
-    }
-    break;
-    case BOT_AND: {
-      Mode c_ctx(open_conj(ctx, frag));
-      CG::eval(b->lhs(), c_ctx, cg, frag);
-      CG::eval(b->rhs(), c_ctx, cg, frag);
-      close_conj(ctx, frag);
-    }
-    break;
-    case BOT_OR: {
-      Mode c_ctx(open_disj(ctx, frag));
-      CG::eval(b->lhs(), c_ctx, cg, frag);
-      CG::eval(b->rhs(), c_ctx, cg, frag);
-      close_disj(ctx, frag);
-    }
-    break;
-    case BOT_IMPL: {
-      Mode c_ctx(open_disj(ctx, frag));
-      CG::eval(b->lhs(), -c_ctx, cg, frag);
-      CG::eval(b->rhs(), c_ctx, cg, frag);
-      close_disj(ctx, frag);
-    }
-    break;
-    case BOT_RIMPL: {
-      Mode c_ctx(open_disj(ctx, frag));
-      CG::eval(b->lhs(), c_ctx, cg, frag);
-      CG::eval(b->rhs(), -c_ctx, cg, frag);
-      close_disj(ctx, frag);
-    }
-    break;
-    default: {
-      // Standard case.
-      int r_lhs(CG::locate(b->lhs(), ctx, cg, frag));
-      int r_rhs(CG::locate(b->rhs(), ctx, cg, frag));
-      call_binop(cg, frag, ctx, b->op(), r_lhs, r_rhs);
-      break;
-    }
-  }
-#if 0
-  PUSH_INSTR(cond, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_AND);
-  if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
-    // These all require rhs() != 0. Which means we need to evaluate the rhs,
-    // and put it in a register.
-    int r_lhs(CG::locate(b->lhs(), ctx, cg, cond, value));
-    CG_Builder cond_tl;
-    int r_rhs(CG::locate(b->rhs(), ctx, cg, cond_tl, value));
-    int r_zero(CG::locate_immi(0, cg, cond_tl));
-    PUSH_INSTR(cond_tl, BytecodeStream::CALL, /* find_builtin(cg, BOT_NQ), */ CG::r(r_rhs), CG::r(r_zero));
-    PUSH_INSTR(value, BytecodeStream::CALL /*, find_builtin(cg, b->op(), r_lhs, r_rhs) */); 
-    cond.append(cond_tl);
-  } else {
-    // TODO: Check whether the expression is aggregatable.
-    int r_lhs = CG::locate(b->lhs(), ctx, cg, cond, value);
-    int r_rhs = CG::locate(b->rhs(), ctx, cg, cond, value);
-    PUSH_INSTR(value, BytecodeStream::CALL, BytecodeProc::FUN /*, find_builtin(cg, b->op())*/, CG::r(r_lhs), CG::r(r_rhs));
-  }
-  PUSH_INSTR(cond, BytecodeStream::CLOSE_AGGREGATION);
-#endif
-}
-
-void CG::eval(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  // Check if the operator is itself partial.
-  // Appropriate aggregation context should have been opened in the enclosing Boolean
-  // expression, so we don't need to here.
-  if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
-    // These all require rhs() != 0. Which means we need to evaluate the rhs,
-    // and put it in a register.
-    Mode c_ctx(open_conj(ctx, pred));
-    int r_lhs(CG::locate(b->lhs(), ctx, cg, value, pred));
-    int r_rhs(CG::locate(b->rhs(), ctx, cg, value, pred));
-    int r_zero(CG::locate_immi(0, cg, value));
-    call_binop(cg, value, BytecodeProc::FUN, b->op(), r_lhs, r_rhs);
-    call_binop(cg, pred, ctx, BOT_NQ, r_rhs, r_zero);
-    close_conj(ctx, pred);
-  } else {
-    // TODO: Check whether the expression is aggregatable.
-    int r_lhs = CG::locate(b->lhs(), ctx, cg, value, pred);
-    int r_rhs = CG::locate(b->rhs(), ctx, cg, value, pred);
-    call_binop(cg, value, BytecodeProc::FUN, b->op(), r_lhs, r_rhs);
-  }
-}
-
-void CG::eval(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // If we're in a Boolean context, we _must_ be evaluating not.
-  // So just push the stuff inwards.
-  assert(u->op() == UOT_NOT);
-  CG::eval(u->e(), -ctx, cg, frag);
-}
-
-void CG::eval(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  // All the unary operators are total, so just evaluate the result, and call the appropriate
-  // builtin.
-  switch(u->op()) {
-    case UOT_NOT:
-      TODO();
-    case UOT_PLUS:
-      CG::eval(u->e(), ctx, cg, value, pred);
-      return;
-    case UOT_MINUS:
-      int r_e = CG::locate(u->e(), ctx, cg, value, pred);
-      PUSH_INSTR(value, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_neg"), CG::r(r_e));
-      return;
-  }
-}
-int CG::locate(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  // All the unary operators are total, so just evaluate the result, and call the appropriate
-  // builtin.
-  switch(u->op()) {
-    case UOT_NOT:
-      TODO();
-      return 0xdeadbeef;
-    case UOT_PLUS:
-      return CG::locate(u->e(), ctx, cg, value, pred);
-    case UOT_MINUS:
-      int r_e = CG::locate(u->e(), ctx, cg, value, pred);
-      PUSH_INSTR(value, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_neg"), CG::r(r_e));
-      int r(GET_REG(cg));
-      PUSH_INSTR(value, BytecodeStream::POP, CG::r(r));
-      return r;
-  }
-}
-
-void CG::eval(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // If we have a builtin for this, dispatch to that instead.
-  {
-    GCLock gc;
-    auto it(builtins().find(call->id().str()));
-    if(it != builtins().end()) {
-      (*it).second.boolean(call, ctx, cg, frag);
-      return;
-    }
-  }
-
-  // Might have some partiality from the arguments.
-  // Evaluate all the bindings first.
-  CG_Builder frag_tl;
-
-  int sz = call->n_args();
-  std::vector<CG_Value> r_arg(sz);
-  
-  // FIXME: Do some mode analysis on the arguments.
-  Mode c_ctx(open_conj(ctx, frag_tl));
-  for(int ii = 0; ii < sz; ++ii) {
-    r_arg[ii] = CG::r(CG::locate(call->arg(ii), c_ctx, cg, frag, frag_tl));
-  }
-  // And finally, add the call itself
-  auto bodies(cg.fun_map.get_bodies(call));
-  std::cerr << "%% Found " << bodies.size() << " definitions matching ";
-  debugprint(call);
-//  for(auto b : bodies)
-//    debugprint(b);
-
-  PUSH_INSTR(frag_tl, BytecodeStream::CALL, c_ctx, find_call_fun(cg, call), r_arg);
-  close_conj(ctx, frag_tl);
-  frag.append(frag_tl);
-}
-
-void CG::eval(Call* call, Mode ctx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  // For a call, we need to bind each of the arguments into registers.
-  // They need to be available for the conditional call, so they get evaluated in the
-  // conditional bit.
-  TODO();
-#if 0
-  {
-    GCLock gc;
-    auto it(builtins().find(call->id().str()));
-    if(it != builtins().end()) {
-      (*it).second.general(call, ctx, cg, value, pred);
-      return;
-    }
-  }
-  CG_Builder cond_tl;
-
-  int sz = call->n_args();
-  std::vector<CG_Value> r_arg(sz);
-  
-  Mode c_ctx(open_conj(ctx, pred));
-  for(int ii = 0; ii < sz; ++ii) {
-    r_arg[ii] = CG::r(CG::locate(call->arg(ii), c_ctx, cg, value, pred));
-  }
-  // Bind the value part.
-  PUSH_INSTR(value, BytecodeStream::CALL, BytecodeProc::RAW, find_call_fun(cg, call), r_arg);
-
-  // Emit the call to the Boolean part.
-  PUSH_INSTR(pred, BytecodeStream::CALL, c_ctx, find_call_pred(cg, call), r_arg);
-  close_conj(ctx, pred);
-#endif
-}
-
-void CG::eval(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // 
-  TODO();
-}
-
-void CG::eval(Let* let, Mode ctx, CodeGen& cg, CG_Builder& value, CG_Builder& pred) {
-  ASTExprVec<Expression> bindings(let->let());
-  for(Expression* e : bindings)
-    debugprint(e);
-  TODO();
-}
-#endif
 
 CG::Binding CG::bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
@@ -2446,9 +1494,7 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   OPEN_OTHER(cg, frag);
   if(idx[0]->type().ispar()) {
     // Just read the vector, and get the appropriate element.
-    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_idxs[0]), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r), CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idxs[0]), CG::r(r));
   } else {
     PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_element"), CG::r(r_A), CG::r(r_idxs[0]));
   }
@@ -2492,14 +1538,18 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T*> partial;
   if(b_lhs.second)
     partial.push_back(b_lhs.second);
+  int r;
   if(b_rhs.second)
     partial.push_back(b_rhs.second);
-
-  OPEN_OTHER(cg, frag);
-  call_binop(cg, frag, BytecodeProc::FUN, b->op(), b_lhs.first, b_rhs.first);
-  CLOSE_AGG(cg, frag);
-  int r(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+    r = bind_binop_par(cg, frag, b->op(), b_lhs.first, b_rhs.first);
+  if(b->type().ispar()) {
+  } else {
+    OPEN_OTHER(cg, frag);
+    call_binop(cg, frag, BytecodeProc::FUN, b->op(), b_lhs.first, b_rhs.first);
+    CLOSE_AGG(cg, frag);
+    r = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  }
 
   if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
     // These all require rhs() != 0. Which means we need to evaluate the rhs,
@@ -2519,11 +1569,18 @@ CG::Binding CG::bind(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       return CG::bind(u->e(), cg, frag);
     case UOT_MINUS: {
       Binding b_e(CG::bind(u->e(), cg, frag));
-      OPEN_OTHER(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_neg"), CG::r(b_e.first));
-      CLOSE_AGG(cg, frag);
-      int r(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      int r;
+      if(u->type().ispar()) {
+        r = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r), CG::r(b_e.first), CG::r(r));
+      } else {
+        OPEN_OTHER(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_neg"), CG::r(b_e.first));
+        CLOSE_AGG(cg, frag);
+        r = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      }
       return CG::Binding(r, b_e.second);
     }
   }
@@ -2700,9 +1757,7 @@ CG_Cond::T* compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(idx[0]->type().ispar()) {
     // Just read the vector, and get the appropriate element.
     int r(GET_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_idxs[0]), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r), CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idxs[0]), CG::r(r));
     cond.push_back(CG_Cond::reg(r));
   } else {
     cond.push_back(CG_Cond::call(cg.find_builtin("bool_element"), ctx, CG::r(r_A), CG::r(r_idxs[0])));
@@ -2735,7 +1790,7 @@ CG_Cond::T* CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     case BOT_EQ:
     case BOT_NQ: {
       // Potentially partial.
-      // TODO: Convert into canonical form.
+      // Converted into canonical form by binop_cond.
       CG::Binding b_lhs(CG::bind(b->lhs(), cg, frag));
       CG::Binding b_rhs(CG::bind(b->rhs(), cg, frag));
       cond.push_back(b_lhs.second);
@@ -2781,14 +1836,20 @@ CG_Cond::T* CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       // Standard case.
       int r_lhs(CG::force(CG::compile(b->lhs(), cg, frag), cg, frag));
       int r_rhs(CG::force(CG::compile(b->rhs(), cg, frag), cg, frag));
-      return binop_cond(cg, b->op(), ctx, r_lhs, r_rhs);
+      if(b->type().ispar()) {
+        return CG_Cond::reg(bind_binop_par(cg, frag, b->op(), r_lhs, r_rhs));
+      } else {
+        return binop_cond(cg, b->op(), ctx, r_lhs, r_rhs);
+      }
     }
   }
 }
 
 CG_Cond::T* CG::compile(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  TODO();
-  return nullptr;
+  // TODO: Fix CG_Cond to handle negation.
+  assert(u->op() == UOT_NOT);
+  int r_e(CG::force(CG::compile(u->e(), cg, frag), cg, frag));
+  return CG_Cond::call(cg.find_builtin("bool_not"), ctx, CG::r(r_e));
 }
 
 CG_Cond::T* CG::compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -2885,9 +1946,7 @@ CG_Cond::T* CG::compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag)
   assert(sz == 1);
   if(idx[0]->type().ispar()) {
     int r(GET_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_idx[0]), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r_idx[0]), CG::r(r));
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r), CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idx[0]), CG::r(r));
     conj.push_back(CG_Cond::reg(r));
   } else {
     conj.push_back(CG_Cond::call(cg.find_builtin("bool_element"), ctx, CG::r(r_A), CG::r(r_idx[0])));
