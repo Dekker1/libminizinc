@@ -261,7 +261,7 @@ struct CG_Cond {
     
     CG_ProcID p;
     BytecodeProc::Mode m;
-    std::vector<CG_Value>& params;
+    std::vector<CG_Value> params;
   };
   class C_And : public T {
   public:
@@ -328,6 +328,15 @@ struct CG_Cond {
   static T* _forall(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) {
     if(args.size() == 0)
       return nullptr;
+    // Drop any true values
+    auto b(args.begin());
+    for(CG_Cond::T* x : args) {
+      if(x) {
+        *b = x;
+        ++b;
+      }
+    }
+    args.erase(b, args.end());
     dedup(args);
     if(args.size() == 1)
       return args[0];
@@ -347,11 +356,11 @@ struct CG_Cond {
   }
   static T* _exists(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) {
     assert(args.size() > 0);
-    dedup(args);
     for(CG_Cond::T* e : args) {
       if(!e)
         return nullptr;
     }
+    dedup(args);
     if(args.size() == 1)
       return args[0];
     return new C_Or(m, args);
@@ -512,7 +521,7 @@ struct CG_Proc {
     while(rm) {
       unsigned char m(find_lsb(rm));
       rm &= (rm-1);
-      new (_body + m) body_t(std::move(o._body[m]));  
+      new (_body + m) body_t(std::move(o._body[m]));
       o._body[m].~body_t();
     }
     o.available_modes = 0;
@@ -542,6 +551,15 @@ struct CG_Proc {
 struct CallSig {
   ASTString id;  
   std::vector<Type> params;
+
+  CallSig(ASTString _id, std::vector<Type> _params)
+    : id(_id) {
+    // Normalize the call types to par.     
+    for(Type p : _params) {
+      p.ti(Type::TI_PAR);
+      params.push_back(p);
+    }
+  }
 
   struct HashSig {
     size_t operator()(const CallSig& c) const { return c.hash(); }
@@ -574,6 +592,7 @@ struct SigMap {
 };
 
 // Handle for dealing with function stuff.
+/*
 class CG_FunID {
   friend class CodeGen;
   CG_FunID(int _f) : f(_f) { }
@@ -581,6 +600,8 @@ class CG_FunID {
   int f;
 };
 
+*/
+/*
 struct CG_FunInfo {
   CG_FunInfo(FunctionI* _def)
     : def(_def), is_total(false), available_modes(0) 
@@ -591,6 +612,7 @@ struct CG_FunInfo {
   unsigned char available_modes; // Bit-vector of instantiated modes.
   std::vector<CG_Instr> bodies[BytecodeProc::MAX_MODE+1];
 };
+*/
 
 struct CG_FunMap {
   struct CG_FunDefn {
@@ -604,7 +626,7 @@ struct CG_FunMap {
   
   ASTStringMap<unsigned int>::t id_map;
   std::vector<CG_FunDefn> functions;
-  
+
   void add_body(FunctionI* f) {
     unsigned int fun_id;
     ASTString id(f->id());
@@ -645,7 +667,7 @@ struct CG_FunMap {
       ASTExprVec<VarDecl> b_params(b->params());
       if(b_params.size() == sz) {
         for(int pi = 0; pi < sz; ++pi) {
-          if(!args[pi].isSubtypeOf(b_params[pi]->type(), false)) // CHECK
+          if(!args[pi].isSubtypeOf(b_params[pi]->type(), false))
             goto get_bodies_continue;
         }
         // Can coerce args to b_params.
@@ -661,16 +683,24 @@ struct CG_FunMap {
     return candidates;
   }
 
-  std::vector<FunctionI*> get_bodies(Call* call) {
-    auto it(id_map.find(call->id()));
+  std::vector<FunctionI*> get_bodies(ASTString id, std::vector<Type>& args) {
+    auto it(id_map.find(id));
     if(it == id_map.end())
       throw InternalError("Attempted to call function not in CG_FunMap.");
     unsigned int fun_id((*it).second);
+    return get_bodies(fun_id, args);
+  }
+
+  std::vector<FunctionI*> get_bodies(Call* call) {
+    // Normalize all types to par, so isSubtype does what we want.
     std::vector<Type> args;
     int sz(call->n_args());
-    for(int ii = 0; ii < sz; ++ii)
-      args.push_back(call->arg(ii)->type());
-    return get_bodies(fun_id, args);
+    for(int ii = 0; ii < sz; ++ii) {
+      Type arg(call->arg(ii)->type());
+      arg.ti(Type::TI_PAR);
+      args.push_back(arg);
+    }
+    return get_bodies(call->id(), args);
   }
 };
 
@@ -710,11 +740,14 @@ struct CodeGen {
   // Function resolution
   void register_function(FunctionI* f) { fun_map.add_body(f); }
 
+  /*
   CG_ProcID resolve_val_fun(Call* c);
   CG_ProcID resolve_pred_fun(Call* c, BytecodeProc::Mode m);
+  */
+  // std::make_pair<CG_ProcID, CG_ProcID> resolve_fun(Call* c, BytecodeProc::Mode m);
 
-  CG_FunID resolve_fun(FunctionI* f);
-  CG_ProcID resolve_val_def(FunctionI* f);
+  CG_ProcID resolve_fun(FunctionI* f);
+  // CG_ProcID resolve_val_def(FunctionI* f);
   CG_ProcID resolve_pred_def(FunctionI* f, BytecodeProc::Mode m);
 
   std::vector< CG_Proc > bytecode; // Bytecode we've built
@@ -745,13 +778,18 @@ struct CodeGen {
   
   // Procedure information
   void register_builtins(void);
-  void register_builtin(std::string s, unsigned int p);
+  CG_ProcID register_builtin(std::string s, unsigned int p);
   CG_ProcID find_builtin(std::string s);
   std::vector<std::pair<std::string, unsigned int> > _builtins;
   std::unordered_map<std::string, CG_ProcID> _proc_map;
 
   // Procedures yet to be emitted.
   CG_FunMap fun_map;
+
+  SigMap<CG_ProcID>::t dispatch;
+
+  std::unordered_map<FunctionI*, CG_ProcID> fun_bodies;
+  std::vector< std::pair<FunctionI*, BytecodeProc::Mode> > pending_bodies;
   /*
   std::vector< std::pair<Expression*, unsigned int> > let_queue;
   std::vector< std::pair<FunctionI*, unsigned int> > fun_queue;

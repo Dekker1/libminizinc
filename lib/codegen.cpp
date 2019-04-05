@@ -159,13 +159,14 @@ void OPEN_OR(CodeGen& cg, CG_Builder& frag) { OPEN_AGG(cg, frag, AggregationCtx:
 void OPEN_OTHER(CodeGen& cg, CG_Builder& frag) { OPEN_AGG(cg, frag, AggregationCtx::VCTX_OTHER); }
 void OPEN_VEC(CodeGen& cg, CG_Builder& frag) { OPEN_AGG(cg, frag, AggregationCtx::VCTX_VEC); }
 
-void CodeGen::register_builtin(std::string s, unsigned int arity) {
+CG_ProcID CodeGen::register_builtin(std::string s, unsigned int arity) {
   auto it(_proc_map.find(s));
   assert(it == _proc_map.end());
 
   CG_ProcID id(CG_ProcID::builtin(_builtins.size()));
   _builtins.push_back(std::make_pair(s, arity));
   _proc_map.insert(std::make_pair(s, id));
+  return id;
 }
 
 CG_ProcID CodeGen::find_builtin(std::string s) {
@@ -358,12 +359,83 @@ CG_Cond::T* binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs
   throw InternalError("Unexpected fall-through in binop_cond.");
 }
 
-CG_ProcID find_call_fun(CodeGen& cg, Call* c) {
-  return CG_ProcID::proc(0xdead);
+CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
+  auto it(fun_bodies.find(fun));
+  if(it != fun_bodies.end())
+    return it->second;
+  
+  GCLock lock;
+
+  if(fun->e()) {
+    std::cerr << "%%%% Resolving: "; debugprint(fun->e());
+    int p_idx = bytecode.size();
+    CG_ProcID p_id(CG_ProcID::proc(p_idx));
+    ASTExprVec<VarDecl> params(fun->params());
+    
+    std::stringstream ss;
+    ss << "f" << p_idx << "_" << fun->id().str();
+
+    bytecode.push_back(CG_Proc(ss.str(), params.size()));
+    fun_bodies.insert(std::make_pair(fun, p_id));
+    return p_id;
+  } else {
+    std::stringstream ss;
+    ss << "b" << _builtins.size() << "_" << fun->id().str();
+    return register_builtin(ss.str(), fun->params().size());
+  }
 }
+
+CG_ProcID find_call_fun(CodeGen& cg, Call* call) {
+  std::vector<Type> arg_types;
+  int sz = call->n_args();
+  for(int ii = 0; ii < sz; ++ii)
+    arg_types.push_back(call->arg(ii)->type());
+
+  CallSig sig(call->id(), arg_types);
+  auto it(cg.dispatch.find(sig));
+  if(it != cg.dispatch.end()) {
+    return (*it).second;
+  } else {
+    GCLock lock;
+    // Currently, just dispatch
+    auto bodies(cg.fun_map.get_bodies(call->id().str(), arg_types));
+    std::vector<CG_ProcID> procs;
+    for(FunctionI* b : bodies) {
+      CG_ProcID body(cg.resolve_fun(b));
+      // Force the body to be created
+      procs.push_back(body);
+      if(!cg.bytecode[body.id()].is_available(BytecodeProc::ROOT)) {
+        cg.bytecode[body.id()].body(BytecodeProc::ROOT);
+        cg.pending_bodies.push_back(std::make_pair(b, BytecodeProc::ROOT));
+      }
+    }
+    // If there's a unique candidate, go for it.
+    if(procs.size() == 1)
+      return procs[0];
+
+    // Otherwise, generate the dispatch function.
+    int p_idx = cg.bytecode.size();
+
+    std::stringstream ss;
+    ss << "_d_" << p_idx << "_" << call->id().str();
+
+    CG_ProcID p_id(CG_ProcID::proc(p_idx));
+    cg.bytecode.push_back(CG_Proc(ss.str(), arg_types.size()));
+    cg.dispatch.insert(std::make_pair(sig, p_id));
+    
+    // Now generate the dispatch body.
+    CG_Builder frag;
+    cg.append(p_idx, BytecodeProc::ROOT, frag);
+
+    return p_id;
+  }
+}
+/*
 CG_ProcID find_call_pred(CodeGen& cg, Call* c) {
   return CG_ProcID::proc(0xbead);
+
 }
+*/
 
 // Analyse an expression (and sub-expressions) for partiality
 #if 0
@@ -788,6 +860,7 @@ private:
           // Evaluate the definition
           // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
           cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
+          std::cout << "%% " << vd->id()->v() << " ~> " << cg.num_globals << std::endl;
           // FIXME
           ++cg.num_globals;
         }
@@ -879,7 +952,8 @@ void show_frag(O& out, CodeGen& cg, std::vector<CG_Instr>& frag) {
         if(p.is_builtin())
           out << " " << cg._builtins[p.id()].first;
         else
-          out << " #P" << p.id(); 
+          // out << " #P" << p.id(); 
+          out << " " << cg.bytecode[p.id()].ident;
         for(int ii = 2; ii < i.params.size(); ++ii) {
           out << " " << show(i.params[ii]);
         }
@@ -1246,7 +1320,13 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
     }
   }
   // We're now in the deepest scope. Generate code for the body.
-  int r_e = CG::bind(c->e(), cg, frag).first; // FIXME: Discarding partiality
+  int r_e;
+  if(c->e()->type().isbool()) {
+    r_e = CG::force(CG::compile(c->e(), cg, frag), cg, frag);
+  } else {
+    r_e = CG::bind(c->e(), cg, frag).first; // FIXME: Discarding partiality
+  }
+
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_e));
   // Now close the iterators _in reverse order_, and restore the environment.
   for(int ii = nesting.size()-1; ii >= 0; --ii) {
@@ -1275,7 +1355,14 @@ CG_Cond::T* eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       break;
       /*
     case Expression::E_COMP: {
-      execute_comprehension(param->cast<Comprehension>(), c_ctx, cg, frag);
+      OPEN_OTHER(cg, frag);
+      OPEN_AND(cg, frag);
+      execute_comprehension_compile(param->cast<Comprehension>(), c_ctx, cg, frag);
+      CLOSE_AGG(cg, frag);
+      CLOSE_AGG(cg, frag);
+      int r(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      return CG_Cond::reg(r);
       }
       break;
       */
@@ -1538,11 +1625,11 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T*> partial;
   if(b_lhs.second)
     partial.push_back(b_lhs.second);
-  int r;
   if(b_rhs.second)
     partial.push_back(b_rhs.second);
-    r = bind_binop_par(cg, frag, b->op(), b_lhs.first, b_rhs.first);
+  int r;
   if(b->type().ispar()) {
+    r = bind_binop_par(cg, frag, b->op(), b_lhs.first, b_rhs.first);
   } else {
     OPEN_OTHER(cg, frag);
     call_binop(cg, frag, BytecodeProc::FUN, b->op(), b_lhs.first, b_rhs.first);
@@ -1605,7 +1692,7 @@ CG::Binding CG::bind(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     if(r_bind.second)
       p_arg.push_back(r_bind.second);
   }
-  p_arg.push_back(CG_Cond::call(find_call_pred(cg, call), ctx, r_arg));
+  // p_arg.push_back(CG_Cond::call(find_call_pred(cg, call), ctx, r_arg));
 
   // Bind the value part.
   int r_ret(GET_REG(cg));
@@ -1880,11 +1967,13 @@ CG_Cond::T* CG::compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     }
   }
   // And finally, add the call itself
+  /*
   auto bodies(cg.fun_map.get_bodies(call));
   std::cerr << "%% Found " << bodies.size() << " definitions matching ";
   debugprint(call);
 //  for(auto b : bodies)
 //    debugprint(b);
+*/
   p_arg.push_back(CG_Cond::call(find_call_fun(cg, call), ctx, r_arg));
   return CG_Cond::forall(ctx, p_arg);
 }

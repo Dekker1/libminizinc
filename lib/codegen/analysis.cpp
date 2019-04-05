@@ -180,8 +180,12 @@ namespace MiniZinc {
   void ModeAnalysis::vVarDecl(VarDecl& decl, Occurrence o, CG::Mode m) {
     if(Id* x = decl.id())
       update(x, o, m);
-    if(Expression* d = decl.ti()->domain())
-      update(d, o, m);
+    if(Expression* d = decl.ti()->domain()) {
+      if(o == Def) {
+        update(d, Def, m);
+        update(d, Use, m);
+      }
+    }
     if(Expression* e = decl.e())
       update(e, o, m);
   }
