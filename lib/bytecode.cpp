@@ -869,7 +869,7 @@ namespace MiniZinc {
         {
           int i = frame->bs->reg(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
-          _stack[0].reg.cp(this, i, frame->reg, r1);
+          globals.cp(this, i, frame->reg, r1);
           DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame->reg[r1].toString() << ")" << "\n");
         }
           break;
@@ -877,7 +877,7 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int i = frame->bs->reg(frame->pc);
-          frame->reg.cp(this, r1, _stack[0].reg, i);
+          frame->reg.cp(this, r1, globals, i);
           DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame->reg[r1].toString() << ")" << " " << i << "\n");
         }
           break;
@@ -1977,6 +1977,7 @@ namespace MiniZinc {
   }
   
   Interpreter::~Interpreter(void) {
+    globals.destroy(this);
     for (auto& f : _stack) {
       f.destroy(this);
     }

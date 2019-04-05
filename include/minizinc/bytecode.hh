@@ -829,6 +829,7 @@ namespace MiniZinc {
     std::vector<CSETable> cse;
     std::vector<Definition*> delayed_calls;
     std::deque<Definition*> _propQueue;
+    RegisterFile globals;
   public:
     Trail trail;
 
@@ -849,6 +850,7 @@ namespace MiniZinc {
     void cse_insert(int proc, CSETable::Key& key, BytecodeProc::Mode& mode, Val& val) {
       return cse[proc].insert(this, key, mode, val);
     }
+    void set_global(int i, const Val& val) { globals.assign(this, i, val); }
     void subscribe(Definition* d);
     void unsubscribe(Definition* d);
     int newIdent(void) { return _identCount++; }
