@@ -1024,9 +1024,9 @@ namespace MiniZinc {
           int r3 = frame->bs->reg(frame->pc);
           assert(frame->reg[r1].isVec());
           assert(frame->reg[r2].isInt());
-          assert(frame->reg[r2]() < frame->reg[r1].size());
+          assert(frame->reg[r2]() > 0 && frame->reg[r2]() <= frame->reg[r1].size());
           DBG_INTERPRETER("GET_VEC " << r1  << "(" << frame->reg[r1].toString() << ")" << " " << r2  << "(" << frame->reg[r2]() << ")");
-          Val v = Val::follow_alias(this, frame->reg[r1][frame->reg[r2]().toInt()]);
+          Val v = Val::follow_alias(this, frame->reg[r1][frame->reg[r2]().toInt()-1]);
           frame->reg.assign(this, r3, v);
           DBG_INTERPRETER(" " << r3 <<  "(" << v.toString() << ")" <<  "\n");
         }
