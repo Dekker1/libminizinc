@@ -870,7 +870,7 @@ namespace MiniZinc {
           int i = frame->bs->reg(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
           _stack[0].reg.cp(this, i, frame->reg, r1);
-          DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame->reg[r1]() << ")" << "\n");
+          DBG_INTERPRETER("LOAD_GLOBAL " << i << " " << r1 << "(" << frame->reg[r1].toString() << ")" << "\n");
         }
           break;
         case BytecodeStream::STORE_GLOBAL:
@@ -878,7 +878,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int i = frame->bs->reg(frame->pc);
           frame->reg.cp(this, r1, _stack[0].reg, i);
-          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame->reg[r1]() << ")" << " " << i << "\n");
+          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame->reg[r1].toString() << ")" << " " << i << "\n");
         }
           break;
         case BytecodeStream::MOV:
@@ -1604,7 +1604,7 @@ namespace MiniZinc {
       BytecodeProc bcp;
       bcp.name = p->name();
       bcp.nargs = p->n_args();
-      DBG_INTERPRETER("add primitive " << bcp.name << " " << p->ident << " " << p->n_args() << "\n");
+      DBG_INTERPRETER("add primitive " << bcp.name << " " << p->ident() << " " << p->n_args() << "\n");
       codes.push_back(bcp);
       procs.emplace(bcp.name, p->ident());
     }
