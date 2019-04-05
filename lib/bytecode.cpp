@@ -1561,7 +1561,7 @@ namespace MiniZinc {
     std::string n1 = n.substr(0,n.find(' '));
     r1 = std::stoi(n1);
     std::string nn = n.substr(n.find(" R")+2);
-    std::string n2 = nn.substr(0,n.find(' '));
+    std::string n2 = nn.substr(0,nn.find(' '));
     r2 = std::stoi(n2);
     std::string n3 = nn.substr(nn.find(" R")+2);
     r3 = std::stoi(n3);
@@ -1574,10 +1574,10 @@ namespace MiniZinc {
     std::string n1 = n.substr(0,n.find(' '));
     r1 = std::stoi(n1);
     std::string nn = n.substr(n.find(" R")+2);
-    std::string n2 = nn.substr(0,n.find(' '));
+    std::string n2 = nn.substr(0,nn.find(' '));
     r2 = std::stoi(n2);
     std::string nnn = nn.substr(nn.find(" R")+2);
-    std::string n3 = nnn.substr(0,nn.find(' '));
+    std::string n3 = nnn.substr(0,nnn.find(' '));
     r3 = std::stoi(n3);
     std::string n4 = nnn.substr(nnn.find(" R")+2);
     r4 = std::stoi(n4);
