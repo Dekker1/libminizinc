@@ -133,6 +133,7 @@ namespace MiniZinc {
       if(sz == 3)
         update(call.arg(2), o, m);
     } else {
+      // Propagate to the other functions.
       for(int ii = 0; ii < sz; ++ii) {
         Expression* arg(call.arg(ii));
         // If arg is non-Boolean, this the partiality gets embedded here.
@@ -188,5 +189,9 @@ namespace MiniZinc {
     }
     if(Expression* e = decl.e())
       update(e, o, m);
+  }
+
+  void ModeAnalysis::vFunctionI(FunctionI& fun, Occurrence o, CG::Mode m) {
+    // DO STUFF  
   }
 };

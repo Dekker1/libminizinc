@@ -71,6 +71,29 @@ public:
     enqueue(e, o);
   }
 
+  void update(FunctionI* fun, Occurrence o, CG::Mode m) {
+    // We only keep Use-modes for Boolean things.
+    /*
+    if(o == Def) {
+      if(e->type().isbool())
+        return;
+      if(e->ann().contains(constants().ann.promise_total))
+        m = BytecodeProc::ROOT;
+    }
+    ExprMap<CG::Mode>::t& t(o == Def ? def_map : use_map);
+    auto it(t.find(e));
+    if(it == t.end()) {
+      // First time we've seen e.
+      t.insert(std::make_pair(e, m));
+    } else {
+      if(it->second.is_submode(m))
+        return;
+      it->second = it->second.join(m);
+    }
+    enqueue(e, o);
+    */
+  }
+
   // Better to make this fifo, but... whatever.
   void process(void) {
     while(!worklist.empty()) {
@@ -203,6 +226,9 @@ public:
   void vLet(Let&, Occurrence, CG::Mode);
   /// Visit variable declaration
   void vVarDecl(VarDecl&, Occurrence, CG::Mode);
+
+  // Process a function body.
+  void vFunctionI(FunctionI&, Occurrence, CG::Mode);
 };
 
 };

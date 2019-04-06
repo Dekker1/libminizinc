@@ -16,7 +16,6 @@
 
 namespace MiniZinc {
 
-#if 1
 template<class V>
 void PUSH_INSTR_OPERAND(CG_Instr& i, std::vector<V>& vec) {
   for(auto v : vec)
@@ -49,131 +48,17 @@ void PUSH_INSTR(CG_Builder& cg, BytecodeStream::Instr i, Args... args) {
 }
 
 void PUSH_LABEL(CG_Builder& frag, unsigned int label) { frag.instrs.push_back(CG_Instr::label(label)); }
-/*
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, BytecodeStream::Instr i, Args... args) {
-  std::cerr << "  " << instr_name(i);
-  // cg.bytecode[cg.current_proc].addInstr(i);
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<class V, typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, std::vector<V>& vec, Args... args) {
-  std::cerr << " " << vec.size();
-  for(const V& v : vec)
-    PUSH_INSTR_BODY(cg, v);
-    // std::cerr << " " << v;
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, CG_ProcID p, Args... args) {
-  std::cerr << " proc[" << p.p << "]";
-    // std::cerr << " " << v;
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, CG_Value x, Args... args) {
-  std::cerr << " " << x.value;
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, BytecodeProc::Mode m, Args... args) {
-  std::cerr << " " << mode_name(m);
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, AggregationCtx::Symbol ctx, Args... args) {
-  std::cerr << " " << agg_name(ctx);
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR(CG_Builder& cg, Args... args) {
-  PUSH_INSTR_BODY(cg, args...);
-  std::cerr << std::endl;
-}
-void PUSH_LABEL(CG_Builder& frag, unsigned int label) { std::cerr << label << ":" << std::endl; }
-*/
-
-#else
-
-void PUSH_INSTR_BODY(CG_Builder& cg) { }
-
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, BytecodeStream::Instr i, Args... args) {
-  std::cerr << "  " << instr_name(i);
-  // cg.bytecode[cg.current_proc].addInstr(i);
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<class V, typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, std::vector<V>& vec, Args... args) {
-  std::cerr << " " << vec.size();
-  for(const V& v : vec)
-    PUSH_INSTR_BODY(cg, v);
-    // std::cerr << " " << v;
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, CG_ProcID p, Args... args) {
-  std::cerr << " proc[" << p.p << "]";
-    // std::cerr << " " << v;
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, CG_Value x, Args... args) {
-  std::cerr << " " << x.value;
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, BytecodeProc::Mode m, Args... args) {
-  std::cerr << " " << mode_name(m);
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR_BODY(CG_Builder& cg, AggregationCtx::Symbol ctx, Args... args) {
-  std::cerr << " " << agg_name(ctx);
-  PUSH_INSTR_BODY(cg, args...);
-}
-template<typename... Args>
-void PUSH_INSTR(CG_Builder& cg, Args... args) {
-  PUSH_INSTR_BODY(cg, args...);
-  std::cerr << std::endl;
-}
-void PUSH_LABEL(CG_Builder& frag, unsigned int label) { std::cerr << label << ":" << std::endl; }
-#endif
 
 // Basic generator manipulation.
 inline int GET_LABEL(CodeGen& cg) { return cg.current_label_count++; }
 inline int GET_REG(CodeGen& cg) { return cg.current_reg_count++; }
-/*
-inline int TEMP_REG(CodeGen& cg) {
-  if(cg.temporary_reg == (unsigned int) -1)
-    cg.temporary_reg = GET_REG(cg);
-  return cg.temporary_reg;
-}
-*/
+
 
 struct REG {
   REG(int _r) : r(_r) { }
   void operator()(CodeGen& cg, CG_Builder& frag) { PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r)); }
   int r;
 };
-
-/*
-struct LOC {
-  LOC(Loc _l) : l(_l) { }
-  void operator()(CodeGen& cg, CG_Builder& frag) {
-    int r;
-    if(!l.is_global()) {
-      r = l.index();
-    } else {
-      // r = TEMP_REG(cg);
-      r = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(l.index()), CG::r(r));
-    }
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r)); 
-  }
-  Loc l;
-};
-*/
 
 // Combinators for slightly safer code generation.
 struct PUSH_REG {
@@ -202,6 +87,7 @@ struct RETN {
   Retn<T> operator()(T x) { return Retn<T>(x); }
 };
 
+/*
 template<class V, class E>
 struct _LET {
   V v;
@@ -218,6 +104,7 @@ struct _LET {
 };
 template<class V, class E>
 _LET<V, E> LET(V&& v, E&& e) { return _LET<V, E> { std::move(v), std::move(e) }; }
+*/
 
 // Iterating over various things -- vectors, interleaved vectors, and sets.
 template<class V, class E>
@@ -253,6 +140,7 @@ template<class V, class E>
 _FOREACH<V, E> FOREACH(V&& v, E&& e) { return _FOREACH<V, E> { std::move(v), std::move(e) }; }
 
 // Same as FOREACH, but when working with a vector of pairs (i.e. sets)
+/*
 template<class V, class E>
 struct _FOREACH2 {
   V v;
@@ -331,6 +219,7 @@ struct _FORSET {
 };
 template<class V, class E>
 _FORSET<V, E> FORSET(V&& v, E&& e) { return _FORSET<V, E>(std::move(v), std::move(e)); }
+*/
 
 // Non-combinator versions of the iteration generators.
 // Less safe, because they don't automatically resolve containment, but more convenient
@@ -404,7 +293,7 @@ struct Forrange : public EmitPost {
   
   void emit_pre(CG_Builder& frag) {
      // Check if the range is non-empty.
-    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(rL), CG::r(rU), CG::r(rC));
+    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rL), CG::r(rU), CG::r(rC));
     PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(rC), CG::l(lblE));
     PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(rL), CG::r(rV));
     PUSH_LABEL(frag, lblH);
@@ -415,7 +304,7 @@ struct Forrange : public EmitPost {
     if(lblCont != -1)
       PUSH_LABEL(frag, lblCont);
     PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(rV));
-    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(rV), CG::r(rU), CG::r(rC));
+    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rV), CG::r(rU), CG::r(rC));
     PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(rC), CG::l(lblH));
     PUSH_LABEL(frag, lblE);
   }

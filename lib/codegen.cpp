@@ -316,6 +316,7 @@ int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r
       return r;
     default:
       TODO();
+      return 0xdead;
     /*
     // BOT_PLUS, BOT_MINUS, BOT_MULT, BOT_DIV, BOT_IDIV, BOT_MOD, BOT_POW,
     // BOT_LE, BOT_LQ, BOT_GR, BOT_GQ, BOT_EQ, BOT_NQ,
@@ -772,9 +773,9 @@ void force_or_leaves(std::vector<int>& leaves, CG_Cond::T* child, CodeGen& cg, C
   if(child->reg != -1) {
     leaves.push_back(child->reg);
   } else if(child->kind() == CG_Cond::CC_Or) {
-    std::vector<CG_Cond::T*>& children(static_cast<CG_Cond::C_And*>(child)->children);
+    std::vector<CG_Cond::T*>& children(static_cast<CG_Cond::C_Or*>(child)->children);
     for(CG_Cond::T* c : children)
-      force_and_leaves(leaves, c, cg, frag);
+      force_or_leaves(leaves, c, cg, frag);
   } else {
     leaves.push_back(CG::force(child, cg, frag));
   }
@@ -811,7 +812,7 @@ int _force_cond(CG_Cond::T* cond, CodeGen& cg, CG_Builder& frag) {
       std::vector<int> leaves;
       force_or_leaves(leaves, cond, cg, frag);
       OPEN_OTHER(cg, frag);
-      OPEN_AND(cg, frag);
+      OPEN_OR(cg, frag);
       for(int r_c : leaves)
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
       CLOSE_AGG(cg, frag);
@@ -846,7 +847,7 @@ private:
   void vVarDeclI(VarDeclI* vdi) {
     VarDecl* vd(vdi->e());
     if(!vd->type().isann()) {
-      if(!vd->type().isvar()) {
+      if(vd->type().ispar()) {
         // std::cerr << "%%%% Binding " << vd->id()->str() << " at g" << slot << std::endl;
         // std::cerr << "%%%% "; debugprint(vd);
         if(!vd->e()) {
@@ -856,14 +857,14 @@ private:
           std::cout << "%% " << vd->id()->v() << " ~> " << cg.num_globals << std::endl;
           // FIXME
           ++cg.num_globals;
-        } else {
+        } /* else {
           // Evaluate the definition
           // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
           cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
           std::cout << "%% " << vd->id()->v() << " ~> " << cg.num_globals << std::endl;
           // FIXME
           ++cg.num_globals;
-        }
+        } */
       } else {
         // If it's a var with a body, feed it into the mode analyser.
         modes.def(vd, BytecodeProc::ROOT);
@@ -895,11 +896,9 @@ public:
     EnvInit eb(cg);
     iterItems(eb, m);
     cg.mode_map = std::move(eb.modes.extract());
-    /*
     for(auto p : cg.mode_map) {
       std::cerr << mode_name(p.second) << "[" << p.first << "] "; debugprint(p.first);
     }
-    */
   }
 };
 
@@ -1072,12 +1071,13 @@ private:
       // Now copy it into a global, and add it to the env.
       PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r_var), CG::g(cg.num_globals));
       std::cout << "%% " << vd->id()->v() << cg.num_globals << std::endl;
-      // cg.env().bind(vd->id()->v(), Loc::global(cg.env().size()));
       cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
       ++cg.num_globals;
-      // FIXME
+
+      // Since it's still in a register, add it to the current env as well.
+      cg.env().bind(vd->id()->str(), CG::Binding(r_var, nullptr));
     } else {
-      // FIXME: Handle the par case.
+      // For par identifiers with definitions, we evaluate them.
       if(vd->e() && !vd->type().isann()) {
         // Evaluate the definition.
         // int r = vd->type().ispar() ? CG::locate_par(vd->e(), cg, root_frag) : CG::locate(vd->e(), BytecodeProc::ROOT, cg, root_frag);
@@ -1085,16 +1085,17 @@ private:
         if(vd->type().isbool()) {
           r = CG::force(CG::compile(vd->e(), cg, root_frag), cg, root_frag);
         } else {
+          // Par expressions may still introduce constraints.
           CG::Binding b_d = CG::bind(vd->e(), cg, root_frag);
           post_cond(cg, root_frag, b_d.second);
           r = b_d.first;
         }
         PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r), CG::g(cg.num_globals));
-        // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
         cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
-        // std::cout << "%% " << vd->id()->v() << cg.num_globals << std::endl;
-        // FIXME
+
         ++cg.num_globals;
+
+        cg.env().bind(vd->id()->str(), CG::Binding(r, nullptr));
       }
     }
   }
@@ -1805,7 +1806,7 @@ CG_Cond::T* CG::compile(Expression* e, CodeGen& cg, CG_Builder& frag) {
 
 CG_Cond::T* CG::compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
-    return cg.env().lookup(x->v()).second;
+    return CG_Cond::reg(cg.env().lookup(x->v()).first);
   } catch(const CG_Env<Binding>::NotFound& exn) {
     debugprint(x);
     int g = cg.globals_env.at(x->v());
