@@ -839,7 +839,6 @@ int _force_cond(CG_Cond::T* cond, CodeGen& cg, CG_Builder& frag) {
 }
 int CG::force(CG_Cond::T* cond, CodeGen& cg, CG_Builder& frag) {
   // Check if the condition is already forced.
-  assert(cond);
   if(cond->reg != -1)
     return cond->reg;
   return cond->reg = _force_cond(cond, cg, frag);
@@ -1003,6 +1002,40 @@ void post_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T* cond) {
   for(int r_c : leaves)
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
 }
+
+// FIXME: This always forces calls outside the aggregation.
+void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T* cond) {
+  if(!cond) {
+    int r_one(CG::locate_immi(1, cg, frag));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_one));
+    return;
+  }
+  if(cond->reg >= 0) {
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(cond->reg));
+    return;
+  }
+  std::vector<int> leaves;
+  switch(cond->kind()) {
+    case CG_Cond::CC_And:  
+      force_and_leaves(leaves, cond, cg, frag);
+      OPEN_AND(cg, frag);
+      for(auto r_l : leaves)
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_l));
+      CLOSE_AGG(cg, frag);
+      break;
+    case CG_Cond::CC_Or:
+      force_or_leaves(leaves, cond, cg, frag);
+      OPEN_OR(cg, frag);
+      for(auto r_l : leaves)
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_l));
+      CLOSE_AGG(cg, frag);
+      break;
+    default:
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(CG::force(cond, cg, frag)));
+      break;
+  }
+}
+
 // Placeholders.
 class Compile : public ItemVisitor {
 private:
@@ -1199,7 +1232,7 @@ private:
     }
     
     // Now compile the result. 
-    post_cond(cg, frag, CG::compile(e, cg, frag));
+    aggregate_cond(cg, frag, CG::compile(e, cg, frag));
     PUSH_INSTR(frag, BytecodeStream::RET);
 
     cg.current_reg_count = saved_regs;
@@ -1228,8 +1261,8 @@ public:
       cg.pending_bodies.pop_back();
       
       FunctionI* fun(p.first);
+      debugprint(fun);
       Mode m(p.second);
-
       // Find the body.
       if(fun->e()) {
         CG_ProcID proc(cg.resolve_fun(fun));
@@ -1654,10 +1687,24 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T*> p_vec;
 
   int sz(a->size());
+  int r_one(-1);
   for(int ii = 0; ii < sz; ++ii) {
-    Binding b_ii(CG::bind((*a)[ii], cg, frag));
-    r_vec.push_back(b_ii.first);
-    p_vec.push_back(b_ii.second);
+    if((*a)[ii]->type().isbool()) {
+      CG_Cond::T* c(CG::compile((*a)[ii], cg, frag));
+      if(!c) {
+        if(r_one == -1) {
+          r_one = GET_REG(cg);
+          PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_one));
+        }
+        r_vec.push_back(r_one);
+      } else {
+        r_vec.push_back(CG::force(c, cg, frag));
+      }
+    } else {
+      Binding b_ii(CG::bind((*a)[ii], cg, frag));
+      r_vec.push_back(b_ii.first);
+      p_vec.push_back(b_ii.second);
+    }
   }
   OPEN_VEC(cg, frag);
   for(int r_c : r_vec)
@@ -2066,8 +2113,14 @@ CG_Cond::T* _compile(Expression* e, CodeGen& cg, CG_Builder& frag) {
   case Expression::E_COMP:
     throw InternalError("compile called on non-Boolean expression.");
   case Expression::E_BOOLLIT:
-    TODO();
-    return nullptr; 
+    {
+      bool v(e->template cast<BoolLit>()->v());
+      if(ctx.is_neg()) v = ~v;
+      if(v) return nullptr;
+      int r(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
+      return CG_Cond::reg(r);
+    }
   case Expression::E_ID:
     return CG::compile(e->template cast<Id>(), ctx, cg, frag);
   case Expression::E_ANON:

@@ -641,13 +641,29 @@ struct CG_FunMap {
     functions[fun_id].bodies.push_back(f);
   }
 
+  bool dominates(FunctionI* f, FunctionI* g) {
+    auto f_params(f->params());
+    auto g_params(g->params());
+    assert(f_params.size() == g_params.size());
+    int sz(f_params.size());
+    for(int ii = 0; ii < sz; ++ii) {
+      if(!Type::bt_subtype(f_params[ii]->type(), g_params[ii]->type(), false))
+        return false;
+    }
+    return true;
+  }
   void filter_bodies(std::vector<FunctionI*>::iterator& dest, std::vector<FunctionI*>::iterator b, std::vector<FunctionI*>::iterator e, int arg, int sz) {
     if(!(b != e)) // Empty partition
       return;
     if(arg == sz) {
       // Find the best candidate between b and e, add it to the output.
       // FIXME
-      (*dest) = (*b);
+      auto best(b);
+      for(++b; b != e; ++b) {
+        if(dominates(*b, *best))
+          best = b;
+      }
+      (*dest) = (*best);
       ++dest;
       return;
     }
