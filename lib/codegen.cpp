@@ -386,7 +386,7 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
   }
 }
 
-CG_ProcID find_call_fun(CodeGen& cg, Call* call) {
+CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
   std::vector<Type> arg_types;
   int sz = call->n_args();
   for(int ii = 0; ii < sz; ++ii)
@@ -394,26 +394,40 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call) {
 
   CallSig sig(call->id(), arg_types);
   auto it(cg.dispatch.find(sig));
-  if(it != cg.dispatch.end()) {
-    return (*it).second;
-  } else {
-    GCLock lock;
-    // Currently, just dispatch
-    auto bodies(cg.fun_map.get_bodies(call->id().str(), arg_types));
-    std::vector<CG_ProcID> procs;
-    for(FunctionI* b : bodies) {
-      CG_ProcID body(cg.resolve_fun(b));
-      // Force the body to be created
-      procs.push_back(body);
-      if(!cg.bytecode[body.id()].is_available(BytecodeProc::ROOT)) {
-        cg.bytecode[body.id()].body(BytecodeProc::ROOT);
-        cg.pending_bodies.push_back(std::make_pair(b, BytecodeProc::ROOT));
-      }
-    }
-    // If there's a unique candidate, go for it.
-    if(procs.size() == 1)
-      return procs[0];
+  std::vector<FunctionI*> args;
 
+  if(it != cg.dispatch.end()) {
+    CG_ProcID d_proc(it->second);
+    if(d_proc.is_builtin() || cg.bytecode[d_proc.id()].is_available(m))
+      return d_proc;
+  }
+
+  GCLock lock;
+  auto bodies = std::move(cg.fun_map.get_bodies(call->id().str(), arg_types));
+  assert(bodies.size() > 0);
+
+  std::vector<CG_ProcID> procs;
+  for(FunctionI* b : bodies) {
+    CG_ProcID body(cg.resolve_fun(b));
+    // Force the body to be created
+    procs.push_back(body);
+    if(!cg.bytecode[body.id()].is_available(m)) {
+      cg.bytecode[body.id()].body(m);
+      cg.pending_bodies.push_back(std::make_pair(b, m));
+    }
+  }
+  
+  // If there's a unique candidate, go for it.
+  if(procs.size() == 1) {
+    if(it == cg.dispatch.end())
+      cg.dispatch.insert(std::make_pair(sig, procs[0]));
+    return procs[0];
+  }
+  
+  CG_ProcID d_proc(CG_ProcID::builtin(0));
+  if(it != cg.dispatch.end()) {
+    d_proc = it->second;
+  } else {
     // Otherwise, generate the dispatch function.
     int p_idx = cg.bytecode.size();
 
@@ -423,13 +437,13 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call) {
     CG_ProcID p_id(CG_ProcID::proc(p_idx));
     cg.bytecode.push_back(CG_Proc(ss.str(), arg_types.size()));
     cg.dispatch.insert(std::make_pair(sig, p_id));
-    
-    // Now generate the dispatch body.
-    CG_Builder frag;
-    cg.append(p_idx, BytecodeProc::ROOT, frag);
-
-    return p_id;
   }
+
+  // Now generate the dispatch body.
+  CG_Builder frag;
+  cg.append(d_proc.id(), m, frag);
+
+  return d_proc;
 }
 /*
 CG_ProcID find_call_pred(CodeGen& cg, Call* c) {
@@ -867,7 +881,10 @@ private:
         } */
       } else {
         // If it's a var with a body, feed it into the mode analyser.
+        // TODO: Because mode analysis is not interprocedural, we have to
+        // assume global params may be used in any context.
         modes.def(vd, BytecodeProc::ROOT);
+        modes.use(vd, BytecodeProc::FUN);
       }
     }
   }
@@ -1111,6 +1128,86 @@ private:
     post_cond(cg, root_frag, CG::compile(c->e(), cg, root_frag));
   }
 
+  // FIXME: This method of saving the CodeGen state is pretty icky.
+  // CodeGen should probably be split into two objects.
+  void compile_fun(CG_Builder& frag, const ASTExprVec<VarDecl>& params, Expression* e) {
+    // Save the codegen state.
+    auto saved_env = cg.current_env;
+    cg.current_env = CG_Env<CG::Binding>::spawn(nullptr);
+    int saved_regs = cg.current_reg_count;
+    int saved_labels = cg.current_label_count;
+
+    saved_regs = params.size();
+    saved_labels = 0;
+
+    cg._exp_scope.clear();
+    cg.mode_map.clear();
+
+    // Rerun mode analysis
+    ModeAnalysis modes;
+    // FIXME: Currently assuming all functions are total.
+    modes.def(e, BytecodeProc::ROOT);
+    modes.use(e, BytecodeProc::ROOT);
+    cg.mode_map = std::move(modes.extract());
+
+    // Set up the new env.
+    {
+    GCLock l;
+    for(int ii = 0; ii < params.size(); ++ii) {
+      cg.env().bind(params[ii]->id()->str(), CG::Binding(ii, nullptr));
+    }
+    }
+    
+    // Now compile the result. 
+    OPEN_OTHER(cg, frag);
+    CG::Binding b_res = CG::bind(e, cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b_res.first));
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::RET);
+
+    // now restore everything
+    cg.current_reg_count = saved_regs;
+    cg.current_label_count = saved_labels;
+
+    delete cg.current_env;
+    cg.current_env = saved_env;
+  }
+
+  void compile_pred(CG_Builder& frag, const ASTExprVec<VarDecl>& params, Mode m, Expression* e) {
+    // Save the codegen state.
+    auto saved_env = cg.current_env;
+    cg.current_env = CG_Env<CG::Binding>::spawn(nullptr);
+    int saved_regs = cg.current_reg_count;
+    int saved_labels = cg.current_label_count;
+
+    saved_regs = params.size();
+    saved_labels = 0;
+
+    cg._exp_scope.clear();
+    cg.mode_map.clear();
+
+    // Rerun mode analysis
+    ModeAnalysis modes;
+    modes.use(e, m);
+    cg.mode_map = std::move(modes.extract());
+
+    // Set up the new env.
+    { GCLock l;
+    for(int ii = 0; ii < params.size(); ++ii) {
+      cg.env().bind(params[ii]->id()->str(), CG::Binding(ii, nullptr));
+    }
+    }
+    
+    // Now compile the result. 
+    post_cond(cg, frag, CG::compile(e, cg, frag));
+    PUSH_INSTR(frag, BytecodeStream::RET);
+
+    cg.current_reg_count = saved_regs;
+    cg.current_label_count = saved_labels;
+    // then restore everything.
+    delete cg.current_env;
+    cg.current_env = saved_env;
+  }
   CodeGen& cg;
   CG_Builder root_frag;
 
@@ -1125,6 +1222,27 @@ public:
     // Now generate procedures for any necessary function/predicate bodies.
     PUSH_INSTR(c.root_frag, BytecodeStream::RET);
     cg.append(0, BytecodeProc::ROOT, c.root_frag);
+  
+    while(!cg.pending_bodies.empty()) {
+      auto p(cg.pending_bodies.back()); 
+      cg.pending_bodies.pop_back();
+      
+      FunctionI* fun(p.first);
+      Mode m(p.second);
+
+      // Find the body.
+      if(fun->e()) {
+        CG_ProcID proc(cg.resolve_fun(fun));
+        CG_Builder frag;
+        if(fun->e()->type().isbool()) {
+          c.compile_pred(frag, fun->params(), m, fun->e());
+        } else {
+          c.compile_fun(frag, fun->params(), fun->e());
+        }
+        cg.append(proc.id(), m, frag);
+      }
+    }
+      
     show(std::cout, cg);
   }
 };
@@ -1503,7 +1621,7 @@ CG::Binding CG::bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
     return CG::Binding(cg.env().lookup(x->v()).first, nullptr);
   } catch(const CG_Env<CodeGen::Binding>::NotFound& exn) {
-    debugprint(x);
+    // debugprint(x);
     int g = cg.globals_env.at(x->v());
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(g), CG::r(r));
@@ -1879,7 +1997,7 @@ CG::Binding CG::bind(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
   // Bind the value part.
   int r_ret(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, find_call_fun(cg, call), r_arg);
+  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, find_call_fun(cg, call, BytecodeProc::ROOT), r_arg);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
 
   return std::make_pair(r_ret, CG_Cond::forall(ctx, p_arg));
@@ -1936,7 +2054,7 @@ CG::Binding CG::bind(Comprehension* comp, Mode ctx, CodeGen& cg, CG_Builder& fra
 
 CG_Cond::T* _compile(Expression* e, CodeGen& cg, CG_Builder& frag) {
   // Look up the mode we need to compile e in.
-  debugprint(e);
+  // debugprint(e);
   CG::Mode ctx(cg.mode_map.at(e));
 
   switch (e->eid()) {
@@ -1990,7 +2108,7 @@ CG_Cond::T* CG::compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
     return CG_Cond::reg(cg.env().lookup(x->v()).first);
   } catch(const CG_Env<Binding>::NotFound& exn) {
-    debugprint(x);
+    // debugprint(x);
     int g = cg.globals_env.at(x->v());
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(g), CG::r(r));
@@ -2157,7 +2275,7 @@ CG_Cond::T* CG::compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 //  for(auto b : bodies)
 //    debugprint(b);
 */
-  p_arg.push_back(CG_Cond::call(find_call_fun(cg, call), ctx, r_arg));
+  p_arg.push_back(CG_Cond::call(find_call_fun(cg, call, ctx), ctx, r_arg));
   return CG_Cond::forall(ctx, p_arg);
 }
 

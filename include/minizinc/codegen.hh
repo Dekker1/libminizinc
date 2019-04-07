@@ -765,7 +765,6 @@ struct CodeGen {
   std::vector<unsigned int> reg_trail;
   unsigned int current_reg_count; // How many registers have been used?
   unsigned int current_label_count;
-  // unsigned int temporary_reg; // Which, if any, register is used for transient stuff.
 
   // Helper information. For an expression, which variables does it refer to?
   ASTStSet scope(Expression* e);
@@ -773,8 +772,10 @@ struct CodeGen {
 
   ExprMap<CG::Mode>::t mode_map;
   
+  /*
   bool is_total(Expression* e);
   ExprMap<bool> _exp_is_total;
+  */
   
   // Procedure information
   void register_builtins(void);
