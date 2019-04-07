@@ -728,8 +728,7 @@ struct CodeGen {
     : /*entry_proc(0)
     ,*/ current_env(new CG_Env<Binding>())
     , num_globals(0)
-    , current_reg_count(0), current_label_count(0) /*, temporary_reg(-1) */ {
-    bytecode.push_back(CG_Proc("main", 0));
+    , current_reg_count(0), current_label_count(0) {
     register_builtins();
   }
 

@@ -870,14 +870,7 @@ private:
           std::cout << "%% " << vd->id()->v() << " ~> " << cg.num_globals << std::endl;
           // FIXME
           ++cg.num_globals;
-        } /* else {
-          // Evaluate the definition
-          // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
-          cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
-          std::cout << "%% " << vd->id()->v() << " ~> " << cg.num_globals << std::endl;
-          // FIXME
-          ++cg.num_globals;
-        } */
+        }
       } else {
         // If it's a var with a body, feed it into the mode analyser.
         // TODO: Because mode analysis is not interprocedural, we have to
@@ -1253,9 +1246,6 @@ public:
     iterItems(c, m);
 
     // Now generate procedures for any necessary function/predicate bodies.
-    PUSH_INSTR(c.root_frag, BytecodeStream::RET);
-    cg.append(0, BytecodeProc::ROOT, c.root_frag);
-  
     while(!cg.pending_bodies.empty()) {
       auto p(cg.pending_bodies.back()); 
       cg.pending_bodies.pop_back();
@@ -1275,7 +1265,13 @@ public:
         cg.append(proc.id(), m, frag);
       }
     }
-      
+
+    // And finally, add the entry function.
+    PUSH_INSTR(c.root_frag, BytecodeStream::RET);
+    int main_proc = cg.bytecode.size();
+    cg.bytecode.push_back(CG_Proc("main", 0));
+    cg.append(main_proc, BytecodeProc::ROOT, c.root_frag);
+ 
     show(std::cout, cg);
   }
 };
@@ -1430,7 +1426,8 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
   std::vector<EmitPost*> nesting;
 
   int g = c->n_generators();
-  for(int g = 0; g < c->n_generators(); ++g) {
+  int n_gen = c->n_generators();
+  for(int g = 0; g < n_gen; ++g) {
     // Bind the in-expression to a register.
     // assert(c->in(g)->type().ispar());
     Expression* in(c->in(g));
@@ -1483,8 +1480,9 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
   for(int ii = nesting.size()-1; ii >= 0; --ii) {
     nesting[ii]->emit_post(frag);
     delete nesting[ii];
-    cg.env_pop();
   }
+  for(int ii = 0; ii < n_gen; ++ii)
+    cg.env_pop();
 }
 
 // Special case implementation of folds where body is a generator.
