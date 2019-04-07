@@ -1240,7 +1240,6 @@ std::pair<int, CG_Cond::T*> _bind(Expression* e, CodeGen& cg, CG_Builder& frag) 
     return CG::bind(e->template cast<Comprehension>(), ctx, cg, frag);
   case Expression::E_ITE:
     return CG::bind(e->template cast<ITE>(), ctx, cg, frag);
-    break;
   case Expression::E_BINOP:
     return CG::bind(e->template cast<BinOp>(), ctx, cg, frag);
   case Expression::E_UNOP:
@@ -1591,32 +1590,215 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG::Binding(r, CG_Cond::forall(ctx, cond));
 }
 
+int make_vec(CodeGen& cg, CG_Builder& frag, const std::vector<int>& regs) {
+  OPEN_VEC(cg, frag);
+  for(int r : regs)
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+  CLOSE_AGG(cg, frag);
+  int r_vec(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vec));
+  return r_vec;
+}
+
+void call_clause(CodeGen& cg, CG_Builder& frag, Mode ctx, const std::vector<int>& pos, const std::vector<int>& neg) {
+  // Build the arguments vectors.
+  int r_pos(make_vec(cg, frag, pos));
+  int r_neg(make_vec(cg, frag, neg));
+  PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("bool_clause"), CG::r(r_pos), CG::r(r_neg));
+}
+
+int deinterlace(CodeGen& cg, CG_Builder& frag, int vec, int width, int offset) {
+  OPEN_VEC(cg, frag);
+  int r_i(CG::locate_immi(1 + offset, cg, frag));
+  int r_step(CG::locate_immi(width, cg, frag));
+  int r_sz(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(vec), CG::r(r_sz));
+  int r_elt(GET_REG(cg));
+
+  int l_hd(GET_LABEL(cg));
+  int l_tl(GET_LABEL(cg));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_elt), CG::l(l_tl));
+  PUSH_LABEL(frag, l_hd);
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(vec), CG::r(r_i), CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::ADDI, CG::r(r_i), CG::r(r_step), CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_elt), CG::l(l_hd));
+  PUSH_LABEL(frag, l_tl);
+  CLOSE_AGG(cg, frag);
+  int r_slice(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_slice));
+  return r_slice;
+}
+
 CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<int> r_cond;
   std::vector<int> p_res;
   std::vector<int> r_res;
 
+  int r_one = CG::locate_immi(1, cg, frag);
+
+  bool is_total = true;
   int sz(ite->size());
   for(int ii = 0; ii < sz; ++ii) {
     r_cond.push_back(CG::force(CG::compile(ite->e_if(ii), cg, frag), cg, frag));
     CG::Binding b_res(CG::bind(ite->e_then(ii), cg, frag));
     r_res.push_back(b_res.first);
-    p_res.push_back(CG::force(b_res.second, cg, frag));
+    // Make sure b_res.second is evaluated _outside_ the aggregation.
+    if(b_res.second) {
+      is_total = false;
+      p_res.push_back(CG::force(b_res.second, cg, frag));
+    } else {
+      p_res.push_back(r_one);
+    }
   }
   Binding b_final = CG::bind(ite->e_else(), cg, frag);
+  r_res.push_back(b_final.first);
+  if(b_final.second) {
+    is_total = false;
+    p_res.push_back(CG::force(b_final.second, cg, frag));
+  } else {
+    p_res.push_back(r_one);
+  }
 
-  // Build the correct selector.
-  /*
-  PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, AggregationCtx::VCTX_AND);
-  // Post c_1 || ... || c_{k-1} || ~c_k || v_k, for k in 1..n.
-  PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
-  */
-  // Build up a vector [ b_0, b_1, ..., b_n ]
-  // s.t. b_0 = ~if(0). b_i = b_{i-1} && ~if(ii).
-  // Then i = 
-  // For now, only Boolean ITEs.
-  TODO();
-  return CG::Binding(0, nullptr);
+  // Build an array of interleaved selectors and conditions.
+  int r_UB = CG::locate_immi(1, cg, frag);
+  int r_test(GET_REG(cg));
+  OPEN_VEC(cg, frag);
+  int l_end(GET_LABEL(cg));
+  for(int ii = 0; ii < sz; ++ii) {
+    int l_cont(GET_LABEL(cg));
+    // PUSH_INSTR(frag, BytecodeStream::ISPAR, CG::r(r_cond[ii]), CG::r(r_test));
+    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r_test)); // ISPAR is broken for now.
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_cont));
+    int l_skip(GET_LABEL(cg));
+    // Condition is par. If the condition is false, we skip this one.
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond[ii]), CG::l(l_skip));
+    // If it's true, we push this last element, and go to the end.
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_res[ii]));
+    if(!is_total)
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(p_res[ii]));
+    PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
+    PUSH_LABEL(frag, l_cont);
+    PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_UB));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_res[ii]));
+    if(!is_total)
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(p_res[ii]));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_cond[ii]));
+    PUSH_LABEL(frag, l_skip);
+  }
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_res[sz]));
+  if(!is_total)
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(p_res[sz]));
+  PUSH_LABEL(frag, l_end);
+  CLOSE_AGG(cg, frag);
+  // We now have a vector of the form [then(0), p[then(0)], if(0)|then(1), p[then(1)], if(1)|...|else,p[else]].
+  // With size r_UB.
+  int r_VEC(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_VEC));
+
+  CG_Cond::T* part(nullptr); 
+
+  // Check how many values there are.
+  int l_fin(GET_LABEL(cg));
+  int l_sel(GET_LABEL(cg));
+  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_one), CG::r(r_UB), CG::r(r_test));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_test), CG::l(l_sel));
+  {
+  OPEN_OTHER(cg, frag);
+  // If only one, we just return it.
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_VEC), CG::r(r_one), CG::r(r_UB));
+  if(!is_total) {
+    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(2), CG::r(r_one));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_VEC), CG::r(r_one), CG::r(r_UB));
+    part = CG_Cond::reg(r_UB);
+  }
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_UB));
+  CLOSE_AGG(cg, frag);
+  }
+  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_fin));
+  
+  PUSH_LABEL(frag, l_sel);
+  // Create the selector variable.
+  // It's not nested inside the result variable,
+  // because we'll also need it for the partiality.
+  // Create the selector variable in a nested context.
+  {
+  OPEN_OTHER(cg, frag);
+  // Create the selector domain.
+  OPEN_VEC(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_one));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_UB));
+  CLOSE_AGG(cg, frag);
+  int r_d(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_d));
+
+  // And the variable
+  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(r_d));
+  int r_idx(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_idx));
+  
+  // Now add the constraints on the selector.
+  int r_SEL = deinterlace(cg, frag, r_VEC, 3 - is_total, 2 - is_total);
+  int r_i(CG::locate_immi(1, cg, frag));
+  int l_hd(GET_LABEL(cg));
+  int l_ex(GET_LABEL(cg));
+  int r_sel(GET_REG(cg));
+  int r_pre(GET_REG(cg));
+  int r_curr(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_i), CG::r(r_UB), CG::r(r_sel));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_sel), CG::l(l_ex));
+  // First case, cond[i] <-> x <= i.
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_SEL), CG::r(r_i), CG::r(r_sel));
+  call_binop(cg, frag, BytecodeProc::FUN, BOT_LQ, r_idx, r_i);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_curr));
+
+  call_clause(cg, frag, BytecodeProc::ROOT, std::vector<int> { r_curr }, std::vector<int> { r_sel });
+  call_clause(cg, frag, BytecodeProc::ROOT, std::vector<int> { r_sel }, std::vector<int> { r_curr });
+
+  // Increment to the second element. If we got here, there definitely was one.
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i), CG::r(r_i));
+  PUSH_LABEL(frag, l_hd);
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_SEL), CG::r(r_i), CG::r(r_sel));
+  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_curr), CG::r(r_pre));
+  call_binop(cg, frag, BytecodeProc::FUN, BOT_LQ, r_idx, r_i);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_curr));
+
+  // Inner case:
+  // ~cond[i] \/ x <= i.
+  call_clause(cg, frag, BytecodeProc::ROOT, std::vector<int> { r_curr }, std::vector<int> { r_sel });
+  // cond[i] \/ x <= (i-1) \/ x > i.
+  call_clause(cg, frag, BytecodeProc::ROOT, std::vector<int> { r_sel, r_pre }, std::vector<int> { r_curr });
+
+  // Now increment the loop.
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i), CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_i), CG::r(r_UB), CG::r(r_sel));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_sel), CG::l(l_hd));
+  PUSH_LABEL(frag, l_ex);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_idx));
+  CLOSE_AGG(cg, frag);
+  }
+  int r_idx(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_idx));
+
+  // Now that we've got the selector, compile the conditional part, and the result.
+  if(!is_total) {
+    int r_part(deinterlace(cg, frag, r_VEC, 3, 1));
+    part = CG_Cond::call(cg.find_builtin("bool_element"), ctx, CG::r(r_part), CG::r(r_idx));
+  }
+
+  OPEN_OTHER(cg, frag);
+  int r_A(deinterlace(cg, frag, r_VEC, 3 - is_total, 0));
+  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_element"), CG::r(r_A), CG::r(r_idx));
+  CLOSE_AGG(cg, frag);
+
+  // On either branch, part is set, and the result is on the stack.
+  PUSH_LABEL(frag, l_fin);
+  int r_ret(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
+  
+  return CG::Binding(r_ret, part);
 }
 
 CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {

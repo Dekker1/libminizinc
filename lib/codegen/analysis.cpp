@@ -54,9 +54,8 @@ namespace MiniZinc {
   void ModeAnalysis::vITE(ITE& ite, Occurrence o, CG::Mode m) {
     int sz(ite.size());
     for(int ii = 0; ii < sz; ++ii) {
-      // We only need to compile the condition if the value is used.
-      if(o == Use)
-        update(ite.e_if(ii), o, BytecodeProc::FUN);
+      // We need the condition to compute the value.
+      update(ite.e_if(ii), Use, BytecodeProc::FUN);
       update(ite.e_then(ii), o, m);
     }
     update(ite.e_else(), o, m);
