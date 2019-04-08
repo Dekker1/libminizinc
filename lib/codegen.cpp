@@ -386,11 +386,20 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
   }
 }
 
+struct dispatch_node {
+  int label;
+  int level;
+  uint64_t sig;
+};
+
 CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
   std::vector<Type> arg_types;
   int sz = call->n_args();
-  for(int ii = 0; ii < sz; ++ii)
-    arg_types.push_back(call->arg(ii)->type());
+  for(int ii = 0; ii < sz; ++ii) {
+    Type t(call->arg(ii)->type());
+    t.ti(Type::TI_PAR);
+    arg_types.push_back(t);
+  }
 
   CallSig sig(call->id(), arg_types);
   auto it(cg.dispatch.find(sig));
@@ -434,13 +443,85 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
     std::stringstream ss;
     ss << "_d_" << p_idx << "_" << call->id().str();
 
-    CG_ProcID p_id(CG_ProcID::proc(p_idx));
+    d_proc = CG_ProcID::proc(p_idx);
     cg.bytecode.push_back(CG_Proc(ss.str(), arg_types.size()));
-    cg.dispatch.insert(std::make_pair(sig, p_id));
+    cg.dispatch.insert(std::make_pair(sig, d_proc));
   }
 
   // Now generate the dispatch body.
   CG_Builder frag;
+  std::vector<uint64_t> var_sig(sz);
+  std::vector<uint64_t> def_sig(bodies.size());
+  for(int bi = 0; bi < bodies.size(); ++bi) {
+    ASTExprVec<VarDecl> params(bodies[bi]->params());
+    for(int ii = 0; ii < params.size(); ++ii) {
+      if(params[ii]->type().isvar()) {
+        var_sig[ii] |= 1ull << bi;
+        def_sig[bi] |= 1ull << ii;
+      }
+    }
+  }
+
+  std::vector< std::unordered_map<uint64_t, int> > sig_table(sz+1);
+  std::vector<dispatch_node> nodes;
+
+  nodes.push_back(dispatch_node { -1, 0, (1ull << bodies.size())-1 });
+  
+  for(int ii = 0; ii < nodes.size(); ii++) {
+    dispatch_node d(nodes[ii]);
+    if(d.label != -1)
+      PUSH_LABEL(frag, d.label);
+    if(d.level == sz) {
+      // Find the best candidate, and emit a call.
+      uint64_t candidates(d.sig);
+      unsigned int best(find_lsb(candidates));
+      uint64_t best_sig(def_sig[best]);
+      candidates ^= 1ull<<best;
+      while(candidates) {
+        unsigned int curr(find_lsb(candidates)); 
+        candidates ^= 1ull<<curr;
+        uint64_t sig(def_sig[curr]);
+        if(!(sig & ~best_sig)) {
+          // At least as good as the incumbent
+          best = curr;
+          best_sig = sig;
+        }
+      }
+      CG_ProcID p_id(procs[best]);
+      PUSH_INSTR(frag, BytecodeStream::TCALL, m, p_id);
+    } else {
+      int par_label;
+      auto p_it(sig_table[d.level+1].find(d.sig));
+      if(p_it != sig_table[d.level+1].end()) {
+        par_label = p_it->second;
+      } else {
+        par_label = GET_LABEL(cg);
+        int idx = nodes.size();
+        sig_table[d.level+1].insert(std::make_pair(d.sig, idx));
+        nodes.push_back(dispatch_node { par_label, d.level+1, d.sig});
+      }
+      uint64_t v_sig(d.sig & var_sig[d.level]);
+      if(v_sig == d.sig) {
+        PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(par_label));
+      } else {
+        int var_label;
+        auto v_it(sig_table[d.level+1].find(v_sig));
+        if(v_it != sig_table[d.level+1].end()) {
+          var_label = v_it->second;
+        } else {
+          var_label = GET_LABEL(cg);
+          int idx = nodes.size();
+          sig_table[d.level+1].insert(std::make_pair(v_sig, idx));
+          nodes.push_back(dispatch_node { var_label, d.level+1, v_sig});
+        }
+
+        PUSH_INSTR(frag, BytecodeStream::ISPAR, CG::r(sz));
+        PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(sz), CG::l(par_label));
+        PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(var_label));
+      }
+    }
+  }
+
   cg.append(d_proc.id(), m, frag);
 
   return d_proc;
@@ -967,6 +1048,16 @@ void show_frag(O& out, CodeGen& cg, std::vector<CG_Instr>& frag) {
         }
         break;
       }
+      case BytecodeStream::TCALL: {
+        out << " " << mode_name((BytecodeProc::Mode) i.params[0].value);
+        CG_ProcID p(CG_ProcID::of_val(i.params[1]));
+        if(p.is_builtin())
+          out << " " << cg._builtins[p.id()].first;
+        else
+          // out << " #P" << p.id(); 
+          out << " " << cg.bytecode[p.id()].ident;
+        break;
+      }
       default:
         for(CG_Value p : i.params)
           out << " " << show(p);
@@ -1161,10 +1252,8 @@ private:
     auto saved_env = cg.current_env;
     cg.current_env = CG_Env<CG::Binding>::spawn(nullptr);
     int saved_regs = cg.current_reg_count;
-    int saved_labels = cg.current_label_count;
 
     saved_regs = params.size();
-    saved_labels = 0;
 
     cg._exp_scope.clear();
     cg.mode_map.clear();
@@ -1193,7 +1282,6 @@ private:
 
     // now restore everything
     cg.current_reg_count = saved_regs;
-    cg.current_label_count = saved_labels;
 
     delete cg.current_env;
     cg.current_env = saved_env;
@@ -1204,10 +1292,8 @@ private:
     auto saved_env = cg.current_env;
     cg.current_env = CG_Env<CG::Binding>::spawn(nullptr);
     int saved_regs = cg.current_reg_count;
-    int saved_labels = cg.current_label_count;
 
     saved_regs = params.size();
-    saved_labels = 0;
 
     cg._exp_scope.clear();
     cg.mode_map.clear();
@@ -1229,7 +1315,6 @@ private:
     PUSH_INSTR(frag, BytecodeStream::RET);
 
     cg.current_reg_count = saved_regs;
-    cg.current_label_count = saved_labels;
     // then restore everything.
     delete cg.current_env;
     cg.current_env = saved_env;
