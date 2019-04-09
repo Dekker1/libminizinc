@@ -21,11 +21,6 @@ namespace MiniZinc {
     enum Id {
       ALIAS,
       MK_INTVAR,
-      LB,
-      UB,
-//      DOM,
-//      INTERSECT,
-//      UNION,
       BOOLNOT,
       CLAUSE,
       FORALL,
@@ -118,38 +113,6 @@ namespace MiniZinc {
         }
         return PS_OK;
       }
-    };
-
-    class Lb : public PrimitiveMap::Primitive {
-    public:
-      Lb(void) : PrimitiveMap::Primitive("lb",PrimitiveMap::LB,1) {}
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) const {
-        assert(args.size()==1);
-        if (args[0].isInt()) {
-          i.pushAgg(args[0], -1);
-        } else {
-          Definition* d = args[0].toDef();
-          Vec* v = d->domain().toVec();
-          assert(v->size() > 0);
-          i.pushAgg((*v)[0],-1);
-        }
-      };
-    };
-
-    class Ub : public PrimitiveMap::Primitive {
-    public:
-      Ub(void) : PrimitiveMap::Primitive("ub",PrimitiveMap::UB,1) {}
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) const {
-        assert(args.size()==1);
-        if (args[0].isInt()) {
-          i.pushAgg(args[0], -1);
-        } else {
-          Definition* d = args[0].toDef();
-          Vec* v = d->domain().toVec();
-          assert(v->size() > 0);
-          i.pushAgg((*v)[v->size()-1],-1);
-        }
-      };
     };
 
     class Clause : public PrimitiveMap::Primitive {

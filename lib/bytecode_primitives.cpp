@@ -17,8 +17,6 @@ namespace MiniZinc {
     Alias alias;
     BoolNot boolnot;
     MkIntVar mk_intvar;
-    Lb lb;
-    Ub ub;
     Clause clause;
     Forall forall;
     Exists exists;
@@ -27,7 +25,7 @@ namespace MiniZinc {
     LinExp linexp;
     
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &lb, &ub, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &linexp
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &linexp
     };
   }
   

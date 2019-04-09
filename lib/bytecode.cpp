@@ -14,6 +14,7 @@
 
 #include <minizinc/model.hh>
 #include <minizinc/prettyprinter.hh>
+#include <minizinc/iter.hh>
 
 #include <iostream>
 #include <sstream>
@@ -640,6 +641,36 @@ namespace MiniZinc {
           oss << "GET_VEC R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
         }
           break;
+        case BytecodeStream::LB:
+        {
+          oss << "LB R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::UB:
+        {
+          oss << "UB R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::DOM:
+        {
+          oss << "DOM R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::INTERSECTION:
+        {
+          oss << "INTERSECTION R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::UNION:
+        {
+          oss << "UNION R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::INTERSECT_DOMAIN:
+        {
+          oss << "INTERSECT_DOMAIN R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
         case BytecodeStream::RET:
         {
           oss << "RET\n";
@@ -1041,6 +1072,188 @@ namespace MiniZinc {
           Val v = Val::follow_alias(this, frame->reg[r1][frame->reg[r2]().toInt()-1]);
           frame->reg.assign(this, r3, v);
           DBG_INTERPRETER(" R" << r3 <<  "(" << v.toString() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::LB:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("LB R" << r1  << "(" << frame->reg[r1].toString() << ")");
+          Val v = Val::follow_alias(this, frame->reg[r1]);
+          if (v.isInt()) {
+            frame->reg.assign(this, r2, v);
+          } else if (v.isDef()) {
+            Definition* def = v.toDef();
+            if (def->domain().isVec()) {
+              Val lb = (*def->domain().toVec())[0];
+              frame->reg.assign(this, r2, lb);
+              DBG_INTERPRETER(" R" << r2 <<  "(" << lb.toString() << ")" <<  "\n");
+            } else {
+              throw Error("Error: lb on unbounded variable");
+            }
+          } else {
+            throw Error("Error: lb on invalid type");
+          }
+        }
+          break;
+        case BytecodeStream::UB:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("UB R" << r1  << "(" << frame->reg[r1].toString() << ")");
+          Val v = Val::follow_alias(this, frame->reg[r1]);
+          if (v.isInt()) {
+            frame->reg.assign(this, r2, v);
+          } else if (v.isDef()) {
+            Definition* def = v.toDef();
+            if (def->domain().isVec()) {
+              Val ub = (*def->domain().toVec())[def->domain().toVec()->size()-1];
+              frame->reg.assign(this, r2, ub);
+              DBG_INTERPRETER(" R" << r2 <<  "(" << ub.toString() << ")" <<  "\n");
+            } else {
+              throw Error("Error: ub on unbounded variable");
+            }
+          } else {
+            throw Error("Error: ub on invalid type");
+          }
+        }
+          break;
+        case BytecodeStream::DOM:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("DOM R" << r1  << "(" << frame->reg[r1].toString() << ")");
+          Val v = Val::follow_alias(this, frame->reg[r1]);
+          if (v.isInt()) {
+            frame->reg.assign(this, r2, Val(Vec::a(this, newIdent(), {v,v})));
+          } else if (v.isDef()) {
+            Definition* def = v.toDef();
+            if (def->domain().isVec()) {
+              frame->reg.assign(this, r2, def->domain());
+              DBG_INTERPRETER(" R" << r2 <<  "(" << def->domain().toString() << ")" <<  "\n");
+            } else {
+              throw Error("Error: dom on unbounded variable");
+            }
+          } else {
+            throw Error("Error: dom on invalid type");
+          }
+        }
+          break;
+        case BytecodeStream::INTERSECTION:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("INTERSECTION R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
+          Val v1 = Val::follow_alias(this, frame->reg[r1]);
+          Val v2 = Val::follow_alias(this, frame->reg[r2]);
+          Val result_val;
+          if (v1.isInt()) {
+            result_val = v2;
+          } else if (v2.isInt()) {
+            result_val = v1;
+          } else {
+            Vec* s1 = v1.toVec();
+            Vec* s2 = v2.toVec();
+            VecSetRanges vsr1(s1);
+            VecSetRanges vsr2(s2);
+            Ranges::Inter<IntVal,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
+            std::vector<Val> result;
+            for (; inter(); ++inter) {
+              result.push_back(inter.min());
+              result.push_back(inter.max());
+            }
+            result_val = Val(Vec::a(this, newIdent(), result));
+          }
+          frame->reg.assign(this, r3, result_val);
+          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::UNION:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("UNION R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
+          Val v1 = Val::follow_alias(this, frame->reg[r1]);
+          Val v2 = Val::follow_alias(this, frame->reg[r2]);
+          Val result_val;
+          if (v1.isInt()) {
+            result_val = v1;
+          } else if (v2.isInt()) {
+            result_val = v2;
+          } else {
+            Vec* s1 = v1.toVec();
+            Vec* s2 = v2.toVec();
+            VecSetRanges vsr1(s1);
+            VecSetRanges vsr2(s2);
+            Ranges::Union<IntVal,VecSetRanges,VecSetRanges> union_r(vsr1,vsr2);
+            std::vector<Val> result;
+            for (; union_r(); ++union_r) {
+              result.push_back(union_r.min());
+              result.push_back(union_r.max());
+            }
+            result_val = Val(Vec::a(this, newIdent(), result));
+          }
+          frame->reg.assign(this, r3, result_val);
+          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString() << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::INTERSECT_DOMAIN:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("INTERSECT_DOMAIN R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
+          Val v1 = Val::follow_alias(this, frame->reg[r1]);
+          Val v2 = Val::follow_alias(this, frame->reg[r2]);
+
+          Val dom_val;
+          if (v1.isDef()) {
+            dom_val = v1.toDef()->domain();
+          } else {
+            throw Error("Error: INTERSECT_DOMAIN on invalid type");
+          }
+
+          bool did_update = false;
+          Val result_val;
+          if (dom_val.isInt()) {
+            if (v2.isVec()) {
+              result_val = v2;
+              did_update = true;
+            }
+          } else if (v2.isVec()) {
+            Vec* s1 = dom_val.toVec();
+            Vec* s2 = v2.toVec();
+            VecSetRanges vsr1(s1);
+            VecSetRanges vsr2(s2);
+            Ranges::Inter<IntVal,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
+            std::vector<Val> result;
+            for (; inter(); ++inter) {
+              result.push_back(inter.min());
+              result.push_back(inter.max());
+            }
+            if (result.size() != s1->size()) {
+              did_update = true;
+            } else {
+              for (unsigned int i=0; i<result.size(); i++) {
+                if (result[i]() != (*s1)[i]()) {
+                  did_update = true;
+                  break;
+                }
+              }
+            }
+            if (did_update) {
+              result_val = Val(Vec::a(this, newIdent(), result));
+            }
+          }
+          if (did_update) {
+            bool assigned = result_val.toVec()->size()==2 && (*result_val.toVec())[0]()==(*result_val.toVec())[1]();
+            v1.toDef()->domain(this, result_val);
+            schedule(v1.toDef(), assigned ? Definition::SEV_VAL : Definition::SEV_DOM);
+          }
+          frame->reg.assign(this, r3, result_val);
+          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::RET:
@@ -1825,6 +2038,33 @@ namespace MiniZinc {
         cur_code.addReg(r2);
       } else if (instrRRR(line,"GET_VEC",r1,r2,r3)) {
         cur_code.addInstr(BytecodeStream::GET_VEC);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+        cur_code.addReg(r3);
+      } else if (instrRR(line,"LB",r1,r2)) {
+        cur_code.addInstr(BytecodeStream::LB);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+      } else if (instrRR(line,"UB",r1,r2)) {
+        cur_code.addInstr(BytecodeStream::UB);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+      } else if (instrRR(line,"DOM",r1,r2)) {
+        cur_code.addInstr(BytecodeStream::DOM);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+      } else if (instrRRR(line,"INTERSECTION",r1,r2,r3)) {
+        cur_code.addInstr(BytecodeStream::INTERSECTION);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+        cur_code.addReg(r3);
+      } else if (instrRRR(line,"UNION",r1,r2,r3)) {
+        cur_code.addInstr(BytecodeStream::UNION);
+        cur_code.addReg(r1);
+        cur_code.addReg(r2);
+        cur_code.addReg(r3);
+      } else if (instrRRR(line,"INTERSECT_DOMAIN",r1,r2,r3)) {
+        cur_code.addInstr(BytecodeStream::INTERSECT_DOMAIN);
         cur_code.addReg(r1);
         cur_code.addReg(r2);
         cur_code.addReg(r3);

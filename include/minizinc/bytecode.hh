@@ -68,6 +68,15 @@ namespace MiniZinc {
       LENGTH,  // R1 -> R2: put length of vector in R1 into R2
       GET_VEC, // R1, R2 -> R3: put element R2 of vector in R1 into R3
       
+      LB, // R1 -> R2: put lower bound of value in R1 into R2
+      UB, // R1 -> R2: put upper bound of value in R1 into R2
+      DOM, // R1 -> R2: put domain of value in R1 into R2
+      
+      INTERSECTION, // R1, R2 -> R3: put intersection of sets in R1 and R2 into R3
+      UNION, // R1, R2 -> R3: put union of sets in R1 and R2 into R3
+      
+      INTERSECT_DOMAIN, // R1, R2 -> R3: Update domain of R1 with set R2, place result in R3
+      
       OPEN_AGGREGATION, // i: Create a new aggregation context with symbol i
       CLOSE_AGGREGATION,  // Close current aggregation context, put result onto context above
       SIMPLIFY_LIN, // R1 -> R2, R3, R4: simplify linear expression in R1, return coefficients (R2), variables (R3), constant (R4)
@@ -348,6 +357,28 @@ namespace MiniZinc {
       return true;
     }
   };
+  
+  /// Iterator over a Vec interpreted as a range set
+  class VecSetRanges {
+    /// The vector
+    const Vec* rs;
+    /// The current range
+    int n;
+  public:
+    /// Constructor
+    VecSetRanges(const Vec* r) : rs(r), n(0) {}
+    /// Check if iterator is still valid
+    bool operator()(void) const { return n+1<rs->size(); }
+    /// Move to next range
+    void operator++(void) { n+=2; }
+    /// Return minimum of current range
+    IntVal min(void) const { return (*rs)[n](); }
+    /// Return maximum of current range
+    IntVal max(void) const { return (*rs)[n+1](); }
+    /// Return width of current range
+    IntVal width(void) const { return (*rs)[n+1]()-(*rs)[n]()+1; }
+  };
+
   
   inline
   Val::~Val(void) { }
