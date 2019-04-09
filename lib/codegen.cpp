@@ -188,8 +188,9 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       return;
     case BOT_PLUS:
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_plus"), CG::r(r_lhs), CG::r(r_rhs));
+      return;
     case BOT_MINUS:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_plus"), CG::r(r_lhs), CG::r(r_rhs));
+      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs));
       return;
     case BOT_MULT:
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_times"), CG::r(r_lhs), CG::r(r_rhs));
@@ -515,7 +516,7 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
           nodes.push_back(dispatch_node { var_label, d.level+1, v_sig});
         }
 
-        PUSH_INSTR(frag, BytecodeStream::ISPAR, CG::r(sz));
+        PUSH_INSTR(frag, BytecodeStream::ISPAR, CG::r(d.level), CG::r(sz));
         PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(sz), CG::l(par_label));
         PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(var_label));
       }
@@ -1345,6 +1346,7 @@ public:
         if(fun->e()->type().isbool()) {
           c.compile_pred(frag, fun->params(), m, fun->e());
         } else {
+          assert(m == BytecodeProc::ROOT);
           c.compile_fun(frag, fun->params(), fun->e());
         }
         cg.append(proc.id(), m, frag);
@@ -1682,9 +1684,45 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   Expression* e = call->arg(0);
   // Components of the sum may be partial.
-  // TODO
-  TODO();
-  return CG::Binding(0, nullptr);
+  // TODO: Specialise for literals and comprehensions.
+  CG::Binding b_elts(CG::bind(e, cg, frag));
+  int r_A(b_elts.first);
+  {
+  OPEN_OTHER(cg, frag);
+  int r_one(CG::locate_immi(1, cg, frag));
+  int r_sz(GET_REG(cg));
+  int r_elt(GET_REG(cg));
+  int r_acc(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_A), CG::r(r_sz));
+  int l_hd(GET_LABEL(cg));
+  int l_end(GET_LABEL(cg));
+
+  // Slightly cheeky here -- if this fails, we know the accumulator should be zero.
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_acc));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_acc), CG::l(l_end));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_acc));
+  // Second element.
+  PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_elt), CG::l(l_end));
+  PUSH_LABEL(frag, l_hd);
+
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_elt));
+  // OPEN_OTHER(cg, frag); // maybe needed?
+  PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_plus"), CG::r(r_elt), CG::r(r_acc));
+  // CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_acc));
+  
+  PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_elt), CG::l(l_hd));
+  PUSH_LABEL(frag, l_end);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_acc));
+  CLOSE_AGG(cg, frag);
+  }
+  int r_ret(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
+  return CG::Binding(r_ret, b_elts.second);
 }
 
 CG_Cond::T* eval_assert_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -1719,6 +1757,46 @@ CG::Binding bind_assert_g(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG::bind(call->arg(2), cg, frag);
 }
 
+CG::Binding bind_array1d(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  if(call->n_args() == 1) {
+    return CG::bind(call->arg(0), cg, frag);
+  } else {
+    assert(call->n_args() == 2);
+    return CG::bind(call->arg(1), cg, frag);
+  }
+}
+
+CG::Binding bind_length(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+  CG::Binding b(CG::bind(call->arg(0), cg, frag));
+  int r(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b.first), CG::r(r));
+  return CG::Binding(r, b.second);
+}
+
+CG::Binding bind_indexset(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+  CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
+  {
+  OPEN_VEC(cg, frag);
+  int r(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_arg.first), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+  CLOSE_AGG(cg, frag);
+  }
+  int r(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  return CG::Binding(r, b_arg.second);
+}
+
+CG::Binding bind_bool2int(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+  int r_e(CG::force(CG::compile(call->arg(0), cg, frag), cg, frag));
+  return CG::Binding(r_e, nullptr);
+}
+
 builtin_table init_builtins(void) {
   builtin_table tbl;
   Constants& c(constants());
@@ -1726,6 +1804,9 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair(c.ids.exists, builtin_t { eval_exists, bind_error_g } ));
   tbl.insert(std::make_pair(c.ids.forall, builtin_t { eval_forall, bind_error_g } ));
   tbl.insert(std::make_pair(c.ids.assert, builtin_t { eval_assert_b, bind_assert_g } ));
+  tbl.insert(std::make_pair("array1d", builtin_t { eval_error_b, bind_array1d } ));
+  tbl.insert(std::make_pair("index_set", builtin_t { eval_error_b, bind_indexset } ));
+  tbl.insert(std::make_pair(c.ids.bool2int, builtin_t { eval_error_b, bind_bool2int } ));
   return tbl;
 }
 builtin_table& builtins(void) {
@@ -1917,8 +1998,8 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int l_end(GET_LABEL(cg));
   for(int ii = 0; ii < sz; ++ii) {
     int l_cont(GET_LABEL(cg));
-    // PUSH_INSTR(frag, BytecodeStream::ISPAR, CG::r(r_cond[ii]), CG::r(r_test));
-    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r_test)); // ISPAR is broken for now.
+    PUSH_INSTR(frag, BytecodeStream::ISPAR, CG::r(r_cond[ii]), CG::r(r_test));
+    // PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r_test)); // ISPAR is broken for now.
     PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_cont));
     int l_skip(GET_LABEL(cg));
     // Condition is par. If the condition is false, we skip this one.
@@ -2118,16 +2199,21 @@ CG::Binding CG::bind(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int sz = call->n_args();
   std::vector<CG_Value> r_arg(sz);
   for(int ii = 0; ii < sz; ++ii) {
-    Binding r_bind(CG::bind(call->arg(ii), cg, frag));
-    r_arg[ii] = CG::r(r_bind.first);
-    if(r_bind.second)
-      p_arg.push_back(r_bind.second);
+    if(call->arg(ii)->type().isbool()) {
+      int r_i(CG::force(CG::compile(call->arg(ii), cg, frag), cg, frag));
+      r_arg[ii] = CG::r(r_i);
+    } else {
+      Binding r_bind(CG::bind(call->arg(ii), cg, frag));
+      r_arg[ii] = CG::r(r_bind.first);
+      if(r_bind.second)
+        p_arg.push_back(r_bind.second);
+    }
   }
   // p_arg.push_back(CG_Cond::call(find_call_pred(cg, call), ctx, r_arg));
 
   // Bind the value part.
   int r_ret(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, find_call_fun(cg, call, BytecodeProc::ROOT), r_arg);
+  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, call, BytecodeProc::ROOT), r_arg);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
 
   return std::make_pair(r_ret, CG_Cond::forall(ctx, p_arg));

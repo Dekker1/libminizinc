@@ -131,6 +131,12 @@ namespace MiniZinc {
       update(call.arg(0), Use, BytecodeProc::ROOT);
       if(sz == 3)
         update(call.arg(2), o, m);
+    } else if(call.id() == "array1d") {
+      // No-op
+      update(call.arg(sz-1), o, m);
+    } else if(call.id() == "index_set" || call.id() == "length") {
+      if(o == Def)
+        update(call.arg(0), Def, m);
     } else {
       // Propagate to the other functions.
       for(int ii = 0; ii < sz; ++ii) {
