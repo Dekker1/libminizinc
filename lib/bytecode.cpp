@@ -987,14 +987,25 @@ namespace MiniZinc {
             frame->reg.assign(this, r2, IntVal(1));
           } else if (v.isDef()) {
             Definition* def = v.toDef();
-            if (def->domain().isInt()) {
-              frame->reg.assign(this, r1, def->domain());
-              frame->reg.assign(this, r2, IntVal(1));
-            } else {
+            // TODO: Fix domain check when we have domains!
+//            if (def->domain().isInt()) {
+//              frame->reg.assign(this, r1, def->domain());
+//              frame->reg.assign(this, r2, IntVal(1));
+//            } else {
               frame->reg.assign(this, r2, IntVal(0));
-            }
+//            }
           } else {
-            frame->reg.assign(this, r2, IntVal(0));
+            assert(v.isVec());
+            IntVal ret = IntVal(1);
+            for (int i = 0; i < v.size(); ++i) {
+              assert(!v[i].isVec());
+              if (v[i].isDef()) {
+                // TODO: Fix domain check when we have domains!
+                ret = IntVal(0);
+                break;
+              }
+            }
+            frame->reg.assign(this, r2, ret);
           }
           DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
