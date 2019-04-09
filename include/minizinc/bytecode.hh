@@ -63,8 +63,8 @@ namespace MiniZinc {
       NOT,
       XOR,
       
-      ISPAR,   // R: whether value in R is not a variable
-      ISEMPTY, // R: whether vector in R is empty
+      ISPAR,   // R1 -> R2: put whether value in R1 is not a variable into R2
+      ISEMPTY, // R1 -> R2: put whether vector in R1 is empty into R2
       LENGTH,  // R1 -> R2: put length of vector in R1 into R2
       GET_VEC, // R1, R2 -> R3: put element R2 of vector in R1 into R3
       
