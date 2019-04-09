@@ -887,11 +887,17 @@ int _force_cond(CG_Cond::T* cond, CodeGen& cg, CG_Builder& frag) {
       return cond->reg;
     case CG_Cond::CC_Call: { // Evaluate the call, put the result in a register.
       CG_Cond::C_Call* call(static_cast<CG_Cond::C_Call*>(cond));
-      OPEN_OTHER(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::CALL, call->m, call->p, call->params);
-      CLOSE_AGG(cg, frag);
-      int r = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      int r;
+      if(call->m != BytecodeProc::ROOT) {
+        OPEN_OTHER(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::CALL, call->m, call->p, call->params);
+        CLOSE_AGG(cg, frag);
+        r = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      } else {
+        PUSH_INSTR(frag, BytecodeStream::CALL, call->m, call->p, call->params);
+        r = CG::locate_immi(1, cg, frag);
+      }
       return r;
     }
     case CG_Cond::CC_And: {
@@ -1333,6 +1339,7 @@ public:
     Compile c(cg);
     OPEN_OTHER(cg, c.root_frag);
     iterItems(c, m);
+    PUSH_INSTR(c.root_frag, BytecodeStream::RET);
 
     // Now generate procedures for any necessary function/predicate bodies.
     while(!cg.pending_bodies.empty()) {
@@ -1358,7 +1365,6 @@ public:
     }
 
     // And finally, add the entry function.
-    PUSH_INSTR(c.root_frag, BytecodeStream::RET);
     int main_proc = cg.bytecode.size();
     cg.bytecode.push_back(CG_Proc("main", 0));
     cg.append(main_proc, BytecodeProc::ROOT, c.root_frag);
@@ -1915,6 +1921,7 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(idx[0]->type().ispar()) {
     // Just read the vector, and get the appropriate element.
     PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idxs[0]), CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
   } else {
     PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_element"), CG::r(r_A), CG::r(r_idxs[0]));
   }
