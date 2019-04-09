@@ -805,7 +805,7 @@ struct CodeGen {
   SigMap<CG_ProcID>::t dispatch;
 
   std::unordered_map<FunctionI*, CG_ProcID> fun_bodies;
-  std::vector< std::pair<FunctionI*, BytecodeProc::Mode> > pending_bodies;
+  std::vector< std::pair<FunctionI*, std::pair<BytecodeProc::Mode, BytecodeProc::Mode> > > pending_bodies;
   /*
   std::vector< std::pair<Expression*, unsigned int> > let_queue;
   std::vector< std::pair<FunctionI*, unsigned int> > fun_queue;

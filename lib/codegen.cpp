@@ -406,9 +406,12 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
   auto it(cg.dispatch.find(sig));
   std::vector<FunctionI*> args;
 
+  BytecodeProc::Mode call_mode(call->type().isbool() ? m : BytecodeProc::FUN);
+  BytecodeProc::Mode def_mode(call->type().isbool() ? m : BytecodeProc::ROOT);
+
   if(it != cg.dispatch.end()) {
     CG_ProcID d_proc(it->second);
-    if(d_proc.is_builtin() || cg.bytecode[d_proc.id()].is_available(m))
+    if(d_proc.is_builtin() || cg.bytecode[d_proc.id()].is_available(call_mode))
       return d_proc;
   }
 
@@ -421,9 +424,9 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
     CG_ProcID body(cg.resolve_fun(b));
     // Force the body to be created
     procs.push_back(body);
-    if(!cg.bytecode[body.id()].is_available(m)) {
-      cg.bytecode[body.id()].body(m);
-      cg.pending_bodies.push_back(std::make_pair(b, m));
+    if(!cg.bytecode[body.id()].is_available(call_mode)) {
+      cg.bytecode[body.id()].body(call_mode);
+      cg.pending_bodies.push_back(std::make_pair(b, std::make_pair(call_mode, def_mode)));
     }
   }
   
@@ -489,7 +492,7 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
         }
       }
       CG_ProcID p_id(procs[best]);
-      PUSH_INSTR(frag, BytecodeStream::TCALL, m, p_id);
+      PUSH_INSTR(frag, BytecodeStream::TCALL, call_mode, p_id);
     } else {
       int par_label;
       auto p_it(sig_table[d.level+1].find(d.sig));
@@ -523,7 +526,7 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
     }
   }
 
-  cg.append(d_proc.id(), m, frag);
+  cg.append(d_proc.id(), call_mode, frag);
 
   return d_proc;
 }
@@ -1338,18 +1341,19 @@ public:
       
       FunctionI* fun(p.first);
       debugprint(fun);
-      Mode m(p.second);
+      Mode call_mode(p.second.first);
+      Mode def_mode(p.second.second);
       // Find the body.
       if(fun->e()) {
         CG_ProcID proc(cg.resolve_fun(fun));
         CG_Builder frag;
         if(fun->e()->type().isbool()) {
-          c.compile_pred(frag, fun->params(), m, fun->e());
+          c.compile_pred(frag, fun->params(), def_mode, fun->e());
         } else {
-          assert(m == BytecodeProc::ROOT);
+          assert(def_mode == BytecodeProc::ROOT);
           c.compile_fun(frag, fun->params(), fun->e());
         }
-        cg.append(proc.id(), m, frag);
+        cg.append(proc.id(), call_mode, frag);
       }
     }
 
