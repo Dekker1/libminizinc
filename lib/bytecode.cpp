@@ -184,7 +184,7 @@ namespace MiniZinc {
       auto mode = static_cast<BytecodeProc::Mode>(d->mode());
       if (proc.name == "mk_intvar") {
         // Construct domain
-        Val dom = d->arg(0);
+        Val dom = d->domain();
         auto dom_set = dom.isVec() ? new SetLit(Location().introduce(), IntSetVal::a(dom[0](), dom[1]())) : nullptr;
         auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
         auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
@@ -323,6 +323,36 @@ namespace MiniZinc {
     }
   }
 
+  void
+  Definition::domain(Interpreter* interpreter, Val newDomain) {
+    _domain.destroy(interpreter);
+    _domain = newDomain;
+    _domain.construct(interpreter);
+    bool assigned = newDomain.toVec()->size()==2 && (*newDomain.toVec())[0]()==(*newDomain.toVec())[1]();
+    interpreter->schedule(this, assigned ? Definition::SEV_VAL : Definition::SEV_DOM);
+  }
+  void
+  Definition::domain(Interpreter* interpreter, const std::vector<Val>& newDomain) {
+    if (_domain.isInt()) {
+      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), newDomain)));
+    } else {
+      bool did_update = false;
+      Vec* d = _domain.toVec();
+      if (newDomain.size() != d->size()) {
+        did_update = true;
+      } else {
+        for (unsigned int i=0; i<newDomain.size(); i++) {
+          if (newDomain[i]() != (*d)[i]()) {
+            did_update = true;
+            break;
+          }
+        }
+      }
+      if (did_update) {
+        domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), newDomain)));
+      }
+    }
+  }
   
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   
@@ -1019,13 +1049,13 @@ namespace MiniZinc {
             frame->reg.assign(this, r2, IntVal(1));
           } else if (v.isDef()) {
             Definition* def = v.toDef();
-            // TODO: Fix domain check when we have domains!
-//            if (def->domain().isInt()) {
-//              frame->reg.assign(this, r1, def->domain());
-//              frame->reg.assign(this, r2, IntVal(1));
-//            } else {
+            if (def->domain().isVec() && def->domain().toVec()->size()==2 &&
+                (*def->domain().toVec())[0]==(*def->domain().toVec())[1]) {
+              frame->reg.assign(this, r1, (*def->domain().toVec())[0]);
+              frame->reg.assign(this, r2, IntVal(1));
+            } else {
               frame->reg.assign(this, r2, IntVal(0));
-//            }
+            }
           } else {
             assert(v.isVec());
             IntVal ret = IntVal(1);
@@ -1215,12 +1245,11 @@ namespace MiniZinc {
             throw Error("Error: INTERSECT_DOMAIN on invalid type");
           }
 
-          bool did_update = false;
           Val result_val;
           if (dom_val.isInt()) {
             if (v2.isVec()) {
               result_val = v2;
-              did_update = true;
+              v1.toDef()->domain(this, result_val);
             }
           } else if (v2.isVec()) {
             Vec* s1 = dom_val.toVec();
@@ -1233,24 +1262,8 @@ namespace MiniZinc {
               result.push_back(inter.min());
               result.push_back(inter.max());
             }
-            if (result.size() != s1->size()) {
-              did_update = true;
-            } else {
-              for (unsigned int i=0; i<result.size(); i++) {
-                if (result[i]() != (*s1)[i]()) {
-                  did_update = true;
-                  break;
-                }
-              }
-            }
-            if (did_update) {
-              result_val = Val(Vec::a(this, newIdent(), result));
-            }
-          }
-          if (did_update) {
-            bool assigned = result_val.toVec()->size()==2 && (*result_val.toVec())[0]()==(*result_val.toVec())[1]();
-            v1.toDef()->domain(this, result_val);
-            schedule(v1.toDef(), assigned ? Definition::SEV_VAL : Definition::SEV_DOM);
+            v1.toDef()->domain(this, result);
+            result_val = v1.toDef()->domain();
           }
           frame->reg.assign(this, r3, result_val);
           DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString() << ")" <<  "\n");

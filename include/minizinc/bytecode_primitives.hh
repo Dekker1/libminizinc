@@ -48,10 +48,22 @@ namespace MiniZinc {
       const Id& ident(void) const { return _ident; }
       int n_args(void) const { return _n_args; }
       const std::string& name(void) const { return _name; }
-      virtual PropStatus subscribe(Interpreter& i, Definition* d) const { assert(false); };
-      virtual void unsubscribe(Interpreter& i, Definition* d) const { assert(false); };
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const { assert(false); };
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) const { assert(false); };
+      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        assert(false);
+        throw Error("internal error");
+      };
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {
+        assert(false);
+        throw Error("internal error");
+      };
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        assert(false);
+        throw Error("internal error");
+      };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) const {
+        assert(false);
+        throw Error("internal error");
+      };
     };
   protected:
     std::vector<Primitive*> _p;
@@ -60,7 +72,11 @@ namespace MiniZinc {
   public:
     PrimitiveMap(void);
     Primitive* operator [](const std::string& s) { return _s[s]; }
-    Primitive* operator [](int i) { assert(i >= 0 && i <= MAX_ID); assert(_p.size()==MAX_ID+1); return _p[i]; }
+    Primitive* operator [](int i) {
+      assert(i >= 0 && i <= MAX_ID);
+      assert(_p.size()==MAX_ID+1);
+      return _p[i];
+    }
     
     std::vector<Primitive*>::iterator begin(void) { return _p.begin(); }
     std::vector<Primitive*>::iterator end(void) { return _p.end(); }
@@ -76,7 +92,10 @@ namespace MiniZinc {
       Alias(void) : PrimitiveMap::Primitive("<alias>",PrimitiveMap::ALIAS,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const { return PS_OK; }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {}
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const { assert(false); }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        assert(false);
+        throw Error("internal error");
+      }
     };
 
     class BoolNot : public PrimitiveMap::Primitive {
@@ -102,16 +121,18 @@ namespace MiniZinc {
     public:
       MkIntVar(void) : PrimitiveMap::Primitive("mk_intvar",PrimitiveMap::MK_INTVAR,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        return propagate(i,d);
-      }
-      virtual void unsubscribe(Interpreter& i, Definition* d) const {
-      }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        if (d->domain().isInt() && d->arg(0).isVec()) {
+        assert(d->domain().isInt());
+        if (d->arg(0).isVec()) {
           // Propagate declared domain to definition
           d->domain(&i, d->arg(0));
         }
         return PS_OK;
+      }
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {
+      }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        assert(false);
+        throw Error("internal error");
       }
     };
 

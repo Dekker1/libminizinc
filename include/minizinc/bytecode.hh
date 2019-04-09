@@ -499,11 +499,10 @@ namespace MiniZinc {
     Definition(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
   public:
     Val domain(void) const { return _domain; }
-    void domain(Interpreter* interpreter, Val newDomain) {
-      _domain.destroy(interpreter);
-      _domain = newDomain;
-      _domain.construct(interpreter);
-    }
+    /// Set domain to \a newDomain, schedule propagators
+    void domain(Interpreter* interpreter, Val newDomain);
+    /// Set domain to \a newDomain, schedule propagators
+    void domain(Interpreter* interpreter, const std::vector<Val>& newDomain);
     Val ann(void) const { return _ann; }
     int pred(void) const { return _pred; }
     char mode(void) const { return _mode; }
