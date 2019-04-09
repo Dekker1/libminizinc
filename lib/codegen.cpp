@@ -223,9 +223,11 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       return;
     case BOT_DOTDOT:
       // The values in r_lhs and r_rhs had better be IMMIs.
+      OPEN_OTHER(cg, frag);
       OPEN_VEC(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_lhs));
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_rhs));
+      CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       return;
     default:
@@ -1788,12 +1790,14 @@ CG::Binding bind_indexset(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
   {
+  OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
   PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_arg.first), CG::r(r));
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+  CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
   }
   int r(GET_REG(cg));
@@ -1839,6 +1843,7 @@ CG::Binding CG::bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   IntSetVal* s(l->isv());
   assert(s);
+  OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   int r_t(GET_REG(cg));
   for(int ii = 0; ii < s->size(); ++ii) {
@@ -1849,6 +1854,7 @@ CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(u), CG::r(r_t));
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
   }
+  CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
@@ -1880,9 +1886,11 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       p_vec.push_back(b_ii.second);
     }
   }
+  OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   for(int r_c : r_vec)
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+  CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
@@ -1931,9 +1939,11 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 int make_vec(CodeGen& cg, CG_Builder& frag, const std::vector<int>& regs) {
+  OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   for(int r : regs)
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+  CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
   int r_vec(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vec));
