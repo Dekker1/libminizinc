@@ -888,7 +888,7 @@ int _force_cond(CG_Cond::T* cond, CodeGen& cg, CG_Builder& frag) {
     case CG_Cond::CC_Call: { // Evaluate the call, put the result in a register.
       CG_Cond::C_Call* call(static_cast<CG_Cond::C_Call*>(cond));
       int r;
-      if(call->m != BytecodeProc::ROOT) {
+      if(call->m != BytecodeProc::ROOT && call->m != BytecodeProc::ROOT_NEG) {
         OPEN_OTHER(cg, frag);
         PUSH_INSTR(frag, BytecodeStream::CALL, call->m, call->p, call->params);
         CLOSE_AGG(cg, frag);
