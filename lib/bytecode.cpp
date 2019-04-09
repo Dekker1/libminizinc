@@ -47,7 +47,8 @@ namespace MiniZinc {
         if (i<d->size()-1)
           os << ", ";
       }
-      os << ")\n";
+      os << ")";
+      os << " domain: " << d->domain().toString() << "\n";
       if (!d->subscriptions().empty()) {
         os << "   subscriptions: ";
         for (auto& s : d->subscriptions()) {
@@ -661,11 +662,11 @@ namespace MiniZinc {
         {
           int p = reg(pc);
           oss << "BUILTIN " << p << " ";
-          int n=reg(pc);
-          oss << n;
-          for (int i=0; i<n; i++) {
+          oss << procs[p].nargs;
+          for (int i=0; i<procs[p].nargs; i++) {
             oss << " R" << reg(pc);
           }
+          oss << "\n";
         }
           break;
         case BytecodeStream::TCALL:
@@ -760,7 +761,7 @@ namespace MiniZinc {
   }
   void
   Interpreter::unsubscribe(Definition* d) {
-    if (d->pred() < _builtins.size()) {
+    if (d->pred() < primitiveMap().size()) {
       primitiveMap()[d->pred()]->unsubscribe(*this, d);
     }
   }
@@ -1137,15 +1138,15 @@ namespace MiniZinc {
         {
           int code = frame->bs->reg(frame->pc);
           assert(code >= 0);
-          assert(code < _builtins.size());
+          assert(code < primitiveMap().size());
           // this is a FlatZinc builtin
-          int n = frame->bs->reg(frame->pc);
+          int n = _procs[code].nargs;
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
             args[i].assign(this, frame->reg[r]);
           }
-          _builtins[code]->execute(*this, args);
+          primitiveMap()[code]->execute(*this, args);
         }
           break;
         case BytecodeStream::TCALL:
@@ -1615,6 +1616,7 @@ namespace MiniZinc {
       BytecodeProc bcp;
       bcp.name = p->name();
       bcp.nargs = p->n_args();
+      bcp.delay = false;
       DBG_INTERPRETER("add primitive " << bcp.name << " " << p->ident() << " " << p->n_args() << "\n");
       codes.push_back(bcp);
       procs.emplace(bcp.name, p->ident());
@@ -1889,6 +1891,24 @@ namespace MiniZinc {
         std::string rs1 = n0.substr(0, n0.find(' '));
         cur_toPatch.emplace_back(cur_code.size(), rs1);
         cur_code.addSmallInt(0); // placeholder
+      } else if (startsWith(line,"BUILTIN ")) {
+        cur_code.addInstr(BytecodeStream::BUILTIN);
+        size_t cur_pos = line.find(' ');
+        std::string n = line.substr(cur_pos+1);
+        std::string rs1 = n.substr(0, n.find(' '));
+        cur_toPatch.emplace_back(cur_code.size(), rs1);
+        cur_code.addSmallInt(0); // placeholder
+        n = n.substr(n.find(' '));
+        std::vector<int> args;
+        size_t pos = n.find(" R");
+        while (pos != std::string::npos) {
+          n = n.substr(pos+2);
+          args.push_back(std::stoi(n.substr(0,n.find(' '))));
+          pos = n.find(" R");
+        }
+        for(auto arg : args) {
+          cur_code.addReg(arg);
+        }
       } else if (instrR(line,"TRACE",r1)) {
         cur_code.addInstr(BytecodeStream::TRACE);
         cur_code.addReg(r1);

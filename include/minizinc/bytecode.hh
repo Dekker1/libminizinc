@@ -468,6 +468,11 @@ namespace MiniZinc {
     Definition(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
   public:
     Val domain(void) const { return _domain; }
+    void domain(Interpreter* interpreter, Val newDomain) {
+      _domain.destroy(interpreter);
+      _domain = newDomain;
+      _domain.construct(interpreter);
+    }
     Val ann(void) const { return _ann; }
     int pred(void) const { return _pred; }
     char mode(void) const { return _mode; }
@@ -810,11 +815,6 @@ namespace MiniZinc {
     size_t save_state(Interpreter* interpreter);
     void untrail(Interpreter* interpreter);
   };
-
-  class Builtin {
-  public:
-    virtual void execute(Interpreter& i, const std::vector<Val>& args) const = 0;
-  };
   
   class Interpreter {
     friend class Trail;
@@ -824,7 +824,6 @@ namespace MiniZinc {
     std::vector<BytecodeFrame> _stack;
     std::vector<AggregationCtx> _agg;
     std::vector<BytecodeProc>& _procs;
-    const std::vector<Builtin*>& _builtins;
     int _identCount;
     std::vector<CSETable> cse;
     std::vector<Definition*> delayed_calls;
@@ -834,8 +833,7 @@ namespace MiniZinc {
     Trail trail;
 
     Interpreter(std::vector<BytecodeProc>& procs,
-                const std::vector<Builtin*>& builtins,
-                const BytecodeFrame& f) : _procs(procs), _builtins(builtins), _identCount(0), cse(procs.size())
+                const BytecodeFrame& f) : _procs(procs), _identCount(0), cse(procs.size())
     {
       _stack.push_back(f);
     }

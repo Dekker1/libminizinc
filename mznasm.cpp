@@ -67,11 +67,9 @@ int main(int argc, const char** argv) {
       }
       std::cerr << "\n";
     }
-    // Built-in procedures
-    std::vector<Builtin*> builtins;
     // The main procedure is the last one in the file
     BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT]);
-    Interpreter interpreter(bs, builtins, frame);
+    Interpreter interpreter(bs, frame);
     if (verbose) {
       std::cerr << "Run:\n";
     }

@@ -20,6 +20,12 @@ namespace MiniZinc {
   public:
     enum Id {
       ALIAS,
+      MK_INTVAR,
+      LB,
+      UB,
+//      DOM,
+//      INTERSECT,
+//      UNION,
       BOOLNOT,
       CLAUSE,
       FORALL,
@@ -47,9 +53,10 @@ namespace MiniZinc {
       const Id& ident(void) const { return _ident; }
       int n_args(void) const { return _n_args; }
       const std::string& name(void) const { return _name; }
-      virtual PropStatus subscribe(Interpreter& i, Definition* d) const = 0;
-      virtual void unsubscribe(Interpreter& i, Definition* d) const = 0;
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const = 0;
+      virtual PropStatus subscribe(Interpreter& i, Definition* d) const { assert(false); };
+      virtual void unsubscribe(Interpreter& i, Definition* d) const { assert(false); };
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const { assert(false); };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) const { assert(false); };
     };
   protected:
     std::vector<Primitive*> _p;
@@ -94,6 +101,55 @@ namespace MiniZinc {
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+    };
+
+    class MkIntVar : public PrimitiveMap::Primitive {
+    public:
+      MkIntVar(void) : PrimitiveMap::Primitive("mk_intvar",PrimitiveMap::MK_INTVAR,1) {}
+      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        return propagate(i,d);
+      }
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {
+      }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        if (d->domain().isInt() && d->arg(0).isVec()) {
+          // Propagate declared domain to definition
+          d->domain(&i, d->arg(0));
+        }
+        return PS_OK;
+      }
+    };
+
+    class Lb : public PrimitiveMap::Primitive {
+    public:
+      Lb(void) : PrimitiveMap::Primitive("lb",PrimitiveMap::LB,1) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) const {
+        assert(args.size()==1);
+        if (args[0].isInt()) {
+          i.pushAgg(args[0], -1);
+        } else {
+          Definition* d = args[0].toDef();
+          Vec* v = d->domain().toVec();
+          assert(v->size() > 0);
+          i.pushAgg((*v)[0],-1);
+        }
+      };
+    };
+
+    class Ub : public PrimitiveMap::Primitive {
+    public:
+      Ub(void) : PrimitiveMap::Primitive("ub",PrimitiveMap::UB,1) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) const {
+        assert(args.size()==1);
+        if (args[0].isInt()) {
+          i.pushAgg(args[0], -1);
+        } else {
+          Definition* d = args[0].toDef();
+          Vec* v = d->domain().toVec();
+          assert(v->size() > 0);
+          i.pushAgg((*v)[v->size()-1],-1);
+        }
+      };
     };
 
     class Clause : public PrimitiveMap::Primitive {
