@@ -1046,7 +1046,7 @@ void show_frag(O& out, CodeGen& cg, std::vector<CG_Instr>& frag) {
 
   for(CG_Instr& i : frag) {
     if(i.tag&1) {
-      out << "l" << (i.tag>>1) << ":" << std::endl;
+      out << "l" << (i.tag>>1) << ": ";
       continue;
     }
 
