@@ -66,6 +66,15 @@ const char* instr_names[] = {
       "ISEMPTY",
       "LENGTH",
       "GET_VEC",
+
+      "LB",
+      "UB",
+      "DOM",
+
+      "INTERSECTION",
+      "UNION",
+
+      "INTERSECT_DOMAIN",
       
       "OPEN_AGGREGATION",
       "CLOSE_AGGREGATION",
