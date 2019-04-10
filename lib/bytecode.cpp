@@ -13,7 +13,6 @@
 #include <minizinc/bytecode_primitives.hh>
 
 #include <minizinc/model.hh>
-#include <minizinc/prettyprinter.hh>
 #include <minizinc/iter.hh>
 
 #include <iostream>
@@ -206,6 +205,7 @@ namespace MiniZinc {
         // Construct domain
         auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
         auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
+        vd->addAnnotation(constants().ann.output_var);
         auto vdi = new VarDeclI(Location().introduce(), vd);
         auto ret = vdmap.emplace(d->timestamp(), vd);
         fzn->addItem(vdi);
@@ -2268,8 +2268,12 @@ namespace MiniZinc {
 
   Model*
   Interpreter::toFZN() {
+    GCLock lock;
     if (!_agg.empty()) {
-      return Definition::toFZN(this, _agg.back().def_stack, _procs);
+      auto fzn = Definition::toFZN(this, _agg.back().def_stack, _procs);
+      // TODO: What solve item should we add?
+      fzn->addItem(SolveI::sat(Location().introduce()));
+      return fzn;
     }
     return nullptr;
   }

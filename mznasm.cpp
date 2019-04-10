@@ -83,7 +83,8 @@ int main(int argc, const char** argv) {
       interpreter.dumpState(std::cerr);
       std::cerr << "----------------" << std::endl;
       auto fzn = interpreter.toFZN();
-      debugprint(fzn);
+      MiniZinc::Printer p(std::cout,0); p.print(fzn);
+      std::cout.flush();
     }
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";
