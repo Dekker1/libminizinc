@@ -593,8 +593,12 @@ namespace MiniZinc {
   public:
     explicit WeakVal(const Val& val) {
       if(val.isRCO()) {
-        _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(val.toRCO()->timestamp()) | static_cast<ptrdiff_t>(1));
+        auto timestamp = val.timestamp();
+        // TODO: assert timestamp <= unboxed int
+        assert(timestamp > 0);
+        _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(timestamp) << 1 | static_cast<ptrdiff_t>(1));
       } else {
+        assert((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == 0);
         _v = val._v;
       }
     }
