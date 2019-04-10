@@ -168,6 +168,10 @@ namespace MiniZinc {
     _prev = this;
   }
 
+  std::map<const std::string, const std::string> negated_constraints = {
+      {"int_eq", "int_ne"}
+  };
+
   Model* Definition::toFZN(Interpreter* interpreter, Definition* head, const std::vector<BytecodeProc>& bs, Model* model) {
     GCLock lock;
     auto fzn = model ? model : new Model();
@@ -182,6 +186,12 @@ namespace MiniZinc {
       }
       BytecodeProc proc = bs[d->pred()];
       auto mode = static_cast<BytecodeProc::Mode>(d->mode());
+      std::string name = proc.name;
+      if (BytecodeProc::is_neg(mode)) {
+        auto it = negated_constraints.find(name);
+        assert(it != negated_constraints.end());
+        name = it->second;
+      }
       if (proc.name == "mk_intvar") {
         // Construct domain
         Val dom = d->domain();
@@ -191,18 +201,16 @@ namespace MiniZinc {
         auto vdi = new VarDeclI(Location().introduce(), vd);
         auto ret = vdmap.emplace(d->timestamp(), vd);
         fzn->addItem(vdi);
-      } else if (mode == BytecodeProc::ROOT) {
+      } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
         std::vector<Expression*> args(proc.nargs);
         for (int i = 0; i < proc.nargs; ++i) {
           Val v = Val::follow_alias(interpreter, d->arg(i));
           args[i] = v.toFZN(vdmap);
         }
-        auto c = new Call(Location().introduce(), proc.name, args);
+        auto c = new Call(Location().introduce(), name, args);
         auto ci = new ConstraintI(Location().introduce(), c);
         fzn->addItem(ci);
       } else {
-        assert(!BytecodeProc::is_neg(mode));
-        // TODO: Actual domain
         Val dom = d->arg(0);
         auto ti = new TypeInst(Location().introduce(), Type::varint());
         auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
@@ -215,14 +223,13 @@ namespace MiniZinc {
           args[i] = v.toFZN(vdmap);
         }
         args.back() = Val(d).toFZN(vdmap);
-        std::string name;
         if (mode == BytecodeProc::FUN) {
           name += "_reif";
         } else {
           assert(mode == BytecodeProc::IMP);
           name += "_imp";
         }
-        auto c = new Call(Location().introduce(), proc.name, args);
+        auto c = new Call(Location().introduce(), name, args);
         fzn->addItem(new ConstraintI(Location().introduce(), c));
       }
       if (d->defs())
