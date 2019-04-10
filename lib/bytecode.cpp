@@ -192,10 +192,18 @@ namespace MiniZinc {
         assert(it != negated_constraints.end());
         name = it->second;
       }
+      Val dom = d->domain();
+      SetLit* dom_set = nullptr;
+      if (dom.isVec()) {
+        assert(dom.size() >= 2 && dom.size() % 2 == 0);
+        std::vector<IntSetVal::Range> ranges;
+        for (int i = 0; i < dom.size(); i += 2) {
+          ranges.emplace_back(dom[i](), dom[i+1]());
+        }
+        dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+      }
       if (proc.name == "mk_intvar") {
         // Construct domain
-        Val dom = d->domain();
-        auto dom_set = dom.isVec() ? new SetLit(Location().introduce(), IntSetVal::a(dom[0](), dom[1]())) : nullptr;
         auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
         auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
         auto vdi = new VarDeclI(Location().introduce(), vd);
@@ -211,8 +219,7 @@ namespace MiniZinc {
         auto ci = new ConstraintI(Location().introduce(), c);
         fzn->addItem(ci);
       } else {
-        Val dom = d->arg(0);
-        auto ti = new TypeInst(Location().introduce(), Type::varint());
+        auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
         auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
         fzn->addItem(new VarDeclI(Location().introduce(), vd));
         auto ret = vdmap.emplace(d->timestamp(), vd);
