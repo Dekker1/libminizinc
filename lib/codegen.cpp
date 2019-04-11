@@ -881,10 +881,6 @@ void force_and_leaves(std::vector<int>& leaves, CG_Cond::T child, CodeGen& cg, C
     std::vector<CG_Cond::T>& children(static_cast<CG_Cond::C_And*>(p)->children);
     for(CG_Cond::T c : children)
       force_and_leaves(leaves, c, cg, frag);
-  } else if(p->kind() == CG_Cond::CC_Or && sign) {
-    std::vector<CG_Cond::T>& children(static_cast<CG_Cond::C_Or*>(p)->children);
-    for(CG_Cond::T c : children)
-      force_and_leaves(leaves, ~c, cg, frag);
   } else {
     leaves.push_back(CG::force(child ^ sign, cg, frag));
   }
@@ -905,10 +901,6 @@ void force_or_leaves(std::vector<int>& leaves, CG_Cond::T child, CodeGen& cg, CG
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));   
     p->reg[sign].reg = r;
     leaves.push_back(r);
-  } else if(p->kind() == CG_Cond::CC_Or && !sign) {
-    std::vector<CG_Cond::T>& children(static_cast<CG_Cond::C_Or*>(p)->children);
-    for(CG_Cond::T c : children)
-      force_or_leaves(leaves, c, cg, frag);
   } else if(p->kind() == CG_Cond::CC_And && sign) {
     std::vector<CG_Cond::T>& children(static_cast<CG_Cond::C_And*>(p)->children);
     for(CG_Cond::T c : children)
@@ -943,8 +935,7 @@ int _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
       r = CG::locate_immi(1, cg, frag);
     }
     return r;
-  } else if((p->kind() == CG_Cond::CC_And && !cond.sign())
-    || (p->kind() == CG_Cond::CC_Or && cond.sign())) {
+  } else if(p->kind() == CG_Cond::CC_And && !cond.sign()) {
     std::vector<int> leaves;
     force_and_leaves(leaves, cond, cg, frag);
     OPEN_OTHER(cg, frag);
@@ -954,8 +945,7 @@ int _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
     CLOSE_AGG(cg, frag);
     CLOSE_AGG(cg, frag);
   } else {
-    assert((p->kind() == CG_Cond::CC_And && cond.sign())
-      || (p->kind() == CG_Cond::CC_Or && !cond.sign()));
+    assert(p->kind() == CG_Cond::CC_And && cond.sign());
     std::vector<int> leaves;
     force_or_leaves(leaves, cond, cg, frag);
     OPEN_OTHER(cg, frag);
@@ -1169,24 +1159,22 @@ void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
     return;
   }
   std::vector<int> leaves;
-  switch(p->kind()) {
-    case CG_Cond::CC_And:  
-      // force_and_leaves(leaves, cond, cg, frag);
+  if(p->kind() == CG_Cond::CC_And) {
+    if(!sign) {
+      force_and_leaves(leaves, cond, cg, frag);
       OPEN_AND(cg, frag);
       for(auto r_l : leaves)
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_l));
       CLOSE_AGG(cg, frag);
-      break;
-    case CG_Cond::CC_Or:
-      // force_or_leaves(leaves, cond, cg, frag);
+    } else {
+      force_or_leaves(leaves, cond, cg, frag);
       OPEN_OR(cg, frag);
       for(auto r_l : leaves)
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_l));
       CLOSE_AGG(cg, frag);
-      break;
-    default:
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(CG::force(cond, cg, frag)));
-      break;
+    }
+  } else {
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(CG::force(cond, cg, frag)));
   }
 }
 
@@ -1677,7 +1665,12 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         CG::Binding b_param(CG::bind(param, cg, frag));
         int r_A(b_param.first);
         std::vector<int> p_A;
-        force_and_leaves(p_A, b_param.second, cg, frag);
+        if(!b_param.second.get()) {
+          if(b_param.second.sign())
+            return CG_Cond::T::fff();
+        } else  {
+          force_and_leaves(p_A, b_param.second, cg, frag);
+        }
         OPEN_OTHER(cg, frag);
         OPEN_AND(cg, frag);
         // First, push the constraints attached to A.

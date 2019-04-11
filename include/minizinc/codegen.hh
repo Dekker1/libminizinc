@@ -227,11 +227,10 @@ public:
 // We use CG_Cond to track the conditionality of values.
 struct CG_Cond {
   // FIXME: Currently not GC'd, so this will leak a bunch of memory.
-  enum Kind { CC_Reg, CC_Call, CC_And, CC_Or };
+  enum Kind { CC_Reg, CC_Call, CC_And };
   class C_Reg;
   class C_Call;
   class C_And;
-  class C_Or;
 
   struct cond_reg {
     cond_reg(void) : is_root(0), is_seen(0), reg(-1) { }
@@ -302,17 +301,6 @@ struct CG_Cond {
     Kind kind(void) const { return _kind; }
 
     C_And(BytecodeProc::Mode _m, std::vector<T>& _children)
-      : m(_m), children(_children) { }
-
-    BytecodeProc::Mode m;
-    std::vector<T> children;
-  };
-  class C_Or : public _T {
-  public:
-    static const Kind _kind = CC_Or;
-    Kind kind(void) const { return _kind; }
-
-    C_Or(BytecodeProc::Mode _m, std::vector<T>& _children)
       : m(_m), children(_children) { }
 
     BytecodeProc::Mode m;
@@ -400,43 +388,8 @@ struct CG_Cond {
     args.push_back(next);
     return _exists(m, args, rest...);
   }
-  static T _exists(BytecodeProc::Mode m, std::vector<T>& args) {
-    assert(args.size() > 0);
-    auto b(args.begin());
-    for(T e : args) {
-      // Check for true/false.
-      _T* p(e.get());
-      if(!p) {
-        if(!e.sign()) {
-          clear_seen(args.begin(), args.end());
-          return T::ttt();
-        }
-        continue;
-      }
-      // Check if x is globally true, or we've already seen ~x.
-      if(p->reg[e.sign()].is_root
-        || p->reg[1 - e.sign()].is_seen) {
-        clear_seen(args.begin(), args.end());
-        return T::ttt();
-      }
-      // If ~x is globally true, or we've already seen x, we can
-      // ignore it.
-      if(p->reg[e.sign()].is_seen
-        || p->reg[1 - e.sign()].is_root) {
-        continue;
-      }
-      // Now we've found something we need to keep.
-      (*b) = e;
-      ++b;
-    }
-    args.erase(b, args.end());
-    clear_seen(args.begin(), args.end());
-    if(args.size() == 0)
-      return T::fff();
-    if(args.size() == 1)
-      return args[0];
-    return T::of_ptr(new C_Or(m, args));
-  }
+  static T _exists(BytecodeProc::Mode m, std::vector<T>& args);
+
   template<typename ...Args>
   static T exists(BytecodeProc::Mode m, Args... args) {
     std::vector<T> vec;
@@ -566,6 +519,13 @@ struct CG {
   static CG_Cond::T compile(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
 };
 
+inline CG_Cond::T CG_Cond::_exists(BytecodeProc::Mode m, std::vector<T>& args) {
+  std::vector<T> c_args;
+  for(T e : args)
+    c_args.push_back(~e);
+  return ~T::of_ptr(new C_And(-CG::Mode(m), args));
+}
+
 // Partially compiled bytecode.
 struct CG_Proc {
   typedef std::vector<CG_Instr> body_t;
@@ -662,29 +622,6 @@ template<class T>
 struct SigMap {
   typedef std::unordered_map<CallSig, T, CallSig::HashSig, CallSig::EqSig> t;
 };
-
-// Handle for dealing with function stuff.
-/*
-class CG_FunID {
-  friend class CodeGen;
-  CG_FunID(int _f) : f(_f) { }
-
-  int f;
-};
-
-*/
-/*
-struct CG_FunInfo {
-  CG_FunInfo(FunctionI* _def)
-    : def(_def), is_total(false), available_modes(0) 
-  { }
-
-  FunctionI* def;
-  bool is_total;
-  unsigned char available_modes; // Bit-vector of instantiated modes.
-  std::vector<CG_Instr> bodies[BytecodeProc::MAX_MODE+1];
-};
-*/
 
 struct CG_FunMap {
   struct CG_FunDefn {
@@ -827,24 +764,14 @@ struct CodeGen {
   // Function resolution
   void register_function(FunctionI* f) { fun_map.add_body(f); }
 
-  /*
-  CG_ProcID resolve_val_fun(Call* c);
-  CG_ProcID resolve_pred_fun(Call* c, BytecodeProc::Mode m);
-  */
-  // std::make_pair<CG_ProcID, CG_ProcID> resolve_fun(Call* c, BytecodeProc::Mode m);
-
   CG_ProcID resolve_fun(FunctionI* f);
-  // CG_ProcID resolve_val_def(FunctionI* f);
+  // CG_ProcID resolve_fun_pred(FunctionI* f);
   CG_ProcID resolve_pred_def(FunctionI* f, BytecodeProc::Mode m);
 
   std::vector< CG_Proc > bytecode; // Bytecode we've built
 
-  // Procedures
-  // std::vector<std::pair<proc_id, CallSig> > proc_queue; // Typed calls yet to be compiled
-  // std::unordered_map<CallSig, proc_id> proc_map; // call -> proc
   inline CG_Env<Binding>& env(void) { return *current_env; }
 
-  // proc_id current_proc; // Procedure we're currently building
   CG_Env<Binding>* current_env; // Where are things in scope?
   ASTStringMap<int>::t globals_env;
   int num_globals;
@@ -858,11 +785,6 @@ struct CodeGen {
   ExprMap<ASTStSet>::t _exp_scope;
 
   ExprMap<CG::Mode>::t mode_map;
-  
-  /*
-  bool is_total(Expression* e);
-  ExprMap<bool> _exp_is_total;
-  */
   
   // Procedure information
   void register_builtins(void);
@@ -878,15 +800,6 @@ struct CodeGen {
 
   std::unordered_map<FunctionI*, CG_ProcID> fun_bodies;
   std::vector< std::pair<FunctionI*, std::pair<BytecodeProc::Mode, BytecodeProc::Mode> > > pending_bodies;
-  /*
-  std::vector< std::pair<Expression*, unsigned int> > let_queue;
-  std::vector< std::pair<FunctionI*, unsigned int> > fun_queue;
-  std::vector< std::pair<CallSig, unsigned int> > call_queue;
-
-  std::unordered_map<Expression*, unsigned int> let_map;
-  std::unordered_map<FunctionI*, unsigned int> fun_map;
-  SigMap<unsigned int>::t call_map;
-  */
 };
 
 const char* instr_name(BytecodeStream::Instr i);
