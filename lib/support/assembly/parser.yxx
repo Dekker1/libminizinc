@@ -121,8 +121,6 @@ void yyerror(MZAContext& ctx, const char* s);
 %type<sValue> label
 %type<liValue> registers
 
-%define parse.error verbose
-
 %start procedures
 
 %%

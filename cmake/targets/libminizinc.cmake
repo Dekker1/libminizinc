@@ -42,7 +42,7 @@ else()
       "The file parser.yxx has been modified but bison cannot be run.\n"
       "If you are sure parser.tab.cpp and minizinc/parser.tab.hh in ${PROJECT_SOURCE_DIR}/lib/cached/ are correct "
         "then copy parser.yxx's md5 ${parser_yxx_md5} into ${PROJECT_SOURCE_DIR}/lib/cached/md5_cached.cmake"
-      )
+    )
   endif()
 
   MD5(${PROJECT_SOURCE_DIR}/lib/support/regex/parser.yxx regex_parser_yxx_md5)
@@ -52,7 +52,17 @@ else()
       "If you are sure regex_parser.tab.cpp and minizinc/support/regex_parser.tab.hh in "
         "${PROJECT_SOURCE_DIR}/lib/cached/ are correct then copy regex_parser.yxx's md5 ${regex_parser_yxx_md5} into "
         "${PROJECT_SOURCE_DIR}/lib/cached/md5_cached.cmake"
-      )
+    )
+  endif()
+
+  MD5(${PROJECT_SOURCE_DIR}/lib/support/assembly/parser.yxx mza_parser_yxx_md5)
+  if(NOT "${mza_parser_yxx_md5}" STREQUAL "${mza_parser_yxx_md5_cached}")
+    message(FATAL_ERROR
+      "The file assembly/parser.yxx has been modified but bison cannot be run.\n"
+      "If you are sure mza_parser.tab.cpp and minizinc/support/mza_parser.tab.hh in "
+      "${PROJECT_SOURCE_DIR}/lib/cached/ are correct then copy mza_parser.yxx's md5 ${mza_parser_yxx_md5} into "
+      "${PROJECT_SOURCE_DIR}/lib/cached/md5_cached.cmake"
+    )
   endif()
 
   include_directories(${PROJECT_SOURCE_DIR}/lib/cached)
@@ -63,6 +73,10 @@ else()
   set(BISON_RegExParser_OUTPUTS
     ${PROJECT_SOURCE_DIR}/lib/cached/regex_parser.tab.cpp
     ${PROJECT_SOURCE_DIR}/lib/cached/minizinc/support/regex_parser.tab.hh
+  )
+  set(BISON_MZAParser_OUTPUTS
+    ${PROJECT_SOURCE_DIR}/lib/cached/mza_parser.tab.cpp
+    ${PROJECT_SOURCE_DIR}/lib/cached/minizinc/support/mza_parser.tab.hh
   )
 endif()
 
@@ -107,8 +121,18 @@ else()
     )
   endif()
 
+  MD5(${PROJECT_SOURCE_DIR}/lib/support/assembly/lexer.lxx mza_lexer_lxx_md5)
+  if(NOT "${mza_lexer_lxx_md5}" STREQUAL "${mza_lexer_lxx_md5_cached}")
+    message(FATAL_ERROR
+      "The file assembly/lexer.lxx has been modified but flex cannot be run.\n"
+      "If you are sure ${PROJECT_SOURCE_DIR}/lib/cached/mza_lexer.yy.cpp is correct then "
+      "copy mza/lexer.lxx's md5 ${mza_lexer_lxx_md5} into ${PROJECT_SOURCE_DIR}/lib/cached/md5_cached.cmake"
+    )
+  endif()
+
   set(FLEX_MZNLexer_OUTPUTS ${PROJECT_SOURCE_DIR}/lib/cached/lexer.yy.cpp)
   set(FLEX_RegExLexer_OUTPUTS ${PROJECT_SOURCE_DIR}/lib/cached/regex_lexer.yy.cpp)
+  set(FLEX_MZALexer_OUTPUTS ${PROJECT_SOURCE_DIR}/lib/cached/mza_lexer.yy.cpp)
 endif()
 
 if(NOT GECODE_FOUND)
