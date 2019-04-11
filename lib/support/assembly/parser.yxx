@@ -1,0 +1,380 @@
+/* -*- mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*- */
+
+/*
+ *  Main authors:
+ *     Jip J. Dekker <jip.dekker@monash.edu>
+ */
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+%{
+#include <cstdio>
+#include <list>
+
+#include <minizinc/bytecode.hh>
+using namespace MiniZinc;
+
+typedef struct yy_buffer_state *YY_BUFFER_STATE;
+YY_BUFFER_STATE mza_yy_scan_string ( const char* yy_str );
+
+extern int yylex();
+extern FILE* yyin;
+
+struct ProcPatch {
+  int code;
+  BytecodeProc::Mode mode;
+  std::vector<std::pair<int,std::string>> patch;
+  ProcPatch(int code0, BytecodeProc::Mode mode0, std::vector<std::pair<int, std::string>> patch0)
+  : code(code0), mode(mode0), patch(std::move(patch0)) {}
+};
+
+typedef struct MZAContext {
+  std::vector<BytecodeProc>& procs;
+  std::unordered_map<std::string, int>& proc_map;
+  std::vector<ProcPatch> to_patch;
+  BytecodeStream proc_body;
+  std::unordered_map<std::string, int> labels;
+  std::vector<std::pair<int,std::string>> patch_labels;
+  std::vector<std::pair<int,std::string>> patch_procs;
+} MZAContext;
+
+void yyerror(MZAContext& ctx, const char* s);
+%}
+
+%union {
+  int iValue;
+  char* sValue;
+  MiniZinc::BytecodeStream::Instr bValue;
+  std::list<int>* liValue;
+}
+%parse-param {MZAContext& ctx}
+
+%token<iValue> MZA_INT
+%token<iValue> MZA_REG
+%token<iValue> MZA_MODE
+%token<iValue> MZA_CTX
+%token<sValue> MZA_ID
+
+%token MZA_COLON ":"
+%token MZA_DELAY "D"
+
+%token<bValue> MZA_ADDI
+%token<bValue> MZA_SUBI
+%token<bValue> MZA_MULI
+%token<bValue> MZA_DIVI
+%token<bValue> MZA_MODI
+%token<bValue> MZA_INCI
+%token<bValue> MZA_DECI
+
+%token<bValue> MZA_IMMI
+%token<bValue> MZA_LOAD_GLOBAL
+%token<bValue> MZA_STORE_GLOBAL
+%token<bValue> MZA_MOV
+
+%token<bValue> MZA_JMP
+%token<bValue> MZA_JMPIF
+%token<bValue> MZA_JMPIFNOT
+
+%token<bValue> MZA_EQI
+%token<bValue> MZA_LTI
+%token<bValue> MZA_LEI
+
+%token<bValue> MZA_AND
+%token<bValue> MZA_OR
+%token<bValue> MZA_NOT
+%token<bValue> MZA_XOR
+
+%token<bValue> MZA_ISPAR
+%token<bValue> MZA_ISEMPTY
+%token<bValue> MZA_LENGTH
+%token<bValue> MZA_GET_VEC
+
+%token<bValue> MZA_LB
+%token<bValue> MZA_UB
+%token<bValue> MZA_DOM
+
+%token<bValue> MZA_INTERSECTION
+%token<bValue> MZA_UNION
+
+%token<bValue> MZA_INTERSECT_DOMAIN
+
+%token<bValue> MZA_OPEN_AGGREGATION
+%token<bValue> MZA_CLOSE_AGGREGATION
+%token<bValue> MZA_SIMPLIFY_LIN
+
+%token<bValue> MZA_PUSH
+%token<bValue> MZA_POP
+
+%token<bValue> MZA_RET
+%token<bValue> MZA_CALL
+%token<bValue> MZA_BUILTIN
+%token<bValue> MZA_TCALL
+
+%token<bValue> MZA_TRACE
+%token<bValue> MZA_ABORT
+
+
+%type<iValue> delay instruction mode
+%type<bValue> instr instrIR instrR instrRR instrRS instrRRR instrS
+%type<sValue> label
+%type<liValue> registers
+
+%define parse.error verbose
+
+%start procedures
+
+%%
+
+procedures:
+  /* empty */
+  | procedure procedures
+
+procedure:
+    ":" MZA_ID ":" mode MZA_INT delay instructions
+    {
+      // patch jumps with recorded labels
+      for (auto& cl : ctx.patch_labels) {
+        if (ctx.labels.find(cl.second) == ctx.labels.end()) {
+          throw Error("Error: label " + cl.second + " not found\n");
+        }
+        ctx.proc_body.patchAddress(cl.first, ctx.labels[cl.second]);
+      }
+      ctx.labels.clear();
+      ctx.patch_labels.clear();
+
+      auto mode = static_cast<BytecodeProc::Mode>($4);
+      auto it = ctx.proc_map.find($2);
+      if (it != ctx.proc_map.end()) {
+        BytecodeProc& bcp = ctx.procs[it->second];
+        if (bcp.mode[mode].size() > 0) {
+          throw Error("Error: procedure " + std::string($2) + " already defined before with the same mode\n");
+        }
+        if (bcp.nargs != $5 ) {
+          throw Error("Error: procedure " + std::string($2) + " already defined before with different number of arguments\n");
+        }
+        bcp.mode[$4] = ctx.proc_body;
+        ctx.to_patch.emplace_back(it->second, mode, ctx.patch_procs);
+      } else {
+        BytecodeProc bcp;
+        bcp.name = $2;
+        bcp.mode[mode] = ctx.proc_body;
+        bcp.nargs = $5;
+        bcp.delay = $6;
+        ctx.proc_map.emplace($2, ctx.procs.size());
+        ctx.to_patch.emplace_back(ctx.procs.size(), mode, ctx.patch_procs);
+        ctx.procs.push_back(bcp);
+      }
+      ctx.proc_body = BytecodeStream();
+      ctx.patch_procs.clear();
+    }
+
+mode:
+   /* empty */ { $$ = BytecodeProc::FUN; }
+ | MZA_MODE
+
+delay:
+    /* empty */ { $$ = 0; }
+  | MZA_DELAY   { $$ = 1; }
+
+instructions:
+    /* empty */
+  | labeled_instr instructions
+
+labeled_instr:
+    instruction
+  | label instruction
+    {
+      ctx.labels.emplace($1, $2);
+    }
+
+label:
+    MZA_ID ":"
+
+instruction:
+    instr
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+    }
+  | instrIR MZA_INT MZA_REG
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addIntVal($2);
+      ctx.proc_body.addReg($3);
+    }
+  | instrR MZA_REG
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addReg($2);
+    }
+  | instrRR MZA_REG MZA_REG
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addReg($2);
+      ctx.proc_body.addReg($3);
+    }
+  | instrRS MZA_REG MZA_ID
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addReg($2);
+      ctx.patch_labels.emplace_back(ctx.proc_body.size(), $3);
+      ctx.proc_body.addSmallInt(0);
+    }
+  | instrRRR MZA_REG MZA_REG MZA_REG
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addReg($2);
+      ctx.proc_body.addReg($3);
+      ctx.proc_body.addReg($4);
+    }
+  | instrS MZA_ID
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.patch_labels.emplace_back(ctx.proc_body.size(), $2);
+      ctx.proc_body.addSmallInt(0);
+    }
+  | MZA_CALL MZA_MODE MZA_ID registers
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addCharVal($2);
+      ctx.patch_procs.emplace_back(ctx.proc_body.size(), $3);
+      ctx.proc_body.addSmallInt(0);
+      for (auto arg : *$4) {
+        ctx.proc_body.addReg(arg);
+      }
+      delete $4;
+    }
+  | MZA_OPEN_AGGREGATION MZA_CTX
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addCharVal($2);
+    }
+  // Special cases: Using aggregation context with the same name as instructions
+  | MZA_OPEN_AGGREGATION MZA_AND
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addCharVal(AggregationCtx::VCTX_AND);
+    }
+  | MZA_OPEN_AGGREGATION MZA_OR
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addCharVal(AggregationCtx::VCTX_OR);
+    }
+    // Special cases: Read INT, but adds Reg value on the Stream
+  | MZA_LOAD_GLOBAL MZA_INT MZA_REG
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addReg($2);
+      ctx.proc_body.addReg($3);
+    }
+  | MZA_STORE_GLOBAL MZA_REG MZA_INT
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addReg($2);
+      ctx.proc_body.addReg($3);
+    }
+
+instrIR:
+    MZA_IMMI
+
+instrR:
+    MZA_INCI
+  | MZA_DECI
+  | MZA_PUSH
+  | MZA_POP
+  | MZA_TRACE
+
+instrRR:
+    MZA_MOV
+  | MZA_NOT
+  | MZA_ISPAR
+  | MZA_ISEMPTY
+  | MZA_LENGTH
+  | MZA_UB
+  | MZA_LB
+  | MZA_DOM
+
+instrRS:
+    MZA_JMPIF
+  | MZA_JMPIFNOT
+
+instrRRR:
+    MZA_ADDI
+  | MZA_SUBI
+  | MZA_MULI
+  | MZA_DIVI
+  | MZA_MODI
+  | MZA_EQI
+  | MZA_LTI
+  | MZA_LEI
+  | MZA_AND
+  | MZA_OR
+  | MZA_XOR
+  | MZA_GET_VEC
+  | MZA_INTERSECTION
+  | MZA_UNION
+  | MZA_INTERSECT_DOMAIN
+
+instrS:
+    MZA_JMP
+
+instr:
+    MZA_RET
+  | MZA_CLOSE_AGGREGATION
+  | MZA_ABORT
+
+
+registers:
+    /* empty */ { $$ = new std::list<int>(); }
+  | MZA_REG registers { $2->push_front($1); $$ = $2; }
+
+%%
+
+#include <minizinc/bytecode_primitives.hh>
+
+void yyerror(MZAContext& ctx, const char* s) {
+  // TODO: Add error location
+  throw std::runtime_error("Cannot parse MiniZinc assembly: " + std::string(s));
+}
+
+std::vector<BytecodeProc> parse_mza(const std::string& assembly_str) {
+  std::vector<BytecodeProc> procs;
+  std::unordered_map<std::string, int> proc_map;
+  // Initialise first slots with
+  for (PrimitiveMap::Primitive* p : primitiveMap()) {
+    BytecodeProc bcp;
+    bcp.name = p->name();
+    bcp.nargs = p->n_args();
+    bcp.delay = false;
+    procs.push_back(bcp);
+    proc_map.emplace(bcp.name, p->ident());
+  }
+  mza_yy_scan_string(assembly_str.c_str());
+  MZAContext ctx = MZAContext{procs, proc_map};
+  int err = yyparse(ctx);
+  if (err != 0) {
+    throw std::runtime_error("Cannot parse MiniZinc assembly: " + std::to_string(err));
+  }
+  for (auto& p : ctx.to_patch) {
+    int code = p.code;
+    BytecodeProc::Mode mode = p.mode;
+    for (auto& patch : p.patch) {
+      procs[code].mode[mode].patchAddress(patch.first, proc_map[patch.second]);
+    }
+  }
+  return procs;
+}

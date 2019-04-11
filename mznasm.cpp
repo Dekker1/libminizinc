@@ -27,6 +27,7 @@
 
 #include <minizinc/bytecode.hh>
 #include <minizinc/prettyprinter.hh>
+#include <minizinc/support/mza_parser.hh>
 
 using namespace std;
 using namespace MiniZinc;
@@ -54,7 +55,7 @@ int main(int argc, const char** argv) {
                   std::istreambuf_iterator<char>());
   try {
     // Parse assembly file
-    auto bs = parse(str);
+    auto bs = parse_mza(str);
     if (verbose) {
       std::cerr << "Disassembled code:\n";
       for (auto& b : bs) {
@@ -82,10 +83,10 @@ int main(int argc, const char** argv) {
       std::cerr << "Done\n";
       interpreter.dumpState(std::cerr);
       std::cerr << "----------------" << std::endl;
-      auto fzn = interpreter.toFZN();
-      MiniZinc::Printer p(std::cout,0); p.print(fzn);
-      std::cout.flush();
     }
+    auto fzn = interpreter.toFZN();
+    MiniZinc::Printer p(std::cout,0); p.print(fzn);
+    std::cout.flush();
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";
   }

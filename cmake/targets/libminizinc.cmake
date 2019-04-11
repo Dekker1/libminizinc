@@ -22,6 +22,13 @@ if(BISON_FOUND)
   )
 
   file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/include/minizinc/support/)
+  BISON_TARGET(MZAParser
+    ${PROJECT_SOURCE_DIR}/lib/support/assembly/parser.yxx
+    ${PROJECT_BINARY_DIR}/mza_parser.tab.cpp
+    DEFINES_FILE ${PROJECT_BINARY_DIR}/include/minizinc/support/mza_parser.tab.hh
+    COMPILE_FLAGS "-p mza_yy -l"
+  )
+
   BISON_TARGET(RegExParser
     ${PROJECT_SOURCE_DIR}/lib/support/regex/parser.yxx
     ${PROJECT_BINARY_DIR}/regex_parser.tab.cpp
@@ -67,6 +74,13 @@ if(FLEX_FOUND)
     COMPILE_FLAGS "-P mzn_yy -L"
   )
   ADD_FLEX_BISON_DEPENDENCY(MZNLexer MZNParser)
+
+  FLEX_TARGET(MZALexer
+          ${PROJECT_SOURCE_DIR}/lib/support/assembly/lexer.lxx
+          ${PROJECT_BINARY_DIR}/mza_lexer.yy.cpp
+          COMPILE_FLAGS "-P mza_yy -L"
+          )
+  ADD_FLEX_BISON_DEPENDENCY(MZALexer MZAParser)
 
   FLEX_TARGET(RegExLexer
     ${PROJECT_SOURCE_DIR}/lib/support/regex/lexer.lxx
@@ -199,9 +213,12 @@ add_library(minizinc_compiler
   include/minizinc/thirdparty/b64/cencode.h
   include/minizinc/thirdparty/b64/decode.h
   include/minizinc/thirdparty/b64/encode.h
+  include/minizinc/support/mza_parser.hh
   include/minizinc/support/regex.hh
   ${BISON_MZNParser_OUTPUTS}
   ${FLEX_MZNLexer_OUTPUTS}
+  ${BISON_MZAParser_OUTPUTS}
+  ${FLEX_MZALexer_OUTPUTS}
   ${BISON_RegExParser_OUTPUTS}
   ${FLEX_RegExLexer_OUTPUTS}
 )

@@ -1836,6 +1836,7 @@ namespace MiniZinc {
     return true;
   }
 
+  // TODO: Remove with all dependencies (once bison parser is more properly tested)
   std::vector<BytecodeProc> parse(const std::string& s) {
 
     std::vector<BytecodeProc> codes;
