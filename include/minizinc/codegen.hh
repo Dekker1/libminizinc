@@ -233,25 +233,58 @@ struct CG_Cond {
   class C_And;
   class C_Or;
 
-  class T {
-  public:
-    int is_root : 1;
-    int is_seen : 1;
-    int reg : 30;
+  struct cond_reg {
+    cond_reg(void) : is_root(0), is_seen(0), reg(-1) { }
+    cond_reg(int _reg) : is_root(0), is_seen(0), reg(_reg) { }
 
-    T(void) : is_root(0), is_seen(0), reg(-1) { }
-    T(int _reg) : is_root(0), is_seen(0), reg(_reg) { }
+    int operator*(void) const { assert(reg >= 0); return reg; }
+    bool has_reg(void) const { return reg >= 0; }
+
+    int is_root: 1;
+    int is_seen: 1;
+    int reg: 30;
+  };
+
+  class _T {
+  public:
+    cond_reg reg[2];
+  
+    _T(void) { }
+    _T(int r) {
+      reg[0].reg = r;
+    }
 
     virtual Kind kind(void) const = 0;
   };
 
-  class C_Reg : public T {
+  class T {
+    T(uintptr_t _p) : p(_p) { }
+  public:
+    T(void) : p(0) { }
+
+    static T ttt(void) { return T(0); }
+    static T fff(void) { return T(1); }
+    static T of_ptr(_T* p) { return T(reinterpret_cast<uintptr_t>(p)); }
+
+    T operator~(void) const { return T(p^1); }
+    T operator^(bool b) const { return T(p ^ b); }
+
+    bool sign(void) const { return p&1; }
+    _T* get(void) const { return reinterpret_cast<_T*>(p & ~((uintptr_t) 1)); }
+
+    uintptr_t p;
+  };
+
+  static T ttt(void) { return T::ttt(); }
+  static T fff(void) { return T::fff(); }
+  
+  class C_Reg : public _T {
   public:
     static const Kind _kind = CC_Reg;
     Kind kind(void) const { return _kind; }
-    C_Reg(int reg) : T(reg) { }
+    C_Reg(int reg) : _T(reg) { }
   };
-  class C_Call : public T {
+  class C_Call : public _T {
   public:
     static const Kind _kind = CC_Call;
     Kind kind(void) const { return _kind; }
@@ -263,118 +296,157 @@ struct CG_Cond {
     BytecodeProc::Mode m;
     std::vector<CG_Value> params;
   };
-  class C_And : public T {
+  class C_And : public _T {
   public:
     static const Kind _kind = CC_And;
     Kind kind(void) const { return _kind; }
 
-    C_And(BytecodeProc::Mode _m, std::vector<CG_Cond::T*>& _children)
-      : m(_m), children(_children) { } 
+    C_And(BytecodeProc::Mode _m, std::vector<T>& _children)
+      : m(_m), children(_children) { }
 
     BytecodeProc::Mode m;
-    std::vector<CG_Cond::T*> children;
+    std::vector<T> children;
   };
-  class C_Or : public T {
+  class C_Or : public _T {
   public:
     static const Kind _kind = CC_Or;
     Kind kind(void) const { return _kind; }
 
-    C_Or(BytecodeProc::Mode _m, std::vector<CG_Cond::T*>& _children)
+    C_Or(BytecodeProc::Mode _m, std::vector<T>& _children)
       : m(_m), children(_children) { }
 
     BytecodeProc::Mode m;
-    std::vector<CG_Cond::T*> children;
+    std::vector<T> children;
   };
 
-  static T* reg(int r) {
-    return new C_Reg(r);
+  static T reg(int r) {
+    return T::of_ptr(new C_Reg(r));
   }
 
   template<typename ...Args>
-  static T* call(CG_ProcID p, BytecodeProc::Mode m, Args... args) {
+  static T call(CG_ProcID p, BytecodeProc::Mode m, Args... args) {
     std::vector<CG_Value> params;
     return _call(p, m, params, args...);
   }
-  static T* call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params) { return _call(p, m, params); }
+  static T call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params) {
+    return _call(p, m, params);
+  }
 
   template<typename ...Args>
-  static T* _call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params, CG_Value next, Args... rest) {
+  static T _call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params, CG_Value next, Args... rest) {
     params.push_back(next);
     return _call(p, m, params, rest...);
   }
-  static T* _call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params) {
-    return new C_Call(p, m, params);
-  }
-
-  static void dedup(std::vector<CG_Cond::T*>& args) {
-    auto dest(args.begin());
-    for(CG_Cond::T* e : args) {
-      if(!e->is_seen) {
-        e->is_seen = 1;
-        *dest = e;
-        ++dest;
-      }
-    }
-    args.erase(dest, args.end());
-    for(CG_Cond::T* e : args)
-      e->is_seen = 0;
+  static T _call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params) {
+    return T::of_ptr(new C_Call(p, m, params));
   }
 
   template<typename ...Args>
-  static T* _forall(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args, CG_Cond::T* next, Args... rest) {
+  static T _forall(BytecodeProc::Mode m, std::vector<T>& args, T next, Args... rest) {
     args.push_back(next);
     return _forall(m, args, rest...);
   }
-  static T* _forall(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) {
-    if(args.size() == 0)
-      return nullptr;
-    // Drop any true values
+  template<class It>
+  static void clear_seen(It b, It e) {
+    for(; b != e; ++b) {
+      if(!b->get())
+        continue;
+      b->get()->reg[b->sign()].is_seen = false;
+    }
+  }
+  static T _forall(BytecodeProc::Mode m, std::vector<T>& args) {
+    T ret(T::ttt());
     auto b(args.begin());
-    for(CG_Cond::T* x : args) {
-      if(x) {
-        *b = x;
-        ++b;
+    for(T x : args) {
+      _T* p(x.get());
+      if(!p) {
+        // Either true or false.
+        if(x.sign()) {
+          clear_seen(args.begin(), args.end());
+          return T::fff();
+        }
+        continue;
       }
+      // Otherwise, check if we've already seen this or its negation.
+      if(p->reg[1 - x.sign()].is_seen || p->reg[1 - x.sign()].is_root) {
+        clear_seen(args.begin(), args.end());
+        return T::fff();
+      }
+      if(p->reg[x.sign()].is_seen || p->reg[x.sign()].is_root)
+        continue;
+      // Haven't seen this yet, so save and mark it.
+      p->reg[x.sign()].is_seen = true;
+      (*b) = x;
+      ++b;
     }
     args.erase(b, args.end());
-    dedup(args);
+    clear_seen(args.begin(), args.end());
+    if(args.size() == 0)
+      return T::ttt();
     if(args.size() == 1)
       return args[0];
-    return new C_And(m, args);
+    return T::of_ptr(new C_And(m, args));
   }
-  template<typename ...Args>
-  static T* forall(BytecodeProc::Mode m, Args... args) {
-    std::vector<CG_Cond::T*> vec;
-    return _forall(m, vec, args...);
-  }
-  static T* forall(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) { return _forall(m, args); }
 
   template<typename ...Args>
-  static T* _exists(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args, CG_Cond::T* next, Args... rest) {
+  static T forall(BytecodeProc::Mode m, Args... args) {
+    std::vector<CG_Cond::T> vec;
+    return _forall(m, vec, args...);
+  }
+  static T forall(BytecodeProc::Mode m, std::vector<T>& args) { return _forall(m, args); }
+
+  template<typename ...Args>
+  static T _exists(BytecodeProc::Mode m, std::vector<T>& args, T next, Args... rest) {
     args.push_back(next);
     return _exists(m, args, rest...);
   }
-  static T* _exists(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) {
+  static T _exists(BytecodeProc::Mode m, std::vector<T>& args) {
     assert(args.size() > 0);
-    for(CG_Cond::T* e : args) {
-      if(!e)
-        return nullptr;
+    auto b(args.begin());
+    for(T e : args) {
+      // Check for true/false.
+      _T* p(e.get());
+      if(!p) {
+        if(!e.sign()) {
+          clear_seen(args.begin(), args.end());
+          return T::ttt();
+        }
+        continue;
+      }
+      // Check if x is globally true, or we've already seen ~x.
+      if(p->reg[e.sign()].is_root
+        || p->reg[1 - e.sign()].is_seen) {
+        clear_seen(args.begin(), args.end());
+        return T::ttt();
+      }
+      // If ~x is globally true, or we've already seen x, we can
+      // ignore it.
+      if(p->reg[e.sign()].is_seen
+        || p->reg[1 - e.sign()].is_root) {
+        continue;
+      }
+      // Now we've found something we need to keep.
+      (*b) = e;
+      ++b;
     }
-    dedup(args);
+    args.erase(b, args.end());
+    clear_seen(args.begin(), args.end());
+    if(args.size() == 0)
+      return T::fff();
     if(args.size() == 1)
       return args[0];
-    return new C_Or(m, args);
+    return T::of_ptr(new C_Or(m, args));
   }
   template<typename ...Args>
-  static T* exists(BytecodeProc::Mode m, Args... args) {
-    std::vector<CG_Cond::T*> vec;
+  static T exists(BytecodeProc::Mode m, Args... args) {
+    std::vector<T> vec;
     return _exists(m, vec, args...);
   }
-  static T* exists(BytecodeProc::Mode m, std::vector<CG_Cond::T*>& args) { return _exists(m, args); }
+  static T exists(BytecodeProc::Mode m, std::vector<T>& args) { return _exists(m, args); }
 };
 
 struct CG {
-  typedef std::pair<int, CG_Cond::T*> Binding;
+  typedef std::pair<int, CG_Cond::T> Binding;
 
   // This is currently (probably) sound, but unnecessarily weak. If an expression ever appears in
   // root context, the root appearance should dominate.
@@ -465,9 +537,9 @@ struct CG {
   // Place a non-Boolean value in a register, and collect its partiality.
   static Binding bind(Expression* e, CodeGen& cg, CG_Builder& frag);
   // Compile a Boolean expression into a condition.
-  static CG_Cond::T* compile(Expression* e, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(Expression* e, CodeGen& cg, CG_Builder& frag);
   // Reify a condion, putting it in a register.
-  static int force(CG_Cond::T* cond, CodeGen& cg, CG_Builder& frag);
+  static int force(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag);
 
   static void run(CodeGen& cg, Model* m);
 
@@ -484,14 +556,14 @@ struct CG {
   static Binding bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
   static Binding bind(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
 
-  static CG_Cond::T* compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static CG_Cond::T* compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static CG_Cond::T* compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static CG_Cond::T* compile(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static CG_Cond::T* compile(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static CG_Cond::T* compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static CG_Cond::T* compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
-  static CG_Cond::T* compile(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(BinOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(UnOp* op, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
+  static CG_Cond::T compile(Comprehension* let, Mode ctx, CodeGen& cg, CG_Builder& frag);
 };
 
 // Partially compiled bytecode.
@@ -723,7 +795,7 @@ struct CG_FunMap {
 struct CodeGen {
   typedef unsigned int proc_id;
   typedef unsigned int reg_id;
-  typedef std::pair<int, CG_Cond::T*> Binding;
+  typedef std::pair<int, CG_Cond::T> Binding;
   CodeGen(void)
     : /*entry_proc(0)
     ,*/ current_env(new CG_Env<Binding>())
