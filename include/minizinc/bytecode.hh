@@ -598,7 +598,7 @@ namespace MiniZinc {
         assert(timestamp > 0);
         _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(timestamp) << 1 | static_cast<ptrdiff_t>(1));
       } else {
-        assert((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == 0);
+        assert((reinterpret_cast<ptrdiff_t>(val._v) & static_cast<ptrdiff_t>(1)) == 0);
         _v = val._v;
       }
     }
