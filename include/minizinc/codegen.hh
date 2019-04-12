@@ -637,6 +637,13 @@ struct CG_FunMap {
   std::vector<CG_FunDefn> functions;
 
   void add_body(FunctionI* f) {
+    // FIXME: Currently discarding anything with var-set.
+    ASTExprVec<VarDecl> params(f->params());
+    for(int ii = 0; ii < params.size(); ++ii) {
+      if(params[ii]->type().is_set() && !params[ii]->type().ispar())
+        return;
+    }
+
     unsigned int fun_id;
     ASTString id(f->id());
     auto it(id_map.find(id));
