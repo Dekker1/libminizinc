@@ -2752,25 +2752,62 @@ CG_Cond::T compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
 CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int sz(ite->size());
-  std::vector<int> r_if;
-  std::vector<CG_Cond::T> c_then;
+   
+  // Check whether all the conditions are par.
+  bool all_par = true;
+  for(int ii = 0; ii < sz; ++ii) {
+    if(!ite->e_if(ii)->type().ispar()) {
+      all_par = false;
+      break;
+    }
+  }
 
-  // Put the conditions in registers, and compile the results.
-  for(int ii = 0; ii < sz; ++ii) {
-    r_if.push_back(CG::force(CG::compile(ite->e_if(ii), cg, frag), cg, frag)); 
-    c_then.push_back(CG::compile(ite->e_then(ii), cg, frag));
+  if(all_par) {
+    // We need to interfere with the env, here, because stuff may not be available.
+    // Except, ite->e_if(0) will always be available.
+    int l_end(GET_LABEL(cg));
+    int r_ret(GET_REG(cg));
+    for(int ii = 0; ii < sz; ++ii) {
+      int r_sel = CG::force(CG::compile(ite->e_if(ii), cg, frag), cg, frag);
+      int l_cont(GET_LABEL(cg));  
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_sel), CG::l(l_cont));
+      cg.env_push();
+      int r_val = CG::force(CG::compile(ite->e_then(ii), cg, frag), cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_val), CG::r(r_ret));
+      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
+      cg.env_pop();
+      cg.env_push();
+      PUSH_LABEL(frag, l_cont);
+    }
+    // Else case.
+    int r_val = CG::force(CG::compile(ite->e_else(), cg, frag), cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_val), CG::r(r_ret));
+    PUSH_LABEL(frag, l_end);
+    // Now kill the availability of all the expressions.
+    for(int ii = 0; ii < sz; ++ii)
+      cg.env_pop();
+    return CG_Cond::reg(r_ret);
+  } else {
+    // Put the conditions in registers, and compile the results.
+    std::vector<int> r_if;
+    std::vector<CG_Cond::T> c_then;
+
+    for(int ii = 0; ii < sz; ++ii) {
+      r_if.push_back(CG::force(CG::compile(ite->e_if(ii), cg, frag), cg, frag)); 
+      c_then.push_back(CG::compile(ite->e_then(ii), cg, frag));
+    }
+    TODO();
+    /*
+    int r(GET_REG(cg));
+    int l_exit(GET_LABEL(cg));
+    for(int ii = 0; ii < sz; ++ii) {
+      int l_cont(GET_LABEL(cg));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_if[ii]), CG::l(l_cont));
+      PUSH_INSTR(frag, BytecodeStream::MOV, 
+    }
+    */
+    return CG_Cond::ttt();
   }
-  TODO();
-  /*
-  int r(GET_REG(cg));
-  int l_exit(GET_LABEL(cg));
-  for(int ii = 0; ii < sz; ++ii) {
-    int l_cont(GET_LABEL(cg));
-    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_if[ii]), CG::l(l_cont));
-    PUSH_INSTR(frag, BytecodeStream::MOV, 
-  }
-  */
-  return CG_Cond::ttt();
 }
 
 CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
