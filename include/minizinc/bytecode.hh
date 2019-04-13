@@ -884,6 +884,7 @@ namespace MiniZinc {
       return cse[proc].insert(this, key, mode, val);
     }
     void set_global(int i, const Val& val) { globals.assign(this, i, val); }
+    const Val get_global(int i) { return globals[i]; }
     void subscribe(Definition* d);
     void unsubscribe(Definition* d);
     int newIdent(void) { return _identCount++; }
