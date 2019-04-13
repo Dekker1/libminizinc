@@ -300,7 +300,7 @@ namespace MiniZinc {
     }
     
     // Set Alias
-    interpreter->trail.trail_alias(this);
+    interpreter->trail.trail_alias(interpreter, this);
     _pred = PrimitiveMap::ALIAS;
     _size = 1;
     _args[0] = v;
@@ -338,7 +338,8 @@ namespace MiniZinc {
   }
 
   void
-  Definition::domain(Interpreter* interpreter, Val newDomain) {
+  Definition::domain(Interpreter* interpreter, const Val& newDomain) {
+    interpreter->trail.trail_domain(interpreter, this, _domain);
     _domain.destroy(interpreter);
     _domain = newDomain;
     _domain.construct(interpreter);
@@ -2390,7 +2391,7 @@ namespace MiniZinc {
           args[i] = def->arg(i);
         }
         call(def->pred(), mode, args, true);
-        if (_status = ROGER) {
+        if (_status != ROGER) {
           break;
         }
         Val ret(1);
@@ -2418,8 +2419,8 @@ namespace MiniZinc {
   void Trail::untrail(MiniZinc::Interpreter* interpreter) {
     assert(len() > 0);
     assert(interpreter->_stack.size() == 1);
-    size_t ht_size, ot_size, at_size;
-    std::tie(ht_size, ot_size, at_size) = trail_size.back(); trail_size.pop_back();
+    size_t ht_size, ot_size, at_size, dt_size;
+    std::tie(ht_size, ot_size, at_size, dt_size) = trail_size.back(); trail_size.pop_back();
     int timestamp = timestamp_trail.back(); timestamp_trail.pop_back();
     Definition* back = interpreter->_agg[0].def_stack;
     // Reconstruct destroyed items
@@ -2445,6 +2446,7 @@ namespace MiniZinc {
     }
     // Restore original definitions for created aliases
     while (alias_trail.size() > at_size) {
+      // TODO: this is clearly wrong. The definition needs something like reconstruct
       Definition* def;
       int proc, size;
       Val arg0;
@@ -2452,7 +2454,19 @@ namespace MiniZinc {
       def->_pred = proc;
       def->_size = size;
       def->_args[0] = arg0;
+      arg0.removeFromCSE(interpreter);
       alias_trail.pop_back();
+    }
+    // Restore original domains
+    while (domain_trail.size() > dt_size) {
+      Definition* def;
+      Val dom;
+      std::tie(def, dom) = domain_trail.back();
+      def->_domain.destroy(interpreter);
+      def->_domain = dom;
+      def->_domain.construct(interpreter);
+      dom.removeFromCSE(interpreter);
+      domain_trail.pop_back();
     }
     // Remove all additions/changes to the CSE table
     for (auto &table : interpreter->cse) {
@@ -2465,6 +2479,7 @@ namespace MiniZinc {
       rem->destroy(interpreter);
       free(rem);
     }
+    // TODO: Should we remove newly created propagators??
     // Reset the timestamp count to its previous value
     interpreter->_identCount = timestamp;
     last_operation_pop = true;

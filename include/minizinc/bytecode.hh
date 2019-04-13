@@ -500,7 +500,7 @@ namespace MiniZinc {
   public:
     Val domain(void) const { return _domain; }
     /// Set domain to \a newDomain, schedule propagators
-    void domain(Interpreter* interpreter, Val newDomain);
+    void domain(Interpreter* interpreter, const Val& newDomain);
     /// Set domain to \a newDomain, schedule propagators
     void domain(Interpreter* interpreter, const std::vector<Val>& newDomain);
     Val ann(void) const { return _ann; }
@@ -801,8 +801,9 @@ namespace MiniZinc {
     std::vector<RefCountedObject*> obj_trail;
     // <Definition, procedure, size, arg(0)>
     std::vector<std::tuple<Definition*, int, int, Val>> alias_trail;
-    // <Hedge trail size, Obj trail size, Alias trial size>
-    std::vector<std::tuple<size_t, size_t, size_t>> trail_size;
+    std::vector<std::pair<Definition*, Val>> domain_trail;
+    // <Hedge trail size, Obj trail size, Alias trail size, Domain trail size>
+    std::vector<std::tuple<size_t, size_t, size_t, size_t>> trail_size;
     std::vector<int> timestamp_trail;
     bool last_operation_pop = false;
   public:
@@ -839,11 +840,21 @@ namespace MiniZinc {
       return true;
     }
     // Trail definition aliasing
-    inline bool trail_alias(Definition* def) {
+    inline bool trail_alias(Interpreter* interpreter, Definition* def) {
       if (!is_trailed(def)) {
         return false;
       }
+      def->arg(0).addToCSE(interpreter);
       alias_trail.emplace_back(def, def->pred(), def->size(), def->arg(0));
+      return true;
+    }
+    // Trail definition domain change
+    inline bool trail_domain(Interpreter* interpreter, Definition* def, Val dom) {
+      if (!is_trailed(def)) {
+        return false;
+      }
+      dom.addToCSE(interpreter);
+      domain_trail.emplace_back(def, dom);
       return true;
     }
     size_t save_state(Interpreter* interpreter);
