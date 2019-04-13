@@ -522,13 +522,13 @@ static const yytype_uint8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint16 yyrline[] =
 {
-       0,   128,   128,   130,   133,   172,   173,   176,   177,   179,
-     181,   184,   185,   191,   194,   199,   206,   212,   219,   227,
-     235,   242,   254,   261,   267,   274,   281,   290,   293,   294,
-     295,   296,   297,   300,   301,   302,   303,   304,   305,   306,
-     307,   310,   311,   314,   315,   316,   317,   318,   319,   320,
-     321,   322,   323,   324,   325,   326,   327,   328,   331,   334,
-     335,   336,   340,   341
+       0,   128,   128,   130,   133,   175,   176,   179,   180,   182,
+     184,   187,   188,   194,   197,   202,   209,   215,   222,   230,
+     238,   245,   257,   264,   270,   277,   284,   293,   296,   297,
+     298,   299,   300,   303,   304,   305,   306,   307,   308,   309,
+     310,   313,   314,   317,   318,   319,   320,   321,   322,   323,
+     324,   325,   326,   327,   328,   329,   330,   331,   334,   337,
+     338,   339,   343,   344
 };
 #endif
 
@@ -1375,7 +1375,7 @@ yyreduce:
         case 4:
 
     {
-      // patch jumps with recorded labels
+      // Patch jumps with recorded labels
       for (auto& cl : ctx.patch_labels) {
         if (ctx.labels.find(cl.second) == ctx.labels.end()) {
           throw Error("Error: label " + cl.second + " not found\n");
@@ -1385,6 +1385,9 @@ yyreduce:
       ctx.labels.clear();
       ctx.patch_labels.clear();
 
+      // Add ABORT instruction for error management
+      ctx.proc_body.addInstr(BytecodeStream::ABORT);
+      // Store procedure in the correct place
       auto mode = static_cast<BytecodeProc::Mode>((yyvsp[-3].iValue));
       auto it = ctx.proc_map.find((yyvsp[-5].sValue));
       if (it != ctx.proc_map.end()) {
