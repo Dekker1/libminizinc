@@ -2289,13 +2289,22 @@ namespace MiniZinc {
   Model*
   Interpreter::toFZN() {
     GCLock lock;
-    if (!_agg.empty()) {
-      auto fzn = Definition::toFZN(this, _agg.back().def_stack, _procs);
+    Model* fzn = nullptr;
+    if (_status != ROGER) {
+      fzn = new Model();
+      std::vector<Expression*> args = {constants().boollit(true), constants().boollit(false)};
+      auto fail = new Call(Location().introduce(), constants().ids.bool_eq, args);
+      auto failI = new ConstraintI(Location().introduce(), fail);
+      fzn->addItem(failI);
+    } else if (!_agg.empty()) {
+      fzn = Definition::toFZN(this, _agg.back().def_stack, _procs);
+    }
+
+    if (fzn) {
       // TODO: What solve item should we add?
       fzn->addItem(SolveI::sat(Location().introduce()));
-      return fzn;
     }
-    return nullptr;
+    return fzn;
   }
   
   Interpreter::~Interpreter(void) {
