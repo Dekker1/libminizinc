@@ -74,13 +74,13 @@ int main(int argc, const char** argv) {
     if (verbose) {
       std::cerr << "Run:\n";
     }
-    interpreter.run();
-    bool delayed;
-    do {
-      delayed = interpreter.runDelayed();
-    } while (delayed);
+    std::pair<Interpreter::Status, bool> result = {Interpreter::ROGER, true};
+    result.first = interpreter.run();
+    while (result.first == Interpreter::ROGER && result.second) {
+      result = interpreter.runDelayed();
+    }
     if (verbose) {
-      std::cerr << "Done\n";
+      std::cerr << "Status: " << Interpreter::status_to_string[result.first] << std::endl;
       interpreter.dumpState(std::cerr);
       std::cerr << "----------------" << std::endl;
     }

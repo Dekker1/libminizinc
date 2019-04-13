@@ -853,7 +853,8 @@ namespace MiniZinc {
   class Interpreter {
     friend class Trail;
   public:
-    
+    enum Status { ROGER, ABORTED, INCONSISTENT, ERROR, MAX_STATUS=ERROR };
+    static const std::string status_to_string[MAX_STATUS+1];
   protected:
     std::vector<BytecodeFrame> _stack;
     std::vector<AggregationCtx> _agg;
@@ -872,8 +873,8 @@ namespace MiniZinc {
       _stack.push_back(f);
     }
     ~Interpreter(void);
-    void run(void);
-    bool runDelayed();
+    Status run(void);
+    std::pair<Status, bool> runDelayed();
     void pushAgg(const Val& v, int stackOffset);
     void pushDef(Definition* d);
     std::pair<Val, bool> cse_lookup(int proc, const CSETable::Key& key, BytecodeProc::Mode& mode) {
@@ -892,7 +893,7 @@ namespace MiniZinc {
     void deschedule(Definition* d);
     void propagate(void);
     Model* toFZN();
-    void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
+    Status call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
     
     /// Perform optimizatin by basic propagation on generated FlatZinc
     void optimize(void);

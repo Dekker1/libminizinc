@@ -369,7 +369,9 @@ namespace MiniZinc {
   }
   
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
-  
+
+  const std::string Interpreter::status_to_string[] = {"Roger", "Aborted", "Inconsistent", "Error"};
+
   std::string
   Val::toString(void) const {
     std::ostringstream oss;
@@ -876,8 +878,8 @@ namespace MiniZinc {
     }
   }
   
-  void
-  Interpreter::run(void) {
+  Interpreter::Status Interpreter::run(void) {
+    Status status = ROGER;
     BytecodeFrame* frame = &_stack.back();
     for (;;) {
       DBG_INTERPRETER(frame->pc << " ");
@@ -1294,7 +1296,7 @@ namespace MiniZinc {
           assert(!_stack.empty());
           if (_stack.size()==1) {
             // Always leave final frame on the stack
-            return;
+            return status;
           }
           assert(!frame->cse_info.empty());
           
@@ -1338,17 +1340,18 @@ namespace MiniZinc {
           if (cse_suited) {
             cse_key = CSETable::Key(args);
             // Lookup item in CSE
-            auto cse = cse_lookup(code, cse_key, mode);
-            if (cse.second) {
+            auto lookup = cse_lookup(code, cse_key, mode);
+            if (lookup.second) {
               cse_key.destroy();
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-                assert(cse.first.isInt());
-                if (cse.first().toInt() != 1) {
-                  // TODO: The model is inconsistent!
-                  throw Error("Error: Model Inconsistent!");
+                assert(lookup.first.isInt());
+                if (lookup.first().toInt() != 1) {
+                  status = INCONSISTENT;
+                  // Invariant: Last instruction in the frame is always an ABORT instruction
+                  frame->pc = frame->bs->size()-1;
                 }
               } else {
-                pushAgg(cse.first, -1);
+                pushAgg(lookup.first, -1);
               }
               break;
             }
@@ -1457,7 +1460,14 @@ namespace MiniZinc {
         case BytecodeStream::ABORT:
         {
           DBG_INTERPRETER("ABORT\n");
-          return;
+
+          while (_stack.size() > 1) {
+            _stack.back().destroy(this);
+            _stack.pop_back();
+          }
+          // TODO: Should the Aggregation stack be emptied?
+
+          return status == ROGER ? ABORTED : status;
         }
         case BytecodeStream::PUSH:
         {
@@ -2297,7 +2307,7 @@ namespace MiniZinc {
     }
   }
   
-  void
+  Interpreter::Status
   Interpreter::call(int code, const BytecodeProc::Mode& mode0, const std::vector<Val>& args0, bool delayed) {
     BytecodeProc::Mode mode = mode0;
     std::vector<Val> args = args0;
@@ -2312,19 +2322,19 @@ namespace MiniZinc {
     if (cse_suited) {
       cse_key = CSETable::Key(args);
       // Lookup item in CSE
-      auto cse = cse_lookup(code, cse_key, mode);
-      if (cse.second) {
+      auto lookup = cse_lookup(code, cse_key, mode);
+      if (lookup.second) {
         cse_key.destroy();
         if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-          assert(cse.first.isInt());
-          if (cse.first().toInt() != 1) {
+          assert(lookup.first.isInt());
+          if (lookup.first().toInt() != 1) {
             // TODO: The model is inconsistent!
             throw Error("Error: Model Inconsistent!");
           }
         } else {
-          pushAgg(cse.first, -1);
+          pushAgg(lookup.first, -1);
         }
-        return;
+        return ROGER;
       }
     }
     if (_procs[code].mode[mode].size() == 0) {
@@ -2340,6 +2350,7 @@ namespace MiniZinc {
       if (ident >= 0) {
         pushAgg(Val(def), -1);
       }
+      return ROGER;
     } else {
       // Ensure the last RET is next on the program counter
       _stack.back().pc--;
@@ -2347,13 +2358,14 @@ namespace MiniZinc {
       BytecodeFrame* newFrame = &_stack[_stack.size()-1];
       newFrame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
       newFrame->reg.mov(this, args);
-      run();
+      return run();
     }
   }
 
-  bool Interpreter::runDelayed() {
+  std::pair<Interpreter::Status, bool> Interpreter::runDelayed() {
     std::vector<Definition*> wave = std::move(delayed_calls);
     delayed_calls.clear();
+    Status status;
     for (auto def : wave) {
       if (def->exists()) {
         auto mode = static_cast<BytecodeProc::Mode>(def->mode());
@@ -2361,7 +2373,10 @@ namespace MiniZinc {
         for (int i = 0; i < def->size(); ++i) {
           args[i] = def->arg(i);
         }
-        call(def->pred(), mode, args, true);
+        status = call(def->pred(), mode, args, true);
+        if (status != ROGER) {
+          break;
+        }
         Val ret(1);
         if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
           ret = _agg.back().back();
@@ -2371,7 +2386,7 @@ namespace MiniZinc {
       }
       RefCountedObject::rmWRef(this, def);
     }
-    return !delayed_calls.empty();
+    return std::make_pair(status, !delayed_calls.empty());
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {

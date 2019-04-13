@@ -132,7 +132,7 @@ procedures:
 procedure:
     ":" MZA_ID ":" mode MZA_INT delay instructions
     {
-      // patch jumps with recorded labels
+      // Patch jumps with recorded labels
       for (auto& cl : ctx.patch_labels) {
         if (ctx.labels.find(cl.second) == ctx.labels.end()) {
           throw Error("Error: label " + cl.second + " not found\n");
@@ -142,6 +142,9 @@ procedure:
       ctx.labels.clear();
       ctx.patch_labels.clear();
 
+      // Add ABORT instruction for error management
+      ctx.proc_body.addInstr(BytecodeStream::ABORT);
+      // Store procedure in the correct place
       auto mode = static_cast<BytecodeProc::Mode>($4);
       auto it = ctx.proc_map.find($2);
       if (it != ctx.proc_map.end()) {
