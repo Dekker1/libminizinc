@@ -864,6 +864,7 @@ namespace MiniZinc {
     std::vector<Definition*> delayed_calls;
     std::deque<Definition*> _propQueue;
     RegisterFile globals;
+    Status _status = ROGER;
   public:
     Trail trail;
 
@@ -873,8 +874,9 @@ namespace MiniZinc {
       _stack.push_back(f);
     }
     ~Interpreter(void);
-    Status run(void);
-    std::pair<Status, bool> runDelayed();
+    Status status() { return _status; }
+    void run(void);
+    bool runDelayed();
     void pushAgg(const Val& v, int stackOffset);
     void pushDef(Definition* d);
     std::pair<Val, bool> cse_lookup(int proc, const CSETable::Key& key, BytecodeProc::Mode& mode) {
@@ -894,7 +896,7 @@ namespace MiniZinc {
     void deschedule(Definition* d);
     void propagate(void);
     Model* toFZN();
-    Status call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
+    void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
     
     /// Perform optimizatin by basic propagation on generated FlatZinc
     void optimize(void);

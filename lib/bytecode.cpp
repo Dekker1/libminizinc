@@ -878,8 +878,10 @@ namespace MiniZinc {
     }
   }
   
-  Interpreter::Status Interpreter::run(void) {
-    Status status = ROGER;
+  void Interpreter::run(void) {
+    if (_status != ROGER) {
+      return;
+    }
     BytecodeFrame* frame = &_stack.back();
     for (;;) {
       DBG_INTERPRETER(frame->pc << " ");
@@ -1296,7 +1298,7 @@ namespace MiniZinc {
           assert(!_stack.empty());
           if (_stack.size()==1) {
             // Always leave final frame on the stack
-            return status;
+            return;
           }
           assert(!frame->cse_info.empty());
           
@@ -1346,7 +1348,7 @@ namespace MiniZinc {
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(lookup.first.isInt());
                 if (lookup.first().toInt() != 1) {
-                  status = INCONSISTENT;
+                  _status = INCONSISTENT;
                   // Invariant: Last instruction in the frame is always an ABORT instruction
                   frame->pc = frame->bs->size()-1;
                 }
@@ -1467,7 +1469,10 @@ namespace MiniZinc {
           }
           // TODO: Should the Aggregation stack be emptied?
 
-          return status == ROGER ? ABORTED : status;
+          if (_status == ROGER) {
+            _status = ABORTED;
+          }
+          return;
         }
         case BytecodeStream::PUSH:
         {
@@ -2307,8 +2312,11 @@ namespace MiniZinc {
     }
   }
   
-  Interpreter::Status
+  void
   Interpreter::call(int code, const BytecodeProc::Mode& mode0, const std::vector<Val>& args0, bool delayed) {
+    if (_status != ROGER) {
+      return;
+    }
     BytecodeProc::Mode mode = mode0;
     std::vector<Val> args = args0;
     assert(code >= 0);
@@ -2334,7 +2342,7 @@ namespace MiniZinc {
         } else {
           pushAgg(lookup.first, -1);
         }
-        return ROGER;
+        return;
       }
     }
     if (_procs[code].mode[mode].size() == 0) {
@@ -2350,7 +2358,7 @@ namespace MiniZinc {
       if (ident >= 0) {
         pushAgg(Val(def), -1);
       }
-      return ROGER;
+      return;
     } else {
       // Ensure the last RET is next on the program counter
       _stack.back().pc--;
@@ -2362,10 +2370,9 @@ namespace MiniZinc {
     }
   }
 
-  std::pair<Interpreter::Status, bool> Interpreter::runDelayed() {
+  bool Interpreter::runDelayed() {
     std::vector<Definition*> wave = std::move(delayed_calls);
     delayed_calls.clear();
-    Status status;
     for (auto def : wave) {
       if (def->exists()) {
         auto mode = static_cast<BytecodeProc::Mode>(def->mode());
@@ -2373,8 +2380,8 @@ namespace MiniZinc {
         for (int i = 0; i < def->size(); ++i) {
           args[i] = def->arg(i);
         }
-        status = call(def->pred(), mode, args, true);
-        if (status != ROGER) {
+        call(def->pred(), mode, args, true);
+        if (_status = ROGER) {
           break;
         }
         Val ret(1);
@@ -2386,7 +2393,7 @@ namespace MiniZinc {
       }
       RefCountedObject::rmWRef(this, def);
     }
-    return std::make_pair(status, !delayed_calls.empty());
+    return !delayed_calls.empty();
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
