@@ -1076,9 +1076,14 @@ namespace MiniZinc {
             for (int i = 0; i < v.size(); ++i) {
               assert(!v[i].isVec());
               if (v[i].isDef()) {
-                // TODO: Fix domain check when we have domains!
-                ret = IntVal(0);
-                break;
+                auto dom = v[i].toDef()->domain();
+                if (dom.isVec() && dom.toVec()->size()==2 && (*dom.toVec())[0]==(*dom.toVec())[1]) {
+                  // TODO: Replace v[i] with its value
+//                  v[i].assign(this, (*dom.toVec())[0]);
+                } else {
+                  ret = IntVal(0);
+                  break;
+                }
               }
             }
             frame->reg.assign(this, r2, ret);
