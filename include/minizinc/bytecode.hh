@@ -254,12 +254,12 @@ namespace MiniZinc {
         toRCO()->addRef(interpreter);
       }
     }
-    void addToCSE(Interpreter* interpreter) {
+    void addWeakRef(Interpreter* interpreter) {
       if (isRCO()) {
         toRCO()->addWRef(interpreter);
       }
     };
-    void removeFromCSE(Interpreter* interpreter) {
+    void removeWeakRef(Interpreter* interpreter) {
       if (isRCO()) {
         RefCountedObject::rmWRef(interpreter, toRCO());
       }
@@ -550,6 +550,7 @@ namespace MiniZinc {
     /// Set the reference count to 1
     void makeUniqueReference(void) { _ref_count = 1; }
     void alias(Interpreter* interpreter, Val v);
+    void unalias(Interpreter* interpreter, int proc, int size, const Val& arg0);
     Definition* prev(void) const { return _prev; }
     Definition* next(void) const { return _next; }
     int listSize(void) const {
@@ -740,7 +741,7 @@ namespace MiniZinc {
       for (auto &table : _table) {
         for(auto &item : table) {
           item.first.destroy();
-          item.second.second.removeFromCSE(interpreter);
+          item.second.second.removeWeakRef(interpreter);
         }
       }
       _table = std::vector<impl>(1);
@@ -752,7 +753,7 @@ namespace MiniZinc {
         while (it != table.end()) {
           if (!it->second.second.exists()) {
             it->first.destroy();
-            it->second.second.removeFromCSE(interpreter);
+            it->second.second.removeWeakRef(interpreter);
             it = table.erase(it);
           } else {
             ++it;
@@ -764,7 +765,7 @@ namespace MiniZinc {
     void pop(Interpreter* interpreter) {
       for (auto& item : _table.back()) {
         item.first.destroy();
-        item.second.second.removeFromCSE(interpreter);
+        item.second.second.removeWeakRef(interpreter);
       }
       _table.pop_back();
     }
@@ -844,7 +845,7 @@ namespace MiniZinc {
       if (!is_trailed(def)) {
         return false;
       }
-      def->arg(0).addToCSE(interpreter);
+      def->arg(0).addWeakRef(interpreter);
       alias_trail.emplace_back(def, def->pred(), def->size(), def->arg(0));
       return true;
     }
@@ -853,7 +854,7 @@ namespace MiniZinc {
       if (!is_trailed(def)) {
         return false;
       }
-      dom.addToCSE(interpreter);
+      dom.addWeakRef(interpreter);
       domain_trail.emplace_back(def, dom);
       return true;
     }

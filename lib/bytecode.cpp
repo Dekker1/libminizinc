@@ -306,7 +306,23 @@ namespace MiniZinc {
     _args[0] = v;
     v.construct(interpreter);
   }
-  
+
+  void Definition::unalias(Interpreter* interpreter, int proc, int size, const Val& arg0) {
+    auto ref_count = _ref_count;
+    _pred = proc;
+    _size = size;
+    _args[0].destroy(interpreter);
+    _args[0] = arg0;
+    for (int i = 0; i < _size; ++i) {
+      _args[i].construct(interpreter);
+    }
+    // TODO: Transfer back subscriptions moved on aliasing?
+    interpreter->subscribe(this);
+    _ann.construct(interpreter);
+    _domain.construct(interpreter);
+    _ref_count = ref_count;
+  }
+
   void
   Definition::subscribe(Definition* d, const SubscriptionEventSet& events) {
     Definition* sub = this;
@@ -515,7 +531,7 @@ namespace MiniZinc {
     assert(mode != BytecodeProc::RAW);
     DBG_INTERPRETER("--- CSE add: hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString() << "\n");
     // If value is reference counted, flag that it's in CSE
-    val.addToCSE(interpreter);
+    val.addWeakRef(interpreter);
     auto insertion = _table.back().emplace(key, std::make_pair(mode, val));
     if (!insertion.second) {
       CSETable::iterator& it = insertion.first;
@@ -552,7 +568,7 @@ namespace MiniZinc {
           }
         }
       }
-      oldVal.removeFromCSE(interpreter);
+      oldVal.removeWeakRef(interpreter);
       it->second = std::make_pair(mode, val);
     }
   }
@@ -1884,7 +1900,7 @@ namespace MiniZinc {
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
-    trail_size.emplace_back(hedge_trail.size(), obj_trail.size(), alias_trail.size());
+    trail_size.emplace_back(hedge_trail.size(), obj_trail.size(), alias_trail.size(), domain_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
     for (auto &table : interpreter->cse) {
       table.push(interpreter, !last_operation_pop);
@@ -1928,10 +1944,8 @@ namespace MiniZinc {
       int proc, size;
       Val arg0;
       std::tie(def, proc, size, arg0) = alias_trail.back();
-      def->_pred = proc;
-      def->_size = size;
-      def->_args[0] = arg0;
-      arg0.removeFromCSE(interpreter);
+      def->unalias(interpreter, proc, size, arg0);
+      arg0.removeWeakRef(interpreter);
       alias_trail.pop_back();
     }
     // Restore original domains
@@ -1942,7 +1956,7 @@ namespace MiniZinc {
       def->_domain.destroy(interpreter);
       def->_domain = dom;
       def->_domain.construct(interpreter);
-      dom.removeFromCSE(interpreter);
+      dom.removeWeakRef(interpreter);
       domain_trail.pop_back();
     }
     // Remove all additions/changes to the CSE table
