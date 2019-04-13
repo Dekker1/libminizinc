@@ -1686,7 +1686,6 @@ namespace MiniZinc {
                 break;
               case AggregationCtx::VCTX_VEC:
                 // Create a vector on the aggregation stack
-                assert(_agg[_agg.size()-2].symbol==AggregationCtx::VCTX_OTHER);
                 _agg[_agg.size()-2].push(this,_agg.back().toVec(this,newIdent()));
                 break;
               case AggregationCtx::VCTX_OTHER:
