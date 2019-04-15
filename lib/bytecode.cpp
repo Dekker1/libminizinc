@@ -1686,6 +1686,15 @@ namespace MiniZinc {
                 if (isFalse || args.empty()) {
                   // Conjunction is constant true or false
                   pushAgg(IntVal(!isFalse),-2);
+                } else if (_agg.size()==2) {
+                  // Push into root context
+                  Definition* d = Definition::a(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::ROOT,
+                                                {Val(Vec::a(this,newIdent(),args))},-1);
+                  if (defs) {
+                    d->appendBefore(this, defs);
+                  } else {
+                    defs = d;
+                  }
                 } else {
                   result = Definition::a(this,IntVal(0),PrimitiveMap::FORALL,BytecodeProc::FUN,
                                          {Val(Vec::a(this,newIdent(),args))},newIdent());
@@ -1714,6 +1723,15 @@ namespace MiniZinc {
                 if (isTrue || args.empty()) {
                   // Disjunction is constant true or false
                   pushAgg(IntVal(isTrue),-2);
+                } else if (_agg.size()==2) {
+                  // Push into root context
+                  Definition* d = Definition::a(this,IntVal(0),PrimitiveMap::EXISTS,BytecodeProc::ROOT,
+                                                {Val(Vec::a(this,newIdent(),args))},-1);
+                  if (defs) {
+                    d->appendBefore(this, defs);
+                  } else {
+                    defs = d;
+                  }
                 } else {
                   result = Definition::a(this,IntVal(0),PrimitiveMap::EXISTS,BytecodeProc::FUN,
                                          {Val(Vec::a(this,newIdent(),args))},newIdent());
@@ -1755,7 +1773,9 @@ namespace MiniZinc {
                 // INVARIANT: The result of aggregation is not referenced by any of the registers.
                 assert(std::none_of(frame->reg.cbegin(), frame->reg.cend(), [result](Val v) { return v.contains(Val(result)); }));
                 result->makeUniqueReference();
-                result->defs(this, defs);
+                if (defs) {
+                  result->defs(this, defs);
+                }
                 defs = result;
               }
             }
