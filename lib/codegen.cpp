@@ -2686,7 +2686,27 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
           PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(r_d));
           CLOSE_AGG(cg, frag);
         } else {
-          TODO();
+          // Open nested iterators
+          std::vector<int> r_regs;
+          for(Expression* r : vd->ti()->ranges()) {
+            Expression* dim(r->template cast<TypeInst>()->domain());
+            CG::Binding b_reg(CG::bind(dim, cg, frag));
+            // FIXME: Ignoring conditions
+            // post_cond(cg, frag, b_reg.second);
+            r_regs.push_back(b_reg.first);
+          }
+          std::vector<Forset> nesting;
+          OPEN_VEC(cg, frag);
+          for(int r_r : r_regs) {
+            Forset iter(cg, r_r);
+            nesting.push_back(iter);
+            iter.emit_pre(frag);
+          }
+          PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(b_d.first));
+          for(int r_i = r_regs.size()-1; r_i >= 0; --r_i) {
+            nesting[r_i].emit_post(frag);
+          }
+          CLOSE_AGG(cg, frag);
         }
         r_v = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_v));
@@ -3001,12 +3021,32 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       } else {
         // Variable declaration. Assumes is total and nonempty.
         CG::Binding b_d(bind_domain(vd, cg, frag));
-        if(vd->ti()->isarray())
-          TODO();
-        conj.push_back(b_d.second);
-        OPEN_OTHER(cg, frag);
-        PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(b_d.first));
-        CLOSE_AGG(cg, frag);
+        if(!vd->ti()->isarray()) {
+          conj.push_back(b_d.second);
+          OPEN_OTHER(cg, frag);
+          PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(b_d.first));
+          CLOSE_AGG(cg, frag);
+        } else {
+          std::vector<int> r_regs;
+          for(Expression* r : vd->ti()->ranges()) {
+            Expression* dim(r->template cast<TypeInst>()->domain());
+            CG::Binding b_reg(CG::bind(dim, cg, frag));
+            // post_cond(cg, frag, b_reg.second);
+            r_regs.push_back(b_reg.first);
+          }
+          std::vector<Forset> nesting;
+          OPEN_VEC(cg, frag);
+          for(int r_r : r_regs) {
+            Forset iter(cg, r_r);
+            nesting.push_back(iter);
+            iter.emit_pre(frag);
+          }
+          PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(b_d.first));
+          for(int r_i = r_regs.size()-1; r_i >= 0; --r_i) {
+            nesting[r_i].emit_post(frag);
+          }
+          CLOSE_AGG(cg, frag);
+        }
         r_v = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_v));
       }
