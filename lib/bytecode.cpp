@@ -1812,6 +1812,38 @@ namespace MiniZinc {
       fzn->addItem(failI);
     } else if (!_agg.empty()) {
       fzn = Definition::toFZN(this, _agg.back().def_stack, _procs);
+      Env env(fzn);
+      std::vector<FunctionI*> toAdd;
+      for (auto ci = fzn->begin_constraints(); ci != fzn->end_constraints(); ++ci) {
+        auto call = ci->e()->cast<Call>();
+        FunctionI* fi = fzn->matchFn(env.envi(), call, false);
+        if (!fi) {
+          std::vector<VarDecl*> args;
+          for (int i = 0; i < call->n_args(); ++i) {
+            TypeInst* ti;
+            if (call->arg(i)->type().dim() > 0) {
+              auto al = eval_array_lit(env.envi(), call->arg(i));
+              std::vector<TypeInst*> ranges(al->dims());
+              for (auto& range : ranges) {
+                range = new TypeInst(Location().introduce(), Type::parint(), nullptr);
+              }
+              ti = new TypeInst(Location().introduce(), call->arg(i)->type(), ranges, nullptr);
+            } else {
+              ti = new TypeInst(Location().introduce(), call->arg(i)->type(), nullptr);
+            }
+            args.push_back(new VarDecl(Location().introduce(), ti, i));
+          }
+          TypeInst* ti = new TypeInst(Location().introduce(), Type::varbool());
+          fi = new FunctionI(Location().introduce(), call->id().str(), ti, args, nullptr);
+          fzn->registerFn(env.envi(), fi);
+          toAdd.push_back(fi);
+        }
+        call->decl(fi);
+      }
+      env.model(nullptr);
+      for (const auto& j : toAdd) {
+        fzn->addItem(j);
+      }
     }
 
     if (fzn) {

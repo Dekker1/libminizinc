@@ -302,15 +302,22 @@ namespace MiniZinc {
       } else if (this->isDef()) {
         auto it = vdmap.find(this->timestamp());
         VarDecl* vd = it != vdmap.end() ? it->second : nullptr;
-        return new Id(Location().introduce(), this->timestamp(), vd);
+        auto id = new Id(Location().introduce(), this->timestamp(), vd);
+        id->type(vd->type());
+        return id;
       } else {
         assert(this->isVec());
         std::vector<Expression*> vec(this->size());
+        bool par = true;
         for (int i = 0; i < this->size(); ++i) {
           Val v = (*this)[i];
+          assert(!v.isVec()); // TODO: Handle multi-dimentional vectors
           vec[i] = v.toFZN(vdmap);
+          par = par && vec[i]->type().ispar();
         }
-        return new ArrayLit(Location().introduce(), vec);
+        auto al = new ArrayLit(Location().introduce(), vec);
+        al->type(par ? Type::parint(1) : Type::varint(1));
+        return al;
       }
     }
   };
