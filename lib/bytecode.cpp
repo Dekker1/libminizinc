@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <fstream>
 #include <streambuf>
+#include <minizinc/eval_par.hh>
 
 //#define DBG_INTERPRETER(msg) std::cerr << msg
 #define DBG_INTERPRETER(msg) do {} while(0)
