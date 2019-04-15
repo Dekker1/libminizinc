@@ -82,6 +82,7 @@ const char* instr_names[] = {
       
       "PUSH",
       "POP",
+      "POST",
       
       "RET",
       "CALL",
@@ -132,7 +133,7 @@ void CodeGen::register_builtins(void) {
   register_builtin("bool_clause", 2);
   
   register_builtin("int_eq", 2);
-  register_builtin("int_lt", 2);
+  // register_builtin("int_lt", 2);
   register_builtin("int_le", 2);
 
   register_builtin("int_plus", 2);
@@ -194,7 +195,7 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
     case BOT_EQ:
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_eq"), CG::r(r_lhs), CG::r(r_rhs));
       return;
-    case BOT_LE:
+    case BOT_LQ:
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_le"), CG::r(r_lhs), CG::r(r_rhs));
       return;
     case BOT_PLUS:
@@ -216,14 +217,14 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
     case BOT_NQ:
       call_binop(cg, frag, -ctx, BOT_EQ, r_lhs, r_rhs);
       return;
-    case BOT_LQ:
-      call_binop(cg, frag, -ctx, BOT_LE,  r_rhs, r_lhs);
+    case BOT_LE:
+      call_binop(cg, frag, -ctx, BOT_LQ,  r_rhs, r_lhs);
       return;
     case BOT_GR:
-      call_binop(cg, frag, -ctx, BOT_LE, r_lhs, r_rhs);
+      call_binop(cg, frag, -ctx, BOT_LQ, r_rhs, r_lhs);
       return;
     case BOT_GQ:
-      call_binop(cg, frag, ctx, BOT_LE, r_rhs, r_lhs);
+      call_binop(cg, frag, ctx, BOT_LQ, r_rhs, r_lhs);
       return;
 
     case BOT_XOR:
@@ -381,17 +382,17 @@ CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs)
     // Actual builtins
     case BOT_EQ:
       return CG_Cond::call(cg.find_builtin("int_eq"), ctx, CG::r(r_lhs), CG::r(r_rhs));
-    case BOT_LE:
+    case BOT_LQ:
       return CG_Cond::call(cg.find_builtin("int_le"), ctx, CG::r(r_lhs), CG::r(r_rhs));
     // Normalisation
     case BOT_NQ:
       return binop_cond(cg, BOT_EQ, -ctx, r_lhs, r_rhs);
-    case BOT_LQ:
-      return binop_cond(cg, BOT_LE, -ctx, r_rhs, r_lhs);
+    case BOT_LE:
+      return binop_cond(cg, BOT_LQ, -ctx, r_rhs, r_lhs);
     case BOT_GR:
-      return binop_cond(cg, BOT_LE, -ctx, r_lhs, r_rhs);
+      return binop_cond(cg, BOT_LQ, -ctx, r_lhs, r_rhs);
     case BOT_GQ:
-      return binop_cond(cg, BOT_LE, ctx, r_rhs, r_lhs);
+      return binop_cond(cg, BOT_LQ, ctx, r_rhs, r_lhs);
     case BOT_XOR:
       return binop_cond(cg, BOT_EQUIV, -ctx, r_lhs, r_rhs);
     case BOT_RIMPL:
@@ -1309,15 +1310,60 @@ void show(O& out, CodeGen& cg) {
   }
 }
 
+/*
 void post_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
   if(!cond.get()) {
     assert(!cond.sign());
     return;
   }
+
   std::vector<int> leaves;
   force_and_leaves(leaves, cond, cg, frag);
   for(int r_c : leaves)
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+    PUSH_INSTR(frag, BytecodeStream::POST, CG::r(r_c));
+}
+*/
+void post_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
+  if(!cond.get()) {
+    if(cond.sign())
+      PUSH_INSTR(frag, BytecodeStream::POST, CG::r(bind_cst(0, cg, frag)));
+    return;
+  }
+  CG_Cond::_T* p(cond.get()); 
+  bool sign(cond.sign()); 
+  if(p->reg[sign].is_root)
+    return;
+  if(p->reg[1 - sign].is_root) {
+    PUSH_INSTR(frag, BytecodeStream::POST, CG::r(bind_cst(0, cg, frag)));
+    return;
+  }
+
+  if(p->reg[sign].has_reg()) {
+    PUSH_INSTR(frag, BytecodeStream::POST, CG::r(p->reg[sign].reg));
+  } else if(p->reg[1 - sign].has_reg()) {
+    OPEN_OTHER(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("bool_not"), CG::r(p->reg[1 - sign].reg));
+    CLOSE_AGG(cg, frag);
+    int r(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::POST, CG::r(r));
+    p->reg[sign] = r;
+  } else if(p->kind() == CG_Cond::CC_Call) {
+    CG_Cond::C_Call* call(static_cast<CG_Cond::C_Call*>(p));
+    BytecodeProc::Mode m = (CG::Mode(call->m).is_neg() ^ sign) ? BytecodeProc::ROOT_NEG : BytecodeProc::ROOT;
+    PUSH_INSTR(frag, BytecodeStream::CALL, m, call->p, call->params);
+  } else {
+    assert(p->kind() == CG_Cond::CC_And);
+    CG_Cond::C_And* conj(reinterpret_cast<CG_Cond::C_And*>(p));
+    if(!sign) {
+      // Recurse.    
+      for(CG_Cond::T child : conj->children)
+        post_cond(cg, frag, child);
+    } else {
+      PUSH_INSTR(frag, BytecodeStream::POST, CG::r(CG::force(cond, cg, frag)));
+    }
+  }
+  p->reg[sign].is_root = true;
 }
 
 // FIXME: This always forces calls outside the aggregation.
@@ -1579,7 +1625,11 @@ private:
     }
     
     // Now compile the result. 
-    aggregate_cond(cg, frag, CG::compile(e, cg, frag));
+    CG_Cond::T cond(CG::compile(e, cg, frag));
+    if(m == BytecodeProc::ROOT) 
+      post_cond(cg, frag, cond);
+    else
+      aggregate_cond(cg, frag, CG::compile(e, cg, frag));
     PUSH_INSTR(frag, BytecodeStream::RET);
 
     cg.current_reg_count = saved_regs;
