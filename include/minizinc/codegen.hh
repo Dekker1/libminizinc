@@ -123,6 +123,7 @@ public:
     : bindings(std::move(o.bindings))
     , available(std::move(o.available))
     , available_csts(std::move(o.available_csts))
+    , available_ranges(std::move(o.available_ranges))
     , occurs(std::move(o.occurs)), p(o.p), sz(o.sz) { }
 
 
@@ -200,11 +201,23 @@ public:
     available_csts.insert(std::make_pair(x, val));
   }
 
-  /*
-  CG_Env clone(const CG_Env& o) {
-    return CG_Env(o);
+  static uint64_t range_key(int l, int u) {
+    return (((uint64_t) u)<<32ull | (uint64_t) l);
   }
-  */
+  bool cache_lookup_range(int l, int u, T& ret) {
+    auto it(available_ranges.find(range_key(l, u)));
+    // Anything in the current table is hasn't been invalidated.
+    if(it != available_ranges.end()) {
+      ret = (*it).second;
+      return true; 
+    }
+    if(!p) return false;
+    return p->cache_lookup_range(l, u, ret);
+  }
+  void cache_store_range(int l, int u, T val) {
+    available_ranges.insert(std::make_pair(range_key(l, u), val));
+  }
+
   static CG_Env* spawn(CG_Env* p) { return new CG_Env<T>(p); }
 
   unsigned int size(void) const { return sz; }
@@ -213,6 +226,7 @@ public:
 
   typename ExprMap<T>::t available;
   std::unordered_map<int, T> available_csts;
+  std::unordered_map<uint64_t, T> available_ranges;
 //  std::unordered_map<std::pair<int, int>, T> available_ranges;
   typename ASTStringMap<std::vector<Expression*> >::t occurs;
 

@@ -188,8 +188,6 @@ CG_ProcID CodeGen::find_builtin(std::string s) {
   return (*it).second;
 }
 
-// template<class O>
-// struct 
 void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs, int r_rhs) {
   switch(op) {
     // Actual builtins
@@ -937,6 +935,17 @@ void debugcond(CG_Cond::T c) {
   std::cerr << std::endl;
 }
 
+int bind_cst(int x, CodeGen& cg, CG_Builder& frag) {
+    CG::Binding b;
+    if(cg.env().cache_lookup_cst(x, b))
+      return b.first;
+    int r = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(x), CG::r(r));
+    cg.env().cache_store_cst(x, std::make_pair(r, CG_Cond::ttt()));
+    return r;
+}
+
+
 // Given CG_Cond cond, collect the disjuncts having positive or negative values.
 // Returns false if the conjunction is a contradiction.
 bool collect_prod(std::vector<int>& pos, std::vector<int>& neg, std::vector<CG_Cond::C_And*>& delayed, CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
@@ -1075,7 +1084,8 @@ int _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
   bool negated(cond.sign());
   if(!p) {
     // Either true or false.
-    return CG::locate_immi(1 - cond.sign(), cg, frag);
+    // return CG::locate_immi(1 - cond.sign(), cg, frag);
+    return bind_cst(1 - cond.sign(), cg, frag);
   }
   if(p->kind() == CG_Cond::CC_Reg) {
     // return cond->reg[negated].reg;
@@ -1093,7 +1103,8 @@ int _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     } else {
       PUSH_INSTR(frag, BytecodeStream::CALL, negated ? -m : m, call->p, call->params);
-      r = CG::locate_immi(1, cg, frag);
+      // r = CG::locate_immi(1, cg, frag);
+      r = bind_cst(1, cg, frag);
     }
     return r;
   } else if(p->kind() == CG_Cond::CC_And && !cond.sign()) {
@@ -1314,7 +1325,8 @@ void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
   CG_Cond::_T* p(cond.get());
   bool sign(cond.sign());
   if(!p) {
-    int r_val(CG::locate_immi(1 - sign, cg, frag));
+    // int r_val(CG::locate_immi(1 - sign, cg, frag));
+    int r_val(bind_cst(1 - sign, cg, frag));
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_val));
     return;
   }
@@ -1342,12 +1354,40 @@ void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
   }
 }
 
-// Placeholders.
+int locate_range(int l, int u, CodeGen& cg, CG_Builder& frag) {
+  CG::Binding b;
+  if(cg.env().cache_lookup_range(l, u, b))
+    return b.first;
+
+  OPEN_VEC(cg, frag); 
+  int r = GET_REG(cg);
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(l), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(u), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+  CLOSE_AGG(cg, frag);
+  r = GET_REG(cg);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  cg.env().cache_store_range(l, u, std::make_pair(r, CG_Cond::ttt()));
+  return r;
+}
+
+CG::Binding bind_domain(VarDecl* vd, CodeGen& cg, CG_Builder& frag) {
+  if(vd->type().isbool()) {
+    return CG::Binding(locate_range(0, 1, cg, frag), CG_Cond::ttt()); 
+  } else {
+    Expression* d(vd->ti()->domain());
+    CG::Binding b(CG::bind(d, cg, frag));
+    // Ignoring partiality here.
+    return b;
+  }
+}
+
 class Compile : public ItemVisitor {
 private:
   friend class ItemIter<Compile>;
 
-  Compile(CodeGen& _cg) : cg(_cg), bool_dom(-1) { }
+  Compile(CodeGen& _cg) : cg(_cg) /*, bool_dom(-1) */ { }
 
   /// Enter model
   bool enterModel(Model* m) { return true; }
@@ -1384,28 +1424,10 @@ private:
           }
         }
       } else {
-        int r_d;
-        if(vd->type().isbool()) {
-          if(bool_dom < 0) {
-            int l = CG::locate_immi(0, cg, root_frag);
-            int u = CG::locate_immi(1, cg, root_frag);
-            bool_dom = GET_REG(cg);
-            OPEN_VEC(cg, root_frag);
-            PUSH_INSTR(root_frag, BytecodeStream::PUSH, CG::r(l));
-            PUSH_INSTR(root_frag, BytecodeStream::PUSH, CG::r(u));
-            CLOSE_AGG(cg, root_frag);
-            PUSH_INSTR(root_frag, BytecodeStream::POP, CG::r(bool_dom));
-          }
-          r_d = bool_dom;
-        } else {
-          Expression* d(vd->ti()->domain());
-          assert(d);
-          assert(d->type().ispar());
-          debugprint(d);
-          CG::Binding b_d(CG::bind(d, cg, root_frag));
-          post_cond(cg, root_frag, b_d.second);
-          r_d = b_d.first;
-        }
+        CG::Binding b_d(bind_domain(vd, cg, root_frag));
+        post_cond(cg, root_frag, b_d.second);
+        int r_d = b_d.first;
+
         if(vd->ti()->isarray()) {
           // Open nested iterators
           std::vector<int> r_regs;
@@ -1478,8 +1500,7 @@ private:
 
   void vFunctionI(FunctionI* f) {
     GCLock l;
-    ASTString exp_str("export");
-    if(f->ann().containsCall(exp_str)) {
+    if(f->ann().contains(constants().ann._export)) {
       CG_ProcID body(cg.resolve_fun(f));
       // Force the body to be created
       if(!body.is_builtin()) {
@@ -1570,7 +1591,7 @@ private:
   CG_Builder root_frag;
 
   int globals_count;
-  int bool_dom;
+  // int bool_dom;
 public:
   static void run(CodeGen& cg, Model* m) {
     Compile c(cg);
@@ -1697,7 +1718,8 @@ std::pair<int, CG_Cond::T> _bind(Expression* e, CodeGen& cg, CG_Builder& frag) {
 
   switch (e->eid()) {
   case Expression::E_INTLIT:
-    return std::make_pair(CG::locate_immi(e->template cast<IntLit>()->v().toInt(), cg, frag), CG_Cond::ttt());
+    // return std::make_pair(CG::locate_immi(e->template cast<IntLit>()->v().toInt(), cg, frag), CG_Cond::ttt());
+    return std::make_pair(bind_cst(e->template cast<IntLit>()->v().toInt(), cg, frag), CG_Cond::ttt());
   case Expression::E_FLOATLIT:
     // return std::make_pair(CG::locate_par(e->template cast<FloatLit>(), cg, frag), nullptr);
     TODO();
@@ -1959,7 +1981,8 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int r_A(b_elts.first);
   {
   OPEN_OTHER(cg, frag);
-  int r_one(CG::locate_immi(1, cg, frag));
+  // int r_one(CG::locate_immi(1, cg, frag));
+  int r_one(bind_cst(1, cg, frag));
   int r_sz(GET_REG(cg));
   int r_elt(GET_REG(cg));
   int r_acc(GET_REG(cg));
@@ -2332,8 +2355,10 @@ void call_clause(CodeGen& cg, CG_Builder& frag, Mode ctx, const std::vector<int>
 
 int deinterlace(CodeGen& cg, CG_Builder& frag, int vec, int width, int offset) {
   OPEN_VEC(cg, frag);
-  int r_i(CG::locate_immi(1 + offset, cg, frag));
-  int r_step(CG::locate_immi(width, cg, frag));
+  // int r_i(CG::locate_immi(1 + offset, cg, frag));
+  // int r_step(CG::locate_immi(width, cg, frag));
+  int r_i(bind_cst(1 + offset, cg, frag));
+  int r_step(bind_cst(width, cg, frag));
   int r_sz(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(vec), CG::r(r_sz));
   int r_elt(GET_REG(cg));
@@ -2355,11 +2380,13 @@ int deinterlace(CodeGen& cg, CG_Builder& frag, int vec, int width, int offset) {
   return r_slice;
 }
 
+/*
 inline int reg_k(int k, CodeGen& cg, CG_Builder& frag, int& r) {
   if(r == -1)
     r = CG::locate_immi(1, cg, frag);
   return r;
 }
+*/
 
 CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<int> r_cond;
@@ -2381,9 +2408,11 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       p_res.push_back(CG::force(b_res.second, cg, frag));
     } else {
       if(b_res.second.sign())
-        p_res.push_back(reg_k(0, cg, frag, r_zero));
+        /* p_res.push_back(reg_k(0, cg, frag, r_zero)); */
+        p_res.push_back(bind_cst(0, cg, frag));
       else
-        p_res.push_back(reg_k(1, cg, frag, r_one));
+        /* p_res.push_back(reg_k(1, cg, frag, r_one)); */
+        p_res.push_back(bind_cst(1, cg, frag));
     }
   }
   Binding b_final = CG::bind(ite->e_else(), cg, frag);
@@ -2393,9 +2422,11 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     p_res.push_back(CG::force(b_final.second, cg, frag));
   } else {
     if(b_final.second.sign())
-      p_res.push_back(reg_k(0, cg, frag, r_zero));
+      // p_res.push_back(reg_k(0, cg, frag, r_zero));
+      p_res.push_back(bind_cst(0, cg, frag));
     else
-      p_res.push_back(reg_k(1, cg, frag, r_one));
+      // p_res.push_back(reg_k(1, cg, frag, r_one));
+      p_res.push_back(bind_cst(1, cg, frag));
   }
 
   // Build an array of interleaved selectors and conditions.
@@ -2558,7 +2589,8 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
     // These all require rhs() != 0. Which means we need to evaluate the rhs,
     // and put it in a register.
-    int r_zero(CG::locate_immi(0, cg, frag));
+    // int r_zero(CG::locate_immi(0, cg, frag));
+    int r_zero(bind_cst(0, cg, frag));
     partial.push_back(CG_Cond::call(cg.find_builtin("int_eq"), -ctx, CG::r(b_rhs.first), CG::r(r_zero)));
   }
   return CG::Binding(r, CG_Cond::forall(ctx, partial));
@@ -2646,8 +2678,9 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         }
       } else {
         // Variable declaration. Assumes is total and nonempty.
-        Expression* d(vd->ti()->domain());
-        int r_d = CG::bind(d, cg, frag).first; // Discarding any constraints
+        CG::Binding b_d(bind_domain(vd, cg, frag));
+        int r_d = b_d.first; // Ignoring constraints introduced by domain.
+        partial.push_back(b_d.second);
         if(!vd->ti()->isarray()) {
           OPEN_OTHER(cg, frag);
           PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(r_d));
@@ -2658,7 +2691,6 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         r_v = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_v));
       }
-      // cg.env().bind(vd->id()->v(), Loc::reg(r_v));
       cg.env().bind(vd->id()->v(), CodeGen::Binding(r_v, CG_Cond::ttt()));
     } else {
       // Must be a constraint
@@ -2968,12 +3000,12 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         conj.push_back(b_v.second);
       } else {
         // Variable declaration. Assumes is total and nonempty.
-        Expression* d(vd->ti()->domain());
+        CG::Binding b_d(bind_domain(vd, cg, frag));
         if(vd->ti()->isarray())
           TODO();
-        int r_d = CG::bind(d, cg, frag).first; // Discarding any constraints
+        conj.push_back(b_d.second);
         OPEN_OTHER(cg, frag);
-        PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(r_d));
+        PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(b_d.first));
         CLOSE_AGG(cg, frag);
         r_v = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_v));

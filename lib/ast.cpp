@@ -1476,6 +1476,8 @@ namespace MiniZinc {
     ann.is_reverse_map->type(Type::ann());
     ann.promise_total = new Id(Location(), ASTString("promise_total"), NULL);
     ann.promise_total->type(Type::ann());
+    ann._export = new Id(Location(), ASTString("export"), NULL);
+    ann._export->type(Type::ann());
     ann.maybe_partial = new Id(Location(), ASTString("maybe_partial"), NULL);
     ann.maybe_partial->type(Type::ann());
     ann.doc_comment = ASTString("doc_comment");
@@ -1690,6 +1692,7 @@ namespace MiniZinc {
     v.push_back(new StringLit(Location(),ann.defines_var));
     v.push_back(ann.is_reverse_map);
     v.push_back(ann.promise_total);
+    v.push_back(ann._export);
     v.push_back(ann.maybe_partial);
     v.push_back(new StringLit(Location(),ann.doc_comment));
     v.push_back(new StringLit(Location(),ann.mzn_path));
