@@ -523,7 +523,7 @@ inline CG_Cond::T CG_Cond::_exists(BytecodeProc::Mode m, std::vector<T>& args) {
   std::vector<T> c_args;
   for(T e : args)
     c_args.push_back(~e);
-  return ~T::of_ptr(new C_And(-CG::Mode(m), args));
+  return ~T::of_ptr(new C_And(-CG::Mode(m), c_args));
 }
 
 // Partially compiled bytecode.
