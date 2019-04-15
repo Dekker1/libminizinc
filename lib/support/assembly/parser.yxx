@@ -106,6 +106,7 @@ void yyerror(MZAContext& ctx, const char* s);
 
 %token<bValue> MZA_PUSH
 %token<bValue> MZA_POP
+%token<bValue> MZA_POST
 
 %token<bValue> MZA_RET
 %token<bValue> MZA_CALL
@@ -297,6 +298,7 @@ instrR:
   | MZA_DECI
   | MZA_PUSH
   | MZA_POP
+  | MZA_POST
   | MZA_TRACE
 
 instrRR:

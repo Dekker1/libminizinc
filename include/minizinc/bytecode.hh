@@ -83,6 +83,7 @@ namespace MiniZinc {
       
       PUSH,  // R: push R onto value stack
       POP,   // R: pop from value stack into R
+      POST,  // R: post constraint in R
       
       RET, // return from call
       CALL, // m, i, n, R1, ..., Rn: call code i in mode m with n arguments
@@ -500,16 +501,18 @@ namespace MiniZinc {
     int _pred : 32;
     int _size : 31;
     unsigned int _flag : 1;
+    /// Whether current domain is binding
+    unsigned int _binding : 1;
     char _mode : 8;
     Subscriptions _subscriptions;
     Val _args[1];
-    Definition(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
+    Definition(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
   public:
     Val domain(void) const { return _domain; }
     /// Set domain to \a newDomain, schedule propagators
-    void domain(Interpreter* interpreter, const Val& newDomain);
+    void domain(Interpreter* interpreter, const Val& newDomain, bool binding);
     /// Set domain to \a newDomain, schedule propagators
-    void domain(Interpreter* interpreter, const std::vector<Val>& newDomain);
+    void domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding);
     Val ann(void) const { return _ann; }
     int pred(void) const { return _pred; }
     char mode(void) const { return _mode; }
@@ -518,13 +521,13 @@ namespace MiniZinc {
     Definition* defs(void) const { return _defs; }
     void defs(Interpreter* interpreter, Definition* defs) {
       if (!_defs) {
-        _defs = Definition::a(interpreter,IntVal(0),0,0,{},-1);
+        _defs = Definition::a(interpreter,IntVal(0),false,0,0,{},-1);
       }
       _defs->appendBefore(interpreter, defs);
     }
-    static Definition* a(Interpreter* interpreter, Val domain,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
+    static Definition* a(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
       Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
-      new (d) Definition(interpreter,domain,pred,mode,args,ident,ann);
+      new (d) Definition(interpreter,domain,binding,pred,mode,args,ident,ann);
       return d;
     }
     static void free(Definition* def) {
@@ -579,6 +582,10 @@ namespace MiniZinc {
     bool flag(void) const { return _flag==1; }
     /// Set flag whether definition is currently scheduled
     void flag(bool f) { _flag = f; }
+    /// Flag whether definition's domain is binding
+    bool binding(void) const { return _binding==1; }
+    /// Set flag whether definition's domain is binding
+    void binding(Interpreter* interpreter, bool f);
     /// Add \a d to set of subscribed constraints
     void subscribe(Definition* d, const SubscriptionEventSet& events);
     /// Remove \a d from set of subscribed constraints
@@ -898,6 +905,7 @@ namespace MiniZinc {
     bool runDelayed();
     void pushAgg(const Val& v, int stackOffset);
     void pushDef(Definition* d);
+    void pushDefs(Definition* defs);
     std::pair<Val, bool> cse_lookup(int proc, const CSETable::Key& key, BytecodeProc::Mode& mode) {
       return cse[proc].lookup(this, key, mode);
     }
@@ -965,7 +973,7 @@ namespace MiniZinc {
 
   inline
   AggregationCtx::AggregationCtx(Interpreter* interpreter, int s) :
-    def_stack(Definition::a(interpreter,IntVal(0),0,0,{},-1)),
+    def_stack(Definition::a(interpreter,IntVal(0),false,0,0,{},-1)),
     def_ident_start(interpreter->currentIdent()),
     symbol(static_cast<Symbol>(s)), n_symbols(1) {
     assert(s >= 0 && s <= VCTX_OTHER);

@@ -79,6 +79,7 @@ using namespace MiniZinc;
 
 "PUSH"      { mza_yylval.bValue = BytecodeStream::PUSH; return MZA_PUSH; }
 "POP"       { mza_yylval.bValue = BytecodeStream::POP; return MZA_POP; }
+"POST"       { mza_yylval.bValue = BytecodeStream::POST; return MZA_POST; }
 
 "RET"       { mza_yylval.bValue = BytecodeStream::RET; return MZA_RET; }
 "CALL"      { mza_yylval.bValue = BytecodeStream::CALL; return MZA_CALL; }

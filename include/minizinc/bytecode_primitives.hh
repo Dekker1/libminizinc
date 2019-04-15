@@ -124,7 +124,7 @@ namespace MiniZinc {
         assert(d->domain().isInt());
         if (d->arg(0).isVec()) {
           // Propagate declared domain to definition
-          d->domain(&i, d->arg(0));
+          d->domain(&i, d->arg(0), false);
         }
         return PS_OK;
       }
