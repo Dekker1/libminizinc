@@ -87,7 +87,6 @@ namespace MiniZinc {
   }
   
   void Definition::destroy(MiniZinc::Interpreter* interpreter)  {
-    assert(_ref_count == 0);
     _ref_count = (1u<<31u)-1u;
     if (_defs) {
       Definition* cur = _defs->next();
@@ -2033,7 +2032,8 @@ namespace MiniZinc {
     size_t ht_size, ot_size, at_size, dt_size;
     std::tie(ht_size, ot_size, at_size, dt_size) = trail_size.back(); trail_size.pop_back();
     int timestamp = timestamp_trail.back(); timestamp_trail.pop_back();
-    Definition* back = interpreter->_agg[0].def_stack;
+    Definition* back = interpreter->_agg[0].def_stack->prev(); // Ignore empty object;
+    assert(back->pred() != 0);
     // Reconstruct destroyed items
     while(obj_trail.size() > ot_size) {
       auto obj = obj_trail.back();
@@ -2057,7 +2057,6 @@ namespace MiniZinc {
     }
     // Restore original definitions for created aliases
     while (alias_trail.size() > at_size) {
-      // TODO: this is clearly wrong. The definition needs something like reconstruct
       Definition* def;
       int proc, size;
       Val arg0;
@@ -2082,7 +2081,7 @@ namespace MiniZinc {
       table.pop(interpreter);
     }
     // Remove all newly created definitions
-    while (back->timestamp() > timestamp) {
+    while (back->next() != back) {
       Definition* rem = back;
       back = back->prev();
       rem->destroy(interpreter);
