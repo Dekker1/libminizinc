@@ -14,6 +14,7 @@
 
 #include <minizinc/flattener.hh>
 #include <minizinc/solver.hh>
+#include <minizinc/solvers/incremental_interfaces.hh>
 //#include <minizinc/solver_instance_base.hh>
 
 namespace MiniZinc {
@@ -44,12 +45,13 @@ namespace MiniZinc {
     std::vector<MZNFZNSolverFlag> fzn_solver_flags;
   };
 
-  class FZNSolverInstance : public SolverInstanceBase {
+  class FZNSolverInstance : public SolverInstanceBase, public Changeable {
     private:
       std::string _fzn_solver;
     protected:
       Model* _fzn;
       Model* _ozn;
+      bool changed = false;
     public:
       FZNSolverInstance(Env& env, std::ostream& log, SolverInstanceBase::Options* opt);
 
@@ -62,6 +64,8 @@ namespace MiniZinc {
       void processFlatZinc(void);
 
       void resetSolver(void);
+
+      void changeModel(Model* newFZN) { if (changed) { delete _fzn; } _fzn = newFZN; changed = true; }
 
     protected:
       Expression* getSolutionValue(Id* id);

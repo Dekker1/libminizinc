@@ -21,6 +21,7 @@
 #include <minizinc/solver_config.hh>
 #include <minizinc/solver_instance_base.hh>
 #include <minizinc/exception.hh>
+#include <minizinc/bytecode.hh>
 
 namespace MiniZinc {
   
@@ -141,7 +142,11 @@ namespace MiniZinc {
     SolverInstanceBase::Options* getSI_OPT() { assert(si_opt); return si_opt; }
     bool get_flag_verbose() { return flag_verbose; /*getFlt()->get_flag_verbose();*/ }
     void printUsage();
-    
+
+    void pushToSolver(Interpreter& interpreter);
+    void popFromSolver(Interpreter& interpreter);
+    SolverInstance::Status solve();
+
   private:
     void printHelp(const std::string& selectedSolver=std::string());
     /// Flatten model
@@ -152,7 +157,6 @@ namespace MiniZinc {
     bool ifSolns2out();
     void addSolverInterface();
     void addSolverInterface(SolverFactory* sf);
-    SolverInstance::Status solve();
     void printStatistics();
     
     SolverInstance::Status getFltStatus() { return flt.status; }

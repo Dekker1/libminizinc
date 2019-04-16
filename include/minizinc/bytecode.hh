@@ -811,6 +811,7 @@ namespace MiniZinc {
   };
 
   class Trail {
+    friend class MznSolver;
   protected:
     std::vector<std::pair<Definition**, Definition*>> hedge_trail;
     std::vector<RefCountedObject*> obj_trail;
@@ -878,6 +879,7 @@ namespace MiniZinc {
   
   class Interpreter {
     friend class Trail;
+    friend class MznSolver;
   public:
     enum Status { ROGER, ABORTED, INCONSISTENT, ERROR, MAX_STATUS=ERROR };
     static const std::string status_to_string[MAX_STATUS+1];

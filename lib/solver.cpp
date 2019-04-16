@@ -691,3 +691,70 @@ SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, con
     return getFltStatus();
   }                                   //  Add evalOutput() here?   TODO
 }
+
+void MznSolver::pushToSolver(Interpreter& interpreter) {
+  if (auto tr = dynamic_cast<Trailable*>(getSI())) {
+    assert(interpreter.trail.len() == tr->states() + 1);
+    tr->restart();
+    tr->pushState();
+
+    // Find new Constraints and Variables
+    Definition* back = interpreter._agg[0].def_stack;
+    int timestamp = interpreter.trail.timestamp_trail.back();
+    Model m;
+    while (back->timestamp() != timestamp) {
+      Definition::toFZN(&interpreter, back, interpreter._procs, &m);
+      back = back->prev();
+    }
+
+    size_t ht_size, ot_size, at_size, dt_size;
+    std::tie(ht_size, ot_size, at_size, dt_size) = interpreter.trail.trail_size.back();
+    // Find changed domains
+    for (int i = interpreter.trail.domain_trail.size(); i >= dt_size; --i) {
+      Definition* def;
+      Val dom;
+      std::tie(def, dom) = interpreter.trail.domain_trail.back();
+
+      dom = def->domain();
+      SetLit* dom_set = nullptr;
+      if (dom.isVec()) {
+        assert(dom.size() >= 2 && dom.size() % 2 == 0);
+        std::vector<IntSetVal::Range> ranges;
+        for (int j = 0; j < dom.size(); j += 2) {
+          ranges.emplace_back(dom[j](), dom[j+1]());
+        }
+        dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+      }
+      auto c = new Call(Location().introduce(), constants().ids.set_in, {Val(def).toFZN(), dom_set});
+      auto ci = new ConstraintI(Location().introduce(), c);
+      m.addItem(ci);
+    }
+
+    // Apply changes to the solver
+    for (auto it = m.begin_vardecls(); it != m.begin_vardecls(); ++it) {
+      tr->addVariable(it->e());
+    }
+    for (auto it = m.begin_constraints(); it != m.end_constraints(); ++it) {
+      tr->addConstraint(it->e()->cast<Call>());
+    }
+  } else if(auto cl = dynamic_cast<Changeable*>(getSI())) {
+    Model* fzn = interpreter.toFZN();
+    cl->changeModel(fzn);
+  } else {
+    std::cout << "Solver has not been setup for incremental usage" << std::endl;
+    assert(false);
+  }
+}
+
+void MznSolver::popFromSolver(Interpreter& interpreter) {
+  if (auto tr = dynamic_cast<Trailable*>(getSI())) {
+    tr->restart();
+    tr->popState();
+  } else if(auto cl = dynamic_cast<Changeable*>(getSI())) {
+    Model* fzn = interpreter.toFZN();
+    cl->changeModel(fzn);
+  } else {
+    std::cout << "Solver has not been setup for incremental usage" << std::endl;
+    assert(false);
+  }
+}
