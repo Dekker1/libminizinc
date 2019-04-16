@@ -144,7 +144,9 @@ procedure:
       ctx.patch_labels.clear();
 
       // Add ABORT instruction for error management
-      ctx.proc_body.addInstr(BytecodeStream::ABORT);
+      if (ctx.proc_body.size() > 0) {
+        ctx.proc_body.addInstr(BytecodeStream::ABORT);
+      }
       // Store procedure in the correct place
       auto mode = static_cast<BytecodeProc::Mode>($4);
       auto it = ctx.proc_map.find($2);
