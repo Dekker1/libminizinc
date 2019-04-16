@@ -499,7 +499,7 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
     int p_idx = cg.bytecode.size();
 
     std::stringstream ss;
-    ss << "_d_" << p_idx << "_" << call->id().str();
+    ss << "d_" << p_idx << "_" << call->id().str();
 
     d_proc = CG_ProcID::proc(p_idx);
     cg.bytecode.push_back(CG_Proc(ss.str(), arg_types.size()));
@@ -2052,7 +2052,7 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
   PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_elt));
   // OPEN_OTHER(cg, frag); // maybe needed?
-  PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_plus"), CG::r(r_elt), CG::r(r_acc));
+  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_plus"), CG::r(r_elt), CG::r(r_acc));
   // CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_acc));
   
@@ -2066,6 +2066,21 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int r_ret(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
   return CG::Binding(r_ret, b_elts.second);
+}
+
+CG::Binding bind_set2array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+  Expression* e = call->arg(0);
+  CG::Binding b_elts(CG::bind(e, cg, frag));
+  OPEN_VEC(cg, frag);
+  Forset iter(cg, b_elts.first);
+  iter.emit_pre(frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter.val()));
+  iter.emit_post(frag);
+  CLOSE_AGG(cg, frag);
+  int r_ret(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
+  return CG::Binding(r_ret, CG_Cond::ttt());
 }
 
 CG_Cond::T eval_assert_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -2248,6 +2263,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("dom", builtin_t { eval_error_b, bind_dom } ));
   tbl.insert(std::make_pair("lb_array", builtin_t { eval_error_b, bind_lb_array } ));
   tbl.insert(std::make_pair("ub_array", builtin_t { eval_error_b, bind_ub_array } ));
+  tbl.insert(std::make_pair("set2array", builtin_t { eval_error_b, bind_set2array } ));
   tbl.insert(std::make_pair(c.ids.bool2int, builtin_t { eval_error_b, bind_bool2int } ));
   return tbl;
 }
@@ -2306,24 +2322,18 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> p_vec;
 
   int sz(a->size());
+  /*
   int r_one(-1);
   int r_zero(-1);
+  */
   for(int ii = 0; ii < sz; ++ii) {
     if((*a)[ii]->type().isbool()) {
       CG_Cond::T c(CG::compile((*a)[ii], cg, frag));
       if(!c.get()) {
         if(!c.sign()) {
-          if(r_one == -1) {
-            r_one = GET_REG(cg);
-            PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_one));
-          }
-          r_vec.push_back(r_one);
+          r_vec.push_back(bind_cst(1, cg, frag));
         } else {
-          if(r_zero == -1) {
-            r_zero = GET_REG(cg);
-            PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r_zero));
-          }
-          r_vec.push_back(r_zero);
+          r_vec.push_back(bind_cst(0, cg, frag));
         }
       } else {
         r_vec.push_back(CG::force(c, cg, frag));
@@ -2443,8 +2453,11 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<int> p_res;
   std::vector<int> r_res;
 
+  /*
   int r_one(-1);
   int r_zero(-1);
+  */
+  int r_one(bind_cst(1, cg, frag));
 
   bool is_total = true;
   int sz(ite->size());
@@ -2462,7 +2475,7 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         p_res.push_back(bind_cst(0, cg, frag));
       else
         /* p_res.push_back(reg_k(1, cg, frag, r_one)); */
-        p_res.push_back(bind_cst(1, cg, frag));
+        p_res.push_back(r_one);
     }
   }
   Binding b_final = CG::bind(ite->e_else(), cg, frag);
@@ -2575,7 +2588,7 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   call_clause(cg, frag, BytecodeProc::ROOT, std::vector<int> { r_sel }, std::vector<int> { r_curr });
 
   // Increment to the second element. If we got here, there definitely was one.
-  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i), CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
   PUSH_LABEL(frag, l_hd);
   PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_SEL), CG::r(r_i), CG::r(r_sel));
   PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_curr), CG::r(r_pre));
@@ -2589,7 +2602,7 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   call_clause(cg, frag, BytecodeProc::ROOT, std::vector<int> { r_sel, r_pre }, std::vector<int> { r_curr });
 
   // Now increment the loop.
-  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i), CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
   PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_i), CG::r(r_UB), CG::r(r_sel));
   PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_sel), CG::l(l_hd));
   PUSH_LABEL(frag, l_ex);
@@ -2945,8 +2958,40 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
 }
 
+int force_or_bind(Expression* e, std::vector<CG_Cond::T>& cond, CodeGen& cg, CG_Builder& frag) {
+  if(e->type().isbool()) {
+    return CG::force(CG::compile(e, cg, frag), cg, frag);
+  } else {
+    CG::Binding b(CG::bind(e, cg, frag));
+    if(b.second.get())
+      cond.push_back(b.second);
+    return b.first;
+  }
+}
 CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> cond;
+  if(b->type().ispar()) {
+    int r_lhs = force_or_bind(b->lhs(), cond, cg, frag);
+    int r_rhs = force_or_bind(b->rhs(), cond, cg, frag);
+    std::vector<int> r_cond;
+    for(CG_Cond::T c : cond)
+      r_cond.push_back(CG::force(c, cg, frag));
+    int r_ret = bind_binop_par(cg, frag, b->op(), r_lhs, r_rhs);
+    if(r_cond.size() > 0) {
+      // If any conditions don't hold, evaluate to false.
+      int r(GET_REG(cg));
+      int l_tl(GET_LABEL(cg));
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
+      for(int r_c : r_cond) {
+        PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_c), CG::l(l_tl)); 
+      }
+      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_ret), CG::r(r));
+      PUSH_LABEL(frag, l_tl);
+      return CG_Cond::reg(r);
+    } else {
+      return CG_Cond::reg(r_ret);
+    }
+  }
   switch(b->op()) {
     case BOT_LE:
     case BOT_LQ:
@@ -3000,11 +3045,14 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       // Standard case.
       int r_lhs(CG::force(CG::compile(b->lhs(), cg, frag), cg, frag));
       int r_rhs(CG::force(CG::compile(b->rhs(), cg, frag), cg, frag));
+      return binop_cond(cg, b->op(), ctx, r_lhs, r_rhs);
+      /*
       if(b->type().ispar()) {
         return CG_Cond::reg(bind_binop_par(cg, frag, b->op(), r_lhs, r_rhs));
       } else {
         return binop_cond(cg, b->op(), ctx, r_lhs, r_rhs);
       }
+      */
     }
   }
 }
