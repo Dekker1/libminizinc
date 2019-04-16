@@ -1492,8 +1492,9 @@ namespace MiniZinc {
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(ret.isInt());
                 if (ret().toInt() != 1) {
-                  // TODO: The model is inconsistent!
-                  throw Error("Error: Model Inconsistent!");
+                  _status = INCONSISTENT;
+                  // Invariant: Last instruction in the frame is always an ABORT instruction
+                  frame->pc = frame->bs->size()-1;
                 }
               } else {
                 pushAgg(ret, -1);
@@ -1563,8 +1564,11 @@ namespace MiniZinc {
           DBG_INTERPRETER("POST R" << r << " (" << frame->reg[r].toString() << ")\n");
           Val v1 = Val::follow_alias(this, frame->reg[r]);
           if (v1.isInt()) {
-            if (v1()==0)
-              throw Error("model inconsistency detected");
+            if (v1() == 0) {
+              _status = INCONSISTENT;
+              // Invariant: Last instruction in the frame is always an ABORT instruction
+              frame->pc = frame->bs->size()-1;
+            }
           } else {
             v1.toDef()->domain(this, std::vector<Val>({IntVal(1),IntVal(1)}), true);
           }
@@ -1952,8 +1956,9 @@ namespace MiniZinc {
         if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
           assert(lookup.first.isInt());
           if (lookup.first().toInt() != 1) {
-            // TODO: The model is inconsistent!
-            throw Error("Error: Model Inconsistent!");
+            _status = INCONSISTENT;
+            // Invariant: Last instruction in the frame is always an ABORT instruction
+            _stack.back().pc = _stack.back().bs->size()-1;
           }
         } else {
           pushAgg(lookup.first, -1);
