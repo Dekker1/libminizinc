@@ -979,12 +979,27 @@ namespace MiniZinc {
           break;
         case BytecodeStream::DIVI:
         {
-          assert(false);
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          if(frame->reg[r2]() == 0)
+            frame->pc = frame->bs->size()-1;
+          else
+            frame->reg.assign(this, r3, frame->reg[r1]() / frame->reg[r2]());
+          frame->reg.assign(this, r3, frame->reg[r1]() / frame->reg[r2]());
+          DBG_INTERPRETER("DIVI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::MODI:
         {
-          assert(false);
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          if(frame->reg[r2]() == 0)
+            frame->pc = frame->bs->size()-1;
+          else
+            frame->reg.assign(this, r3, frame->reg[r1]() % frame->reg[r2]());
+          DBG_INTERPRETER("MODI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::INCI:
@@ -1156,7 +1171,7 @@ namespace MiniZinc {
             }
             frame->reg.assign(this, r2, ret);
           }
-          DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::ISEMPTY:
