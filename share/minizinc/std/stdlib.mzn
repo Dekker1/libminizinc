@@ -23,6 +23,10 @@
   any constraints on its arguments. */
 annotation promise_total;
 
+/** @group annotations.export Always export function to intermediate representation to ensure
+ availability for later use. */
+annotation export;
+
 /** @group annotations.general Declare that expression may have undefined result (to avoid warnings) */
 annotation maybe_partial;
 
