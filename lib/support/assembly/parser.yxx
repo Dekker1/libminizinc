@@ -8,7 +8,6 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
 %{
 #include <cstdio>
 #include <list>
@@ -256,6 +255,14 @@ instruction:
         ctx.proc_body.addReg(arg);
       }
       delete $4;
+    }
+  | MZA_TCALL MZA_MODE MZA_ID
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addCharVal($2);
+      ctx.patch_procs.emplace_back(ctx.proc_body.size(), $3);
+      ctx.proc_body.addSmallInt(0);
     }
   | MZA_OPEN_AGGREGATION MZA_CTX
     {
