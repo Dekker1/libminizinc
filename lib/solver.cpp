@@ -702,8 +702,9 @@ void MznSolver::pushToSolver(Interpreter& interpreter) {
     Definition* back = interpreter._agg[0].def_stack;
     int timestamp = interpreter.trail.timestamp_trail.back();
     Model m;
+    std::unordered_map<int, VarDecl*> vdmap;
     while (back->timestamp() != timestamp) {
-      Definition::toFZN(&interpreter, back, interpreter._procs, &m);
+      Definition::toFZN(&interpreter, back, interpreter._procs, &m, vdmap);
       back = back->prev();
     }
 

@@ -181,79 +181,85 @@ namespace MiniZinc {
       {"int_eq", "int_ne"}
   };
 
-  Model* Definition::toFZN(Interpreter* interpreter, Definition* head, const std::vector<BytecodeProc>& bs, Model* model) {
+  void Definition::toFZN(Interpreter* interpreter, Definition* head, const std::vector<BytecodeProc>& bs,
+                          Model* model, std::unordered_map<int, VarDecl*>& vdmap) {
     GCLock lock;
     auto fzn = model ? model : new Model();
     if (head->next()==head)
-      return fzn;
+      return;
     Definition* d = head->next(); // Ignore dummy head
-    std::map<int, VarDecl*> vdmap;
     while (d != head) {
+      assert(d != d->next());
       if (d->pred() == 0) {
         d = d->next();
         continue;
       }
-      BytecodeProc proc = bs[d->pred()];
-      auto mode = static_cast<BytecodeProc::Mode>(d->mode());
-      std::string name = proc.name;
-      if (BytecodeProc::is_neg(mode)) {
-        auto it = negated_constraints.find(name);
-        assert(it != negated_constraints.end());
-        name = it->second;
+      toFZNItem(interpreter, d, bs, fzn, vdmap);
+      if (d->defs()) {
+        toFZN(interpreter, d->defs(), bs, fzn, vdmap);
       }
-      Val dom = d->domain();
-      SetLit* dom_set = nullptr;
-      if (dom.isVec()) {
-        assert(dom.size() >= 2 && dom.size() % 2 == 0);
-        std::vector<IntSetVal::Range> ranges;
-        for (int i = 0; i < dom.size(); i += 2) {
-          ranges.emplace_back(dom[i](), dom[i+1]());
-        }
-        dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
-      }
-      if (proc.name == "mk_intvar") {
-        // Construct domain
-        auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-        auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
-        vd->addAnnotation(constants().ann.output_var);
-        auto vdi = new VarDeclI(Location().introduce(), vd);
-        auto ret = vdmap.emplace(d->timestamp(), vd);
-        fzn->addItem(vdi);
-      } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-        std::vector<Expression*> args(proc.nargs);
-        for (int i = 0; i < proc.nargs; ++i) {
-          Val v = Val::follow_alias(interpreter, d->arg(i));
-          args[i] = v.toFZN(vdmap);
-        }
-        auto c = new Call(Location().introduce(), name, args);
-        auto ci = new ConstraintI(Location().introduce(), c);
-        fzn->addItem(ci);
-      } else {
-        auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-        auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
-        fzn->addItem(new VarDeclI(Location().introduce(), vd));
-        auto ret = vdmap.emplace(d->timestamp(), vd);
-
-        std::vector<Expression*> args(proc.nargs + 1);
-        for (int i = 0; i < proc.nargs; ++i) {
-          Val v = Val::follow_alias(interpreter, d->arg(i));
-          args[i] = v.toFZN(vdmap);
-        }
-        args.back() = Val(d).toFZN(vdmap);
-        if (mode == BytecodeProc::FUN) {
-          name += "_reif";
-        } else {
-          assert(mode == BytecodeProc::IMP);
-          name += "_imp";
-        }
-        auto c = new Call(Location().introduce(), name, args);
-        fzn->addItem(new ConstraintI(Location().introduce(), c));
-      }
-      if (d->defs())
-        toFZN(interpreter, d->defs(), bs, fzn);
       d = d->next();
     }
-    return fzn;
+  }
+
+  void Definition::toFZNItem(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs,
+                             Model* model, std::unordered_map<int, VarDecl*>& vdmap) {
+    const BytecodeProc& proc = bs[d->pred()];
+    auto mode = static_cast<BytecodeProc::Mode>(d->mode());
+    std::string name = proc.name;
+    if (BytecodeProc::is_neg(mode)) {
+      auto it = negated_constraints.find(name);
+      assert(it != negated_constraints.end());
+      name = it->second;
+    }
+    Val dom = d->domain();
+    SetLit* dom_set = nullptr;
+    if (dom.isVec()) {
+      assert(dom.size() >= 2 && dom.size() % 2 == 0);
+      std::vector<IntSetVal::Range> ranges;
+      for (int i = 0; i < dom.size(); i += 2) {
+        ranges.emplace_back(dom[i](), dom[i+1]());
+      }
+      dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+    }
+    if (proc.name == "mk_intvar") {
+      // Construct domain
+      auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
+      auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
+      vd->addAnnotation(constants().ann.output_var);
+      auto vdi = new VarDeclI(Location().introduce(), vd);
+      auto ret = vdmap.emplace(d->timestamp(), vd);
+      model->addItem(vdi);
+    } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+      std::vector<Expression*> args(proc.nargs);
+      for (int i = 0; i < proc.nargs; ++i) {
+        Val v = Val::follow_alias(interpreter, d->arg(i));
+        args[i] = v.toFZN(vdmap);
+      }
+      auto c = new Call(Location().introduce(), name, args);
+      auto ci = new ConstraintI(Location().introduce(), c);
+      model->addItem(ci);
+    } else {
+      auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
+      auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
+      model->addItem(new VarDeclI(Location().introduce(), vd));
+      auto ret = vdmap.emplace(d->timestamp(), vd);
+
+      std::vector<Expression*> args(proc.nargs + 1);
+      for (int i = 0; i < proc.nargs; ++i) {
+        Val v = Val::follow_alias(interpreter, d->arg(i));
+        args[i] = v.toFZN(vdmap);
+      }
+      args.back() = Val(d).toFZN(vdmap);
+      if (mode == BytecodeProc::FUN) {
+        name += "_reif";
+      } else {
+        assert(mode == BytecodeProc::IMP);
+        name += "_imp";
+      }
+      auto c = new Call(Location().introduce(), name, args);
+      model->addItem(new ConstraintI(Location().introduce(), c));
+    }
   }
 
   void Definition::alias(Interpreter* interpreter, Val v) {
@@ -1882,15 +1888,15 @@ namespace MiniZinc {
   Model*
   Interpreter::toFZN() {
     GCLock lock;
-    Model* fzn = nullptr;
+    Model* fzn = new Model();
     if (_status != ROGER) {
-      fzn = new Model();
       std::vector<Expression*> args = {constants().boollit(true), constants().boollit(false)};
       auto fail = new Call(Location().introduce(), constants().ids.bool_eq, args);
       auto failI = new ConstraintI(Location().introduce(), fail);
       fzn->addItem(failI);
     } else if (!_agg.empty()) {
-      fzn = Definition::toFZN(this, _agg.back().def_stack, _procs);
+      std::unordered_map<int, VarDecl*> vdmap;
+      Definition::toFZN(this, _agg.back().def_stack, _procs, fzn, vdmap);
       Env env(fzn);
       std::vector<FunctionI*> toAdd;
       for (auto ci = fzn->begin_constraints(); ci != fzn->end_constraints(); ++ci) {

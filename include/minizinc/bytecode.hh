@@ -296,13 +296,14 @@ namespace MiniZinc {
     void assign(Interpreter* interpreter, const Val& v);
     void assign(Interpreter* interpreter, Val&& v);
     std::string toString(void) const;
-    Expression* const toFZN(const std::map<int, VarDecl*>& vdmap = {}) {
+    Expression* const toFZN(const std::unordered_map<int, VarDecl*>& vdmap = {}) {
       GCLock lock;
       if (this->isInt()) {
         return IntLit::a((*this)());
       } else if (this->isDef()) {
         auto it = vdmap.find(this->timestamp());
-        VarDecl* vd = it != vdmap.end() ? it->second : nullptr;
+        assert(it != vdmap.end());
+        VarDecl* vd = it->second;
         auto id = new Id(Location().introduce(), this->timestamp(), vd);
         id->type(vd->type());
         return id;
@@ -574,7 +575,8 @@ namespace MiniZinc {
     }
 
     static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
-    static Model* toFZN(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model = nullptr);
+    static void toFZN(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap);
+    static void toFZNItem(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap);
 
     // Propagation interface
     
