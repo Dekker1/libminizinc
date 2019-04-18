@@ -27,6 +27,23 @@
 
 namespace MiniZinc {
 
+  Val
+  AggregationCtx::createVec(Interpreter* interpreter, Definition* def, int timestamp) const {
+    for (Val v : stack) {
+      if (v.isDef() && v.toDef()->timestamp() >= def_ident_start) {
+        // this is a new definition created during this aggregation and needs to be added to the hedge
+        if (v.toDef()->prev()==v.toDef()) {
+          if (def) {
+            v.toDef()->insertBefore(interpreter, def);
+          } else {
+            def = v.toDef();
+          }
+        }
+      }
+    }
+    return Val(Vec::a(interpreter,timestamp,stack));
+  }
+
   void
   Definition::dump(Definition* head, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent) {
     Definition* d = head->next();
@@ -1825,8 +1842,10 @@ namespace MiniZinc {
               }
                 break;
               case AggregationCtx::VCTX_VEC:
+              {
                 // Create a vector on the aggregation stack
-                _agg[_agg.size()-2].push(this,_agg.back().toVec(this,newIdent()));
+                _agg[_agg.size()-2].push(this,_agg.back().createVec(this,defs,newIdent()));
+              }
                 break;
               case AggregationCtx::VCTX_OTHER:
                 // When closing a VCTX_OTHER context, it should contain at most one value

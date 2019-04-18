@@ -657,9 +657,7 @@ namespace MiniZinc {
     const Val& operator [](int i) const { return stack[i]; }
     int size(void) const { return stack.size(); }
     bool empty(void) const { return stack.empty(); }
-    Val toVec(Interpreter* interpreter, int timestamp) const {
-      return Val(Vec::a(interpreter,timestamp,stack));
-    }
+    Val createVec(Interpreter* interpreter, Definition* defs, int timestamp) const;
     /// Destroy stack values
     void destroyStack(Interpreter* interpreter) {
       for (auto& v : stack) {
