@@ -682,6 +682,19 @@ namespace MiniZinc {
     enum Mode { RAW, ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
     static const std::string mode_to_string[MAX_MODE+1];
     static const bool is_neg(const Mode& mode) { return mode == ROOT_NEG || mode == FUN_NEG || mode == IMP_NEG; }
+    static const Mode negate(const Mode& mode) {
+      switch(mode) {
+      case ROOT: return ROOT_NEG;
+      case IMP: return IMP_NEG;
+      case FUN: return FUN_NEG;
+      case ROOT_NEG: return ROOT;
+      case IMP_NEG: return IMP;
+      case FUN_NEG: return FUN;
+      default:
+        break;
+      }
+      return RAW;
+    }
     /// The code for different modes
     BytecodeStream mode[MAX_MODE+1];
   };

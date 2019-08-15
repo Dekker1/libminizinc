@@ -195,7 +195,9 @@ namespace MiniZinc {
   }
 
   std::map<const std::string, const std::string> negated_constraints = {
-      {"int_eq", "int_ne"}
+    {"int_eq", "int_ne"},
+    {"int_le", "int_gt"},
+    {"int_lt", "int_ge"}
   };
 
   void Definition::toFZN(Interpreter* interpreter, Definition* head, const std::vector<BytecodeProc>& bs,
@@ -228,6 +230,7 @@ namespace MiniZinc {
       auto it = negated_constraints.find(name);
       assert(it != negated_constraints.end());
       name = it->second;
+      mode = BytecodeProc::negate(mode);
     }
     Val dom = d->domain();
     SetLit* dom_set = nullptr;
