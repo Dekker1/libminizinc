@@ -573,6 +573,7 @@ namespace MiniZinc {
       }
       return i;
     }
+    bool attached() { return !(this == _prev); }
 
     static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
     static void toFZN(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap);

@@ -1468,6 +1468,14 @@ namespace MiniZinc {
             // this is a FlatZinc builtin
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
             Definition* def = Definition::a(this,IntVal(0),false,code,mode,args,ident);
+            for (int i = 0; i < args.size(); ++i) {
+              if (args[i].isDef()) {
+                Definition* argDef = args[i].toDef();
+                if (!argDef->attached()) {
+                  def->defs(this, argDef);
+                }
+              }
+            }
             pushDef(def);
             if (ident >= 0) {
               pushAgg(Val(def), -1);
