@@ -2070,6 +2070,7 @@ namespace MiniZinc {
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
     trail_size.emplace_back(hedge_trail.size(), obj_trail.size(), alias_trail.size(), domain_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
+    end_trail.push_back(interpreter->_agg[0].def_stack->prev());
     for (auto &table : interpreter->cse) {
       table.push(interpreter, !last_operation_pop);
     }
@@ -2083,6 +2084,7 @@ namespace MiniZinc {
     size_t ht_size, ot_size, at_size, dt_size;
     std::tie(ht_size, ot_size, at_size, dt_size) = trail_size.back(); trail_size.pop_back();
     int timestamp = timestamp_trail.back(); timestamp_trail.pop_back();
+    Definition* guard = end_trail.back(); end_trail.pop_back();
     Definition* back = interpreter->_agg[0].def_stack->prev(); // Ignore empty object;
     assert(back->pred() != 0);
     // Reconstruct destroyed items
