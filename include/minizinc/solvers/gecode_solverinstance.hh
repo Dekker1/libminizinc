@@ -30,6 +30,7 @@
 #include <minizinc/flattener.hh>
 #include <minizinc/solver.hh>
 #include <minizinc/solvers/gecode/fzn_space.hh>
+#include <minizinc/bytecode.hh>
 
 #if GECODE_VERSION_NUMBER < 600000
 #error Gecode versions before 6.0 are not supported
@@ -261,6 +262,9 @@ namespace MiniZinc {
     virtual void processFlatZinc(void);    
     virtual Status solve(void);
     virtual void resetSolver(void);
+
+    // TODO:
+    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def){};
 
     // Presolve the currently loaded model, updating variables with the same
     // names in the given Model* m.

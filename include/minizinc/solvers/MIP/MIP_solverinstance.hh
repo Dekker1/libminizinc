@@ -92,13 +92,15 @@ namespace MiniZinc {
         SolverInstanceImpl(env,log,opt),
         mip_wrap(new MIPWrapper(opt))
       {
-        assert(mip_wrap.get()); 
+        assert(mip_wrap.get());
         registerConstraints();
       }
       virtual MIP_wrapper* getMIPWrapper() const { return mip_wrap.get(); }
 
       virtual Status next(void) { assert(0); return SolverInstance::UNKNOWN; }
       virtual void processFlatZinc(void);
+      // TODO:
+      void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def){};
       virtual void processWarmstartAnnotations( const Annotation& ann );
       virtual void processSearchAnnotations( const Annotation& ann );
       virtual Status solve(void);

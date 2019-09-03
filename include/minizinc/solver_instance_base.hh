@@ -20,6 +20,7 @@
 #include <minizinc/statistics.hh>
 #include <minizinc/solver_instance.hh>
 #include <minizinc/solns2out.hh>
+#include <minizinc/bytecode.hh>
 
 namespace MiniZinc {
 
@@ -75,6 +76,7 @@ namespace MiniZinc {
     virtual StatusReason reason(void) {return _status_reason;}
     virtual Status status(void) {return _status;}
     
+    virtual void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) = 0;
 
     /// reset the model to its core (removing temporary cts) and the solver to the root node of the search 
     void reset(void);

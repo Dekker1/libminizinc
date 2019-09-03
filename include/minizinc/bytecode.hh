@@ -25,6 +25,7 @@ namespace MiniZinc {
 
   class BytecodeProc;
   class Interpreter;
+  class SolverInstanceBase;
 
   class BytecodeStream {
   protected:
@@ -578,6 +579,7 @@ namespace MiniZinc {
     static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
     static void toFZN(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap);
     static void toFZNItem(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap);
+    static void addToSolver(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
 
     // Propagation interface
     

@@ -15,6 +15,8 @@
 #include <minizinc/model.hh>
 #include <minizinc/iter.hh>
 
+#include <minizinc/solver_instance_base.hh>
+
 #include <iostream>
 #include <sstream>
 #include <unordered_map>
@@ -281,6 +283,28 @@ namespace MiniZinc {
       model->addItem(new ConstraintI(Location().introduce(), c));
     }
   }
+
+
+  void Definition::addToSolver(Interpreter* interpreter, Definition* head,
+                   const std::vector<BytecodeProc>& bs, SolverInstanceBase* si) {
+    if (head->next()==head)
+      return;
+    Definition* d = head->next(); // Ignore dummy head
+    while (d != head) {
+      assert(d != d->next());
+      if (d->pred() == 0) {
+        d = d->next();
+        continue;
+      }
+      if (d->defs()) {
+        addToSolver(interpreter, d->defs(), bs, si);
+      }
+      si->addDefinition(bs, d);
+      d = d->next();
+    }
+  }
+
+  // ttestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjkslestdfjslfjksl
 
   void Definition::alias(Interpreter* interpreter, Val v) {
     assert(size() >= 1);

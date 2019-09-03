@@ -43,6 +43,8 @@ namespace MiniZinc {
     Status solve(void);
 
     void processFlatZinc(void);
+    // TODO:
+    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def){};
 
     void resetSolver(void);
   };

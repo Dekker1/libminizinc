@@ -45,7 +45,7 @@ namespace MiniZinc {
     std::vector<MZNFZNSolverFlag> fzn_solver_flags;
   };
 
-  class FZNSolverInstance : public SolverInstanceBase, public Changeable {
+  class FZNSolverInstance : public SolverInstanceBase {
     private:
       std::string _fzn_solver;
     protected:
@@ -62,6 +62,9 @@ namespace MiniZinc {
       Status solve(void);
 
       void processFlatZinc(void);
+
+      // TODO:
+      void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def){};
 
       void resetSolver(void);
 

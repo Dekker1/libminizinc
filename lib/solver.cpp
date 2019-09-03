@@ -693,69 +693,49 @@ SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, con
 }
 
 void MznSolver::pushToSolver(Interpreter& interpreter) {
-  if (auto tr = dynamic_cast<Trailable*>(getSI())) {
-    assert(interpreter.trail.len() == tr->states() + 1);
-    tr->restart();
-    tr->pushState();
+    assert(interpreter.trail.len() > 0);
 
-    // Find new Constraints and Variables
-    Definition* back = interpreter._agg[0].def_stack;
-    int timestamp = interpreter.trail.timestamp_trail.back();
-    Model m;
-    std::unordered_map<int, VarDecl*> vdmap;
-    while (back->timestamp() != timestamp) {
-      Definition::toFZN(&interpreter, back, interpreter._procs, &m, vdmap);
-      back = back->prev();
-    }
-
-    size_t ht_size, ot_size, at_size, dt_size;
-    std::tie(ht_size, ot_size, at_size, dt_size) = interpreter.trail.trail_size.back();
-    // Find changed domains
-    for (int i = interpreter.trail.domain_trail.size(); i >= dt_size; --i) {
-      Definition* def;
-      Val dom;
-      std::tie(def, dom) = interpreter.trail.domain_trail.back();
-
-      dom = def->domain();
-      SetLit* dom_set = nullptr;
-      if (dom.isVec()) {
-        assert(dom.size() >= 2 && dom.size() % 2 == 0);
-        std::vector<IntSetVal::Range> ranges;
-        for (int j = 0; j < dom.size(); j += 2) {
-          ranges.emplace_back(dom[j](), dom[j+1]());
-        }
-        dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+    if(auto rsi = dynamic_cast<Restartable*>(si)) {
+      rsi->restart();
+      if(auto tsi = dynamic_cast<Trailable*>(si)) {
+        assert(interpreter.trail.len() == tr->level() - 1);
+        tsi->pushState();
       }
-      auto c = new Call(Location().introduce(), constants().ids.set_in, {Val(def).toFZN(), dom_set});
-      auto ci = new ConstraintI(Location().introduce(), c);
-      m.addItem(ci);
-    }
+      Definition* back = interpreter._agg[0].def_stack->prev();
+      Definition* guard = interpreter.trail.end_trail.back();
+      while (back != guard) {
+        if (back->defs()) {
+          Definition::addToSolver(&interpreter, back->defs(), interpreter._procs, si);
+        }
+        rsi->addDefinition(interpreter._procs, back);
+        back = back->prev();
+      }
 
-    // Apply changes to the solver
-    for (auto it = m.begin_vardecls(); it != m.begin_vardecls(); ++it) {
-      tr->addVariable(it->e());
+      size_t ht_size, ot_size, at_size, dt_size;
+      std::tie(ht_size, ot_size, at_size, dt_size) = interpreter.trail.trail_size.back();
+      // Find changed domains
+      for (int i = interpreter.trail.domain_trail.size(); i > dt_size; --i) {
+        Definition* def = std::get<0>(interpreter.trail.domain_trail.back());
+
+        Val dom = def->domain();
+
+        // TODO: Domain updates
+      }
+    } else {
+      delete si;
+      // si = sf->createSI()
+      Definition::addToSolver(&interpreter, interpreter._agg.back().def_stack, interpreter._procs, si);
     }
-    for (auto it = m.begin_constraints(); it != m.end_constraints(); ++it) {
-      tr->addConstraint(it->e()->cast<Call>());
-    }
-  } else if(auto cl = dynamic_cast<Changeable*>(getSI())) {
-    Model* fzn = interpreter.toFZN();
-    cl->changeModel(fzn);
-  } else {
-    std::cout << "Solver has not been setup for incremental usage" << std::endl;
-    assert(false);
-  }
 }
 
 void MznSolver::popFromSolver(Interpreter& interpreter) {
-  if (auto tr = dynamic_cast<Trailable*>(getSI())) {
-    tr->restart();
-    tr->popState();
-  } else if(auto cl = dynamic_cast<Changeable*>(getSI())) {
-    Model* fzn = interpreter.toFZN();
-    cl->changeModel(fzn);
+  if (auto tsi = dynamic_cast<Trailable*>(si)) {
+    assert(interpreter.trail.len() == tsi->level() - 1);
+    tsi->restart();
+    tsi->popState();
   } else {
-    std::cout << "Solver has not been setup for incremental usage" << std::endl;
-    assert(false);
+    delete si;
+    si = nullptr;
+    // TODO: do we need to reconstruct the model here or can we trust there is a push before solving
   }
 }
