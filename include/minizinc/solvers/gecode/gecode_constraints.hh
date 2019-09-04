@@ -22,19 +22,19 @@ namespace MiniZinc {
 
 namespace GecodeConstraints {
 
-#define PosterImpl(X) void X(SolverInstanceBase& s, const Call* ce)
+#define PosterImpl(X) void X(SolverInstanceBase& s, const Definition* ce)
 
       PosterImpl(p_distinct);
       PosterImpl(p_distinctOffset);
       PosterImpl(p_all_equal);
-      void p_int_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Call* ce);
+      void p_int_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Definition* ce);
       PosterImpl(p_int_eq);
       PosterImpl(p_int_ne);
       PosterImpl(p_int_ge);
       PosterImpl(p_int_gt);
       PosterImpl(p_int_le);
       PosterImpl(p_int_lt);
-      void p_int_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Call* call);
+      void p_int_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Definition* call);
       ///* Comparisons */
       PosterImpl(p_int_eq_reif);
       PosterImpl(p_int_ne_reif);
@@ -48,8 +48,8 @@ namespace GecodeConstraints {
       PosterImpl(p_int_gt_imp);
       PosterImpl(p_int_le_imp);
       PosterImpl(p_int_lt_imp);
-      void p_int_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Call* call) ;
-      void p_int_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Call* call);
+      void p_int_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Definition* call) ;
+      void p_int_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Definition* call);
       PosterImpl(p_int_lin_eq);
       PosterImpl(p_int_lin_eq_reif);
       PosterImpl(p_int_lin_eq_imp);
@@ -68,8 +68,8 @@ namespace GecodeConstraints {
       PosterImpl(p_int_lin_gt);
       PosterImpl(p_int_lin_gt_reif);
       PosterImpl(p_int_lin_gt_imp);
-      void p_bool_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Call* call);
-      void p_bool_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Call* call);
+      void p_bool_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Definition* call);
+      void p_bool_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Definition* call);
       PosterImpl(p_bool_lin_eq);
       PosterImpl(p_bool_lin_eq_reif);
       PosterImpl(p_bool_lin_eq_imp) ;
@@ -100,8 +100,8 @@ namespace GecodeConstraints {
       PosterImpl(p_int_negate) ;
       
       ///* Boolean constraints */
-      void p_bool_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Call* call);
-      void p_bool_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Call* call);
+      void p_bool_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Definition* call);
+      void p_bool_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Definition* call);
       PosterImpl(p_bool_eq);
       PosterImpl(p_bool_eq_reif) ;
       PosterImpl(p_bool_eq_imp);
@@ -158,7 +158,7 @@ namespace GecodeConstraints {
       PosterImpl(p_count);
       PosterImpl(p_count_reif);
       PosterImpl(p_count_imp);
-      void count_rel(Gecode::IntRelType irt, SolverInstanceBase& s, const Call* call);
+      void count_rel(Gecode::IntRelType irt, SolverInstanceBase& s, const Definition* call);
       PosterImpl(p_at_most);
       PosterImpl(p_at_least);
       PosterImpl(p_bin_packing_load);
@@ -199,8 +199,8 @@ namespace GecodeConstraints {
       
       #ifdef GECODE_HAS_FLOAT_VARS
       PosterImpl(p_int2float);
-      void p_float_lin_cmp(GecodeSolverInstance& s, Gecode::FloatRelType frt, const Call* ce);
-      void p_float_lin_cmp_reif(GecodeSolverInstance& s, Gecode::FloatRelType frt, const Call* ce);
+      void p_float_lin_cmp(GecodeSolverInstance& s, Gecode::FloatRelType frt, const Definition* ce);
+      void p_float_lin_cmp_reif(GecodeSolverInstance& s, Gecode::FloatRelType frt, const Definition* ce);
       PosterImpl(p_float_lin_eq);
       PosterImpl(p_float_lin_eq_reif);
       PosterImpl(p_float_lin_le);

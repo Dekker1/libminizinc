@@ -42,13 +42,13 @@ namespace MiniZinc {
     _registry.insert(std::make_pair(name, p));
   }
   void
-  Registry::post(Call* c) {
-    std::unordered_map<std::string,poster>::iterator it = _registry.find(c->id().str());
+  Registry::post(std::string name, Definition* d) {
+    std::unordered_map<std::string,poster>::iterator it = _registry.find(name);
     if (it == _registry.end()) {
       GCLock lock;
-      throw InternalError("Error: solver backend cannot handle constraint: " + c->id().str() + "\n");
+      throw InternalError("Error: solver backend cannot handle constraint: " + name + "\n");
     }
-    it->second(_base, c);
+    it->second(_base, d);
   }
 
   void SolverInstanceBase::printSolution() {

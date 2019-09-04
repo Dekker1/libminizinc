@@ -115,7 +115,7 @@ namespace MiniZinc {
       : SolverInstanceBase(env, log, opt) {}
   };
   
-  typedef void (*poster) (SolverInstanceBase&, const Call* call);
+  typedef void (*poster) (SolverInstanceBase&, const Definition* call);
   class Registry {
   protected:
     std::unordered_map<std::string,poster> _registry;
@@ -123,7 +123,7 @@ namespace MiniZinc {
   public:
     Registry(SolverInstanceBase& base) : _base(base) {}
     void add(const std::string& name, poster p);
-    void post(Call* c);      
+    void post(std::string name, Definition* d);      
     void cleanup() { _registry.clear(); }
   };
 

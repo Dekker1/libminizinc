@@ -19,6 +19,9 @@
 #include <gecode/int.hh>
 #include <gecode/driver.hh>
 
+#undef GECODE_HAS_FLOAT_VARS
+#undef GECODE_HAS_SET_VARS
+
 #ifdef GECODE_HAS_SET_VARS
 #include <gecode/set.hh>
 #endif
@@ -283,20 +286,27 @@ namespace MiniZinc {
     // helper functions for processing flatzinc constraints
     /// Convert \a arg (array of integers) to IntArgs
     Gecode::IntArgs arg2intargs(Expression* arg, int offset = 0);
+    Gecode::IntArgs arg2intargs(const Val& arg, int offset = 0);
     /// Convert \a arg (array of Booleans) to IntArgs
     Gecode::IntArgs arg2boolargs(Expression* arg, int offset = 0);
+    Gecode::IntArgs arg2boolargs(const Val& arg, int offset = 0);
     /// Convert \a n to IntSet
     Gecode::IntSet arg2intset(EnvI& envi, Expression* sl);
+    Gecode::IntSet arg2intset(const Val& sl);
     /// Convert \a n to IntSetArgs
     Gecode::IntSetArgs arg2intsetargs(EnvI& envi, Expression* arg, int offset = 0);
     /// Convert \a arg to IntVarArgs
     Gecode::IntVarArgs arg2intvarargs(Expression* arg, int offset = 0);
+    Gecode::IntVarArgs arg2intvarargs(const Val& arg, int offset = 0);
     /// Convert \a arg to BoolVarArgs
     Gecode::BoolVarArgs arg2boolvarargs(Expression* a, int offset = 0, int siv=-1);
+    Gecode::BoolVarArgs arg2boolvarargs(const Val& a, int offset = 0, int siv=-1);
     /// Convert \a n to BoolVar
     Gecode::BoolVar arg2boolvar(Expression* e);
+    Gecode::BoolVar arg2boolvar(const Val& e);
     /// Convert \a n to IntVar
     Gecode::IntVar arg2intvar(Expression* e);
+    Gecode::IntVar arg2intvar(const Val& e);
     /// Convert \a n to SetVar
     Gecode::SetVar arg2setvar(Expression* e);
     /// Convert \a arg to SetVarArgs
@@ -304,6 +314,7 @@ namespace MiniZinc {
                                       const Gecode::IntSet& od=Gecode::IntSet::empty);
      /// convert \a arg to an ArrayLit (throws InternalError if not possible)
     ArrayLit* arg2arraylit(Expression* arg);  
+    ArrayLit* arg2arraylit(const Val& arg);
     /// Check if \a b is array of Booleans (or has a single integer)
     bool isBoolArray(ArrayLit* a, int& singleInt);
 #ifdef GECODE_HAS_FLOAT_VARS
@@ -318,6 +329,7 @@ namespace MiniZinc {
 
 
     MZ_IntConLevel ann2icl(const Annotation& ann);
+    MZ_IntConLevel ann2icl(const Val& ann) {return MZ_ICL_DEF;}
 
      /// convert the annotation \a s int variable selection to the respective Gecode var selection
     Gecode::TieBreak<Gecode::IntVarBranch> ann2ivarsel(std::string s, Gecode::Rnd& rnd, double decay);
@@ -350,6 +362,7 @@ namespace MiniZinc {
 
     /// Returns the GecodeVariable representing the Id, VarDecl or ArrayAccess
     GecodeSolver::Variable resolveVar(Expression* e);
+    GecodeSolver::Variable resolveVar(Definition* d);
 
     /// Inserts variable gv into _variableMap with key id
     void insertVar(Id* id, GecodeVariable gv);
