@@ -87,8 +87,8 @@ namespace MiniZinc {
     return new FZNSolverOptions;
   }
 
-  SolverInstanceBase* FZN_SolverFactory::doCreateSI(Env& env, std::ostream& log, SolverInstanceBase::Options* opt) {
-    return new FZNSolverInstance(env, log, opt);
+  SolverInstanceBase* FZN_SolverFactory::doCreateSI(std::ostream& log, SolverInstanceBase::Options* opt) {
+    return new FZNSolverInstance(log, opt);
   }
 
   bool FZN_SolverFactory::processOption(SolverInstanceBase::Options* opt, int& i, std::vector<std::string>& argv)
@@ -187,8 +187,8 @@ namespace MiniZinc {
   }
 
 
-  FZNSolverInstance::FZNSolverInstance(Env& env, std::ostream& log, SolverInstanceBase::Options* options)
-    : SolverInstanceBase(env, log, options), _fzn(env.flat()), _ozn(env.output()) {}
+  FZNSolverInstance::FZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* options)
+    : SolverInstanceBase(log, options) {}
 
   FZNSolverInstance::~FZNSolverInstance(void) {}
 
@@ -270,15 +270,15 @@ namespace MiniZinc {
     cmd_line.push_back(fznFile.name());
 
     FileUtils::TmpFile* pathsFile = NULL;
-    if(opt.fzn_needs_paths) {
-      pathsFile = new FileUtils::TmpFile(".paths");
-      std::ofstream ofs(pathsFile->name());
-      PathFilePrinter pfp(ofs, _env.envi());
-      pfp.print(_fzn);
+    // if(opt.fzn_needs_paths) {
+    //   pathsFile = new FileUtils::TmpFile(".paths");
+    //   std::ofstream ofs(pathsFile->name());
+    //   PathFilePrinter pfp(ofs, _env.envi());
+    //   pfp.print(_fzn);
 
-      cmd_line.push_back("--paths");
-      cmd_line.push_back(pathsFile->name());
-    }
+    //   cmd_line.push_back("--paths");
+    //   cmd_line.push_back(pathsFile->name());
+    // }
 
     if(!opt.fzn_output_passthrough) {
       Process<Solns2Out> proc(cmd_line, getSolns2Out(), timelimit, sigint);

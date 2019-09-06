@@ -74,7 +74,7 @@ namespace MiniZinc {
   class SolverFactory {
   protected:
     /// doCreateSI should be implemented to actually allocate a SolverInstance using new()
-    virtual SolverInstanceBase * doCreateSI(Env&, std::ostream&, SolverInstanceBase::Options* opt) = 0;
+    virtual SolverInstanceBase * doCreateSI(std::ostream&, SolverInstanceBase::Options* opt) = 0;
     typedef std::vector<std::unique_ptr<SolverInstanceBase> > SIStorage;
     SIStorage sistorage;
   protected:
@@ -86,7 +86,7 @@ namespace MiniZinc {
     /// Create solver-specific options object
     virtual SolverInstanceBase::Options* createOptions(void) = 0;
     /// Function createSI also adds each SI to the local storage
-    SolverInstanceBase * createSI(Env& env, std::ostream& log, SolverInstanceBase::Options* opt);
+    SolverInstanceBase * createSI(std::ostream& log, SolverInstanceBase::Options* opt);
     /// also providing a manual destroy function.
     /// there is no need to call it upon overall finish - that is taken care of
     void destroySI(SolverInstanceBase * pSI);
@@ -110,7 +110,7 @@ namespace MiniZinc {
     enum OptionStatus { OPTION_OK, OPTION_ERROR, OPTION_FINISH };
     /// Solver configurations
     SolverConfigs solver_configs;
-    Flattener flt;
+    Interpreter* interpreter = nullptr;
     SolverInstanceBase* si=0;
     SolverInstanceBase::Options* si_opt=0;
     SolverFactory* sf=0;
@@ -119,6 +119,7 @@ namespace MiniZinc {
     std::string executable_name;
     std::ostream& os;
     std::ostream& log;
+    SolverInstance::Status interpreter_status = SolverInstance::UNKNOWN;
 
   public:
     Solns2Out s2out;
@@ -134,7 +135,7 @@ namespace MiniZinc {
     MznSolver(std::ostream& os = std::cout, std::ostream& log = std::cerr);
     ~MznSolver();
     
-    SolverInstance::Status run(const std::vector<std::string>& args, const std::string& model = std::string(),
+    SolverInstance::Status run(const std::vector<std::string>& args, const std::string& filename = std::string(),
                                const std::string& exeName = std::string("minizinc"),
                                const std::string& modelName = std::string("stdin"));
     OptionStatus processOptions(std::vector<std::string>& argv);
@@ -143,14 +144,14 @@ namespace MiniZinc {
     bool get_flag_verbose() { return flag_verbose; /*getFlt()->get_flag_verbose();*/ }
     void printUsage();
 
-    void pushToSolver(Interpreter& interpreter);
-    void popFromSolver(Interpreter& interpreter);
+    void pushToSolver();
+    void popFromSolver();
     SolverInstance::Status solve();
 
   private:
     void printHelp(const std::string& selectedSolver=std::string());
     /// Flatten model
-    void flatten(const std::string& modelString = std::string(), const std::string& modelName = std::string("stdin"));
+    void flatten(const std::string& filename = std::string(), const std::string& modelName = std::string("stdin"));
     size_t getNSolvers() { return getGlobalSolverRegistry()->getSolverFactories().size(); }
     /// If building a flattening exe only.
     bool ifMzn2Fzn();
@@ -159,7 +160,7 @@ namespace MiniZinc {
     void addSolverInterface(SolverFactory* sf);
     void printStatistics();
     
-    SolverInstance::Status getFltStatus() { return flt.status; }
+    SolverInstance::Status getFltStatus() { return interpreter_status; }
     SolverInstanceBase* getSI() { assert(si); return si; }
     bool get_flag_statistics() { return flag_statistics; }
     

@@ -27,7 +27,7 @@ namespace MiniZinc {
   /// An abstract SI
   class SolverInstanceBase {
   protected:
-    Env& _env;
+    Env* _env = nullptr;
     Solns2Out* pS2Out=0;
     std::ostream& _log;
   public:
@@ -47,12 +47,12 @@ namespace MiniZinc {
     Status _status;
     StatusReason _status_reason;
     
-    SolverInstanceBase(Env& env, std::ostream& log, Options* options) : _env(env), _log(log), _options(options),
+    SolverInstanceBase(std::ostream& log, Options* options) : _log(log), _options(options),
       _status(SolverInstance::UNKNOWN), _status_reason(SolverInstance::SR_OK) {}
     virtual ~SolverInstanceBase() { }
     
     /// Set/get the environment:
-    virtual Env* getEnv() const { assert(&_env); return &_env; }
+    virtual Env* getEnv() const { assert(_env); return _env; }
     virtual Env& env(void) const { return *getEnv(); }
     
     Solns2Out* getSolns2Out() const { assert(pS2Out); return pS2Out; }
@@ -111,8 +111,8 @@ namespace MiniZinc {
     std::vector<VarDecl*> _varsWithOutput;    // this is to extract fzn vars. Identical to output()?  TODO
 
   public:
-    SolverInstanceBase2(Env& env, std::ostream& log, SolverInstanceBase::Options* opt)
-      : SolverInstanceBase(env, log, opt) {}
+    SolverInstanceBase2(std::ostream& log, SolverInstanceBase::Options* opt)
+      : SolverInstanceBase(log, opt) {}
   };
   
   typedef void (*poster) (SolverInstanceBase&, const Definition* call);
@@ -143,8 +143,8 @@ namespace MiniZinc {
     Registry _constraintRegistry;
 
   public:
-    SolverInstanceImpl(Env& env, std::ostream& log, SolverInstanceBase::Options* opt)
-      : SolverInstanceBase2(env, log, opt), _constraintRegistry(*this) {}
+    SolverInstanceImpl(std::ostream& log, SolverInstanceBase::Options* opt)
+      : SolverInstanceBase2(log, opt), _constraintRegistry(*this) {}
     
   };
 

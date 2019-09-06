@@ -76,8 +76,8 @@ namespace MiniZinc {
     return new MZNSolverOptions;
   }
 
-  SolverInstanceBase* MZN_SolverFactory::doCreateSI(Env& env, std::ostream& log, SolverInstanceBase::Options* opt) {
-    return new MZNSolverInstance(env, log, opt);
+  SolverInstanceBase* MZN_SolverFactory::doCreateSI(std::ostream& log, SolverInstanceBase::Options* opt) {
+    return new MZNSolverInstance(log, opt);
   }
 
   void MZN_SolverFactory::setAcceptedFlags(SolverInstanceBase::Options* opt, const std::vector<MZNFZNSolverFlag>& flags) {
@@ -149,8 +149,8 @@ namespace MiniZinc {
     return true;
   }
 
-  MZNSolverInstance::MZNSolverInstance(Env& env, std::ostream& log, SolverInstanceBase::Options* options)
-    : SolverInstanceBase(env, log, options) {}
+  MZNSolverInstance::MZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* options)
+    : SolverInstanceBase(log, options) {}
 
   MZNSolverInstance::~MZNSolverInstance(void) {}
 

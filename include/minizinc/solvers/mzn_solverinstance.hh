@@ -34,7 +34,7 @@ namespace MiniZinc {
   private:
     std::string _mzn_solver;
   public:
-    MZNSolverInstance(Env& env, std::ostream& log, SolverInstanceBase::Options* opt);
+    MZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
     
     ~MZNSolverInstance(void);
 
@@ -51,7 +51,7 @@ namespace MiniZinc {
 
   class MZN_SolverFactory: public SolverFactory {
   protected:
-    virtual SolverInstanceBase* doCreateSI(Env& env, std::ostream& log, SolverInstanceBase::Options* opt);
+    virtual SolverInstanceBase* doCreateSI(std::ostream& log, SolverInstanceBase::Options* opt);
   public:
     MZN_SolverFactory(void);
     virtual SolverInstanceBase::Options* createOptions(void);

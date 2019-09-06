@@ -17,14 +17,15 @@ namespace MiniZinc {
   GecodePass::GecodePass(GecodeOptions* g_opts) : gopts(g_opts) {}
 
   Env* GecodePass::run(Env* env, std::ostream& log) {
-    try {
-      GecodeSolverInstance gecode(*env,log,new GecodeOptions(*gopts));
-      gecode.processFlatZinc();
-      gecode.presolve(env->flat());
-    } catch(InternalError e) {
-      std::cerr << "Warning during presolve: " << e.msg() << std::endl;
+    // try {
+    //   GecodeSolverInstance gecode(*env,log,new GecodeOptions(*gopts));
+    //   gecode.processFlatZinc();
+    //   gecode.presolve(env->flat());
+    // } catch(InternalError e) {
+      // std::cerr << "Warning during presolve: " << e.msg() << std::endl;
+      std::cerr << "NO LONGER IMPLEMENTED"<< std::endl;
 
-    }
+    // }
     return env;
   }
 }

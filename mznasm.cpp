@@ -25,9 +25,7 @@
 #include <chrono>
 #include <ratio>
 
-#include <minizinc/bytecode.hh>
-#include <minizinc/prettyprinter.hh>
-#include <minizinc/support/mza_parser.hh>
+#include <minizinc/solver.hh>
 
 using namespace std;
 using namespace MiniZinc;
@@ -49,44 +47,26 @@ int main(int argc, const char** argv) {
     }
     filename = argv[2];
   }
-  
-  std::ifstream t(filename, std::ifstream::in);
-  std::string str((std::istreambuf_iterator<char>(t)),
-                  std::istreambuf_iterator<char>());
+
   try {
-    // Parse assembly file
-    auto bs = parse_mza(str);
+    MznSolver slv(std::cout,std::cerr);
+    std::vector<std::string> args = {"--solver", "org.minizinc.gecode_presolver"};
     if (verbose) {
-      std::cerr << "Disassembled code:\n";
-      for (auto& b : bs) {
-        for (int i=0; i<BytecodeProc::MAX_MODE; i++) {
-          if (b.mode[i].size()>0) {
-            std::cerr << ":" << b.name << ":" << BytecodeProc::mode_to_string[i] << "\n";
-            std::cerr << b.mode[i].toString(bs);
-          }
-        }
-      }
-      std::cerr << "\n";
+      args.push_back("--verbose-compilation");
     }
-    // The main procedure is the last one in the file
-    BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT]);
-    Interpreter interpreter(bs, frame);
-    if (verbose) {
-      std::cerr << "Run:\n";
+    bool fSuccess = (slv.run(args, filename) != SolverInstance::ERROR);
+    while (fSuccess) {
+      //Do incremental things
+      // interpreter.trail.save_state(&interpreter);
+      // interpreter.call(24, BytecodeProc::ROOT, {});
+      // slv.pushToSolver(interpreter);
+      // slv.solve();
+      // interpreter.trail.untrail(&interpreter);
+      // slv.popFromSolver(interpreter);
+      // slv.solve();
+
+      fSuccess = false;
     }
-    bool delayed = true;
-    interpreter.run();
-    while (interpreter.status() == Interpreter::ROGER && delayed) {
-      delayed = interpreter.runDelayed();
-    }
-    if (verbose) {
-      std::cerr << "Status: " << Interpreter::status_to_string[interpreter.status()] << std::endl;
-      interpreter.dumpState(std::cerr);
-      std::cerr << "----------------" << std::endl;
-    }
-    auto fzn = interpreter.toFZN();
-    MiniZinc::Printer p(std::cout,0); p.print(fzn);
-    std::cout.flush();
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";
   }

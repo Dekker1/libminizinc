@@ -258,7 +258,7 @@ namespace MiniZinc {
     GecodeEngine* engine;
     Gecode::Search::Options engine_options;
 
-    GecodeSolverInstance(Env& env, std::ostream& log, SolverInstanceBase::Options* opt);
+    GecodeSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
     virtual ~GecodeSolverInstance(void);
 
     virtual Status next(void);    
@@ -408,7 +408,7 @@ namespace MiniZinc {
   public:
     Gecode_SolverFactory(void);
     SolverInstanceBase::Options* createOptions(void);
-    SolverInstanceBase* doCreateSI(Env& env, std::ostream& log, SolverInstanceBase::Options* opt);
+    SolverInstanceBase* doCreateSI(std::ostream& log, SolverInstanceBase::Options* opt);
     std::string getDescription(SolverInstanceBase::Options* opt=NULL);
     std::string getVersion(SolverInstanceBase::Options* opt=NULL);
     std::string getId( ) { return "org.minizinc.gecode_presolver"; }
