@@ -24,6 +24,7 @@ namespace GecodeConstraints {
 
 #define PosterImpl(X) void X(SolverInstanceBase& s, const Definition* ce)
 
+      PosterImpl(p_mk_intvar);
       PosterImpl(p_distinct);
       PosterImpl(p_distinctOffset);
       PosterImpl(p_all_equal);

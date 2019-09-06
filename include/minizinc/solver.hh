@@ -111,6 +111,7 @@ namespace MiniZinc {
     /// Solver configurations
     SolverConfigs solver_configs;
     Interpreter* interpreter = nullptr;
+    std::vector<BytecodeProc> bs;
     SolverInstanceBase* si=0;
     SolverInstanceBase::Options* si_opt=0;
     SolverFactory* sf=0;

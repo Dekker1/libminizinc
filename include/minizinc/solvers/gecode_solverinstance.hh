@@ -266,8 +266,7 @@ namespace MiniZinc {
     virtual Status solve(void);
     virtual void resetSolver(void);
 
-    // TODO:
-    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def){};
+    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def);
 
     // Presolve the currently loaded model, updating variables with the same
     // names in the given Model* m.
@@ -365,7 +364,10 @@ namespace MiniZinc {
     GecodeSolver::Variable resolveVar(Definition* d);
 
     /// Inserts variable gv into _variableMap with key id
-    void insertVar(Definition* id, GecodeVariable gv);
+    inline void insertVar(const Definition* def, GecodeVariable gv) {
+      _variableMap.emplace(def->timestamp(), gv);
+    }
+
 
   protected:
     void registerConstraints(void);

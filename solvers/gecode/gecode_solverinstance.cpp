@@ -146,9 +146,10 @@ namespace MiniZinc {
 
     GecodeSolverInstance::GecodeSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt)
        : SolverInstanceImpl<GecodeSolver>(log,opt), _n_found_solutions(0),
-       _current_space(NULL),
+         _current_space(new FznSpace()),
        _solution(NULL), engine(NULL) {
        registerConstraints();
+       _current_space->_solveType = MiniZinc::SolveI::SolveType::ST_SAT;
        // _flat = env.flat();
      }
 
@@ -167,6 +168,7 @@ namespace MiniZinc {
 
     void GecodeSolverInstance::registerConstraints(void) {
       GCLock lock;
+      registerConstraint("mk_intvar", GecodeConstraints::p_mk_intvar);
       registerConstraint("all_different_int", GecodeConstraints::p_distinct);
       registerConstraint("all_different_offset", GecodeConstraints::p_distinctOffset);
       registerConstraint("all_equal_int", GecodeConstraints::p_all_equal);
@@ -410,14 +412,13 @@ namespace MiniZinc {
 #endif
     }
 
-  inline void GecodeSolverInstance::insertVar(Definition* def, GecodeVariable gv) {
-    //std::cerr << *id << ": " << id->decl() << std::endl;
-    _variableMap.emplace(def->timestamp(), gv);
-  }
-
   inline bool GecodeSolverInstance::valueWithinBounds(double b) {
     long long int bo = round_to_longlong(b);
     return bo >= Gecode::Int::Limits::min && bo <= Gecode::Int::Limits::max;
+  }
+
+  void GecodeSolverInstance::addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) {
+    _constraintRegistry.post(bs[def->pred()].name, def);
   }
 
   void GecodeSolverInstance::processFlatZinc(void) {
@@ -1352,7 +1353,7 @@ namespace MiniZinc {
       // TODO: check what we need to do options-wise
       std::vector<Expression*> branch_vars;
       std::vector<Expression*> solve_args;
-      Expression* solveExpr = _flat->solveItem()->e();
+      Expression* solveExpr = nullptr; //_flat->solveItem()->e();
       Expression* optSearch = NULL;
       
       switch(_current_space->_solveType) {
@@ -1386,7 +1387,8 @@ namespace MiniZinc {
       int seed = _opt.seed;
       double decay = _opt.decay;
       
-      createBranchers(_flat->solveItem()->ann(), optSearch,
+      Annotation search_ann;
+      createBranchers(search_ann, optSearch,
                       seed, decay,
                       false, /* ignoreUnknown */
                       std::cerr);
@@ -1500,7 +1502,7 @@ namespace MiniZinc {
       _n_found_solutions++;
 
       if(n_max_solutions==0 || _n_found_solutions <= n_max_solutions) {
-        processSolution();
+        // processSolution();
         if (_print_stats) print_stats();
       }
       if (_n_found_solutions == n_max_solutions) {
@@ -1511,7 +1513,7 @@ namespace MiniZinc {
     if (_current_space->_solveType != MiniZinc::SolveI::SolveType::ST_SAT) {
       if (n_max_solutions==-1) {
         // Print last solution
-        processSolution(next_sol == NULL);
+        // processSolution(next_sol == NULL);
         if (_print_stats) print_stats();
       }
     }

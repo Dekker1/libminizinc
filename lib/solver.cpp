@@ -590,7 +590,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   std::string str((std::istreambuf_iterator<char>(t)),
                   std::istreambuf_iterator<char>());
   // Parse assembly file
-  auto bs = parse_mza(str);
+  bs = parse_mza(str);
   if (verbose) {
     std::cerr << "Disassembled code:\n";
     for (auto& b : bs) {
@@ -632,13 +632,8 @@ SolverInstance::Status MznSolver::solve()
   }
   SolverInstance::Status status = getSI()->solve();
   GCLock lock;
-  if (status==SolverInstance::SAT || status==SolverInstance::OPT) {
-    if ( !getSI()->getSolns2Out()->fStatusPrinted )
-      getSI()->getSolns2Out()->evalStatus( status );
-  }
-  else {
-    if ( !getSI()->getSolns2Out()->fStatusPrinted )
-      getSI()->getSolns2Out()->evalStatus( status );
+  if ( false && !getSI()->getSolns2Out()->fStatusPrinted ){
+    getSI()->getSolns2Out()->evalStatus( status );
   }
   if (si_opt->printStatistics)
     printStatistics();
