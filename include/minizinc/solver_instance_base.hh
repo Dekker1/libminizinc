@@ -138,7 +138,8 @@ namespace MiniZinc {
     typedef typename Solver::Variable VarId;
 
   protected:
-    IdMap<VarId> _variableMap;      // this to find solver's variables given an Id
+    // IdMap<VarId> _variableMap;      // this to find solver's variables given an Id
+    std::unordered_map<int, VarId> _variableMap;
     Registry _constraintRegistry;
 
   public:

@@ -410,9 +410,9 @@ namespace MiniZinc {
 #endif
     }
 
-  inline void GecodeSolverInstance::insertVar(Id* id, GecodeVariable gv) {
+  inline void GecodeSolverInstance::insertVar(Definition* def, GecodeVariable gv) {
     //std::cerr << *id << ": " << id->decl() << std::endl;
-    _variableMap.insert(id->decl()->id(), gv);
+    _variableMap.emplace(def->timestamp(), gv);
   }
 
   inline bool GecodeSolverInstance::valueWithinBounds(double b) {
@@ -694,6 +694,22 @@ namespace MiniZinc {
   }
 
   Gecode::IntArgs
+  GecodeSolverInstance::arg2intargs(const Val& arg, int offset) {
+    if(!arg.isVec()) {
+      std::stringstream ssm; ssm << "Invalid argument in arg2intargs: " << arg.toString();
+      ssm << ". Expected Vec.";
+      throw InternalError(ssm.str());
+    }
+    IntArgs ia(arg.size()+offset);
+    for (int i=offset; i--;)
+      ia[i] = 0;
+    for (int i=arg.size(); i--;) {
+      ia[i+offset] = arg[i]().toInt();
+    }
+    return ia;
+  }
+
+  Gecode::IntArgs
   GecodeSolverInstance::arg2boolargs(Expression* arg, int offset) {
     if(!arg->isa<Id>() && !arg->isa<ArrayLit>()) {
       std::stringstream ssm; ssm << "Invalid argument in arg2boolargs: " << *arg;
@@ -706,6 +722,22 @@ namespace MiniZinc {
         ia[i] = 0;
     for (int i=a->size(); i--;)
         ia[i+offset] = (*a)[i]->cast<BoolLit>()->v();
+    return ia;
+  }
+
+  Gecode::IntArgs
+  GecodeSolverInstance::arg2boolargs(const Val& arg, int offset) {
+    if(!arg.isVec()) {
+      std::stringstream ssm; ssm << "Invalid argument in arg2intargs: " << arg.toString();
+      ssm << ". Expected Vec.";
+      throw InternalError(ssm.str());
+    }
+    IntArgs ia(arg.size()+offset);
+    for (int i=offset; i--;)
+      ia[i] = 0;
+    for (int i=arg.size(); i--;) {
+      ia[i+offset] = arg[i]().toInt();
+    }
     return ia;
   }
 
@@ -749,6 +781,21 @@ namespace MiniZinc {
     IntSet d(isr_g);
     return d;
    }
+  Gecode::IntSet
+  GecodeSolverInstance::arg2intset(const Val& sl) {
+    GCLock lock;
+    assert(sl.isVec());
+    assert(sl.size() >= 2 && sl.size() % 2 == 0);
+    std::vector<IntSetVal::Range> ranges;
+    for (int i = 0; i < sl.size(); i += 2) {
+      ranges.emplace_back(sl[i](), sl[i+1]());
+    }
+    IntSetVal* isv = IntSetVal::a(ranges);
+    IntSetRanges isr(isv);
+    GecodeRangeIter isr_g(*this, isr);
+    IntSet d(isr_g);
+    return d;
+  }
   IntSetArgs
   GecodeSolverInstance::arg2intsetargs(EnvI& envi, Expression* arg, int offset) {
     ArrayLit* a = arg2arraylit(arg);
@@ -765,6 +812,37 @@ namespace MiniZinc {
     return ia;
   }
 
+  Gecode::IntVarArgs
+  GecodeSolverInstance::arg2intvarargs(const Val& arg, int offset) {
+    if (arg.size() == 0) {
+        IntVarArgs emptyIa(0);
+        return emptyIa;
+    }
+    IntVarArgs ia(arg.size()+offset);
+    for (int i=offset; i--;)
+        ia[i] = IntVar(*this->_current_space, 0, 0);
+    for (int i=arg.size(); i--;) {
+        const Val& val = arg[i];
+        if (val.isDef()) {
+            //ia[i+offset] = _current_space->iv[*(int*)resolveVar(getVarDecl(e))];
+            GecodeSolver::Variable var = resolveVar(val.toDef());
+            assert(var.isint());
+            Gecode::IntVar v = var.intVar(_current_space);
+            ia[i+offset] = v;
+        } else {
+            long long int value = val().toInt();
+            if(valueWithinBounds(value)) {
+              IntVar iv(*this->_current_space, value, value);
+              ia[i+offset] = iv;
+            } else {
+              std::stringstream ssm;
+              ssm << "GecodeSolverInstance::arg2intvarargs Error: " << value << " outside 32-bit int." << std::endl;
+              throw InternalError(ssm.str());
+            }
+        }
+    }
+    return ia;
+  }
   Gecode::IntVarArgs
   GecodeSolverInstance::arg2intvarargs(Expression* arg, int offset) {
     ArrayLit* a = arg2arraylit(arg);
@@ -798,6 +876,44 @@ namespace MiniZinc {
     return ia;
   }
 
+  Gecode::BoolVarArgs
+  GecodeSolverInstance::arg2boolvarargs(const Val& arg, int offset, int siv) {
+    if (arg.size() == 0) {
+        BoolVarArgs emptyIa(0);
+        return emptyIa;
+    }
+    BoolVarArgs ia(arg.size()+offset-(siv==-1?0:1));
+    for (int i=offset; i--;)
+        ia[i] = BoolVar(*this->_current_space, 0, 0);
+    for (int i=0; i<static_cast<int>(arg.size()); i++) {
+        if (i==siv)
+            continue;
+        const Val& v = arg[i];
+        if(v.isDef()) {
+            GecodeVariable var = resolveVar(v.toDef());
+            if (var.isbool()) {
+              // assert(var.isbool());
+              ia[offset++] = var.boolVar(_current_space);
+            } else if(var.hasBoolAlias()) {
+              ia[offset++] = _current_space->bv[var.boolAliasIndex()];
+            } else {
+              std::stringstream ssm;
+              ssm << "expected bool-var or alias int var instead of " << v.toString();
+              throw InternalError(ssm.str());
+            }
+        } else {
+          long long int i = v().toInt();
+          if(i >= 0 && i <= 1) {
+            BoolVar iv(*this->_current_space, i, i);
+            ia[offset++] = iv;
+          } else {
+            std::stringstream ssm; ssm << "Expected bool literal instead of: " << v.toString();
+            throw new InternalError(ssm.str());
+          }
+        }
+    }
+    return ia;
+  }
   Gecode::BoolVarArgs
   GecodeSolverInstance::arg2boolvarargs(Expression* arg, int offset, int siv) {
     ArrayLit* a = arg2arraylit(arg);
@@ -841,6 +957,25 @@ namespace MiniZinc {
   }
 
   Gecode::BoolVar
+  GecodeSolverInstance::arg2boolvar(const Val& v) {
+    BoolVar x0;
+    if (v.isDef()) {
+      //x0 = _current_space->bv[*(int*)resolveVar(getVarDecl(e))];
+      GecodeVariable var = resolveVar(v.toDef());
+      assert(var.isbool());
+      x0 = var.boolVar(_current_space);
+    } else {
+      long long int i = v().toInt();
+      if(i < 0 || i > 1) {
+        std::stringstream ssm; ssm << "Expected bool literal instead of: " << v.toString();
+        throw new InternalError(ssm.str());
+      } else {
+        x0 = BoolVar(*this->_current_space, i, i);
+      }
+    }
+    return x0;
+  }
+  Gecode::BoolVar
   GecodeSolverInstance::arg2boolvar(Expression* e) {
     BoolVar x0;
     if (e->type().isvar()) {
@@ -879,6 +1014,20 @@ namespace MiniZinc {
     }
     return x0;
   }
+  Gecode::IntVar
+  GecodeSolverInstance::arg2intvar(const Val& val) {
+    IntVar x0;
+    if (val.isDef()) {
+      //x0 = _current_space->iv[*(int*)resolveVar(getVarDecl(e))];
+      GecodeVariable var = resolveVar(val.toDef());
+      assert(var.isint());
+      x0 = var.intVar(_current_space);
+    } else {
+      IntVal i = val();
+      x0 = IntVar(*this->_current_space, i.toInt(), i.toInt());
+    }
+    return x0;
+  }
 
   ArrayLit*
   GecodeSolverInstance::arg2arraylit(Expression* arg) {
@@ -904,6 +1053,33 @@ namespace MiniZinc {
       return a;
   }
 
+  bool
+  GecodeSolverInstance::isBoolArray(const Val& arr, int& singleInt) {
+    singleInt = -1;
+    if (arr.size() == 0)
+      return true;
+    for (int i=arr.size(); i--;) {
+      const Val& val = arr[i];
+      if (val.isInt() && val().toInt() >= 0 && val().toInt() <= 1) {
+        continue;
+      } else if (val.isDef()) {
+        // TODO: Check variable domain
+        // GecodeVariable var = resolveVar(getVarDecl((*a)[i]));
+        // if (var.hasBoolAlias()) {
+        //   if (singleInt != -1) {
+        //     return false;
+        //   }
+        //   singleInt = var.boolAliasIndex();
+        // }
+        // else {
+          return false;
+        // }
+      } else {
+        return false;
+      }
+    }
+    return singleInt==-1 || arr.size() > 1;
+  }
   bool
   GecodeSolverInstance::isBoolArray(ArrayLit* a, int& singleInt) {
     singleInt = -1;
@@ -1075,17 +1251,27 @@ namespace MiniZinc {
 
   GecodeSolver::Variable
   GecodeSolverInstance::resolveVar(Expression* e) {
-    if (Id* id = e->dyn_cast<Id>()) {
-        return _variableMap.get(id->decl()->id()); //lookupVar(id->decl());
-    } else if (VarDecl* vd = e->dyn_cast<VarDecl>()) {
-        return _variableMap.get(vd->id()->decl()->id());
-    } else if (ArrayAccess* aa = e->dyn_cast<ArrayAccess>()) {
-        return _variableMap.get(resolveArrayAccess(aa)->id()->decl()->id());
-    } else {
-        std::stringstream ssm;
-        ssm << "Expected Id, VarDecl or ArrayAccess instead of \"" << *e << "\"";
-        throw InternalError(ssm.str());
-    }
+    std::stringstream ssm;
+    ssm << "USING OLD SOLVER INTERFACE THINGS!";
+    throw InternalError(ssm.str());
+    // if (Id* id = e->dyn_cast<Id>()) {
+    //     return _variableMap.get(id->decl()->id()); //lookupVar(id->decl());
+    // } else if (VarDecl* vd = e->dyn_cast<VarDecl>()) {
+    //     return _variableMap.get(vd->id()->decl()->id());
+    // } else if (ArrayAccess* aa = e->dyn_cast<ArrayAccess>()) {
+    //     return _variableMap.get(resolveArrayAccess(aa)->id()->decl()->id());
+    // } else {
+    //     std::stringstream ssm;
+    //     ssm << "Expected Id, VarDecl or ArrayAccess instead of \"" << *e << "\"";
+    //     throw InternalError(ssm.str());
+    // }
+  }
+
+  GecodeSolver::Variable
+  GecodeSolverInstance::resolveVar(Definition* def) {
+    auto it = _variableMap.find(def->timestamp());
+    assert(it != _variableMap.end());
+    return it->second; //lookupVar(id->decl());
   }
 
   SolverInstance::Status
@@ -1450,80 +1636,81 @@ namespace MiniZinc {
         vds[vd->id()->str().str()] = vd;
       }
 
-      IdMap<GecodeVariable>::iterator it;
-      for(it = _variableMap.begin(); it != _variableMap.end(); it++) {
-        VarDecl* vd = it->first->decl();
-        long long int old_domsize = 0;
-        bool holes = false;
+      // TODO: Does not work for new SolverInstance
+      // IdMap<GecodeVariable>::iterator it;
+//       for(auto it = _variableMap.begin(); it != _variableMap.end(); it++) {
+//         int vd = it->first->decl();
+//         long long int old_domsize = 0;
+//         bool holes = false;
 
-        if(vd->ti()->domain()) {
-          if(vd->type().isint()) {
-            IntBounds old_bounds = compute_int_bounds(_env.envi(), vd->id());
-            long long int old_rangesize = abs(old_bounds.u.toInt() - old_bounds.l.toInt());
-            if(vd->ti()->domain()->isa<SetLit>())
-              old_domsize = arg2intset(_env.envi(), vd->ti()->domain()).size();
-            else
-              old_domsize = old_rangesize + 1;
-            holes = old_domsize < old_rangesize + 1;
-          }
-        }
+//         if(vd->ti()->domain()) {
+//           if(vd->type().isint()) {
+//             IntBounds old_bounds = compute_int_bounds(_env.envi(), vd->id());
+//             long long int old_rangesize = abs(old_bounds.u.toInt() - old_bounds.l.toInt());
+//             if(vd->ti()->domain()->isa<SetLit>())
+//               old_domsize = arg2intset(_env.envi(), vd->ti()->domain()).size();
+//             else
+//               old_domsize = old_rangesize + 1;
+//             holes = old_domsize < old_rangesize + 1;
+//           }
+//         }
 
-        std::string name = it->first->str().str();
+//         std::string name = it->first->str().str();
 
 
-        if(vds.find(name) != vds.end()) {
-          VarDecl* nvd = vds[name];
-          Type::BaseType bt = vd->type().bt();
-          if(bt == Type::BaseType::BT_INT) {
-            IntVar intvar = it->second.intVar(_current_space);
-            const long long int l = intvar.min(), u = intvar.max();
+//         if(vds.find(name) != vds.end()) {
+//           VarDecl* nvd = vds[name];
+//           Type::BaseType bt = vd->type().bt();
+//           if(bt == Type::BaseType::BT_INT) {
+//             IntVar intvar = it->second.intVar(_current_space);
+//             const long long int l = intvar.min(), u = intvar.max();
 
-            if(l==u) {
-              if(nvd->e()) {
-                nvd->ti()->domain(new SetLit(nvd->loc(), IntSetVal::a(l, u)));
-              } else {
-                nvd->type(Type::parint());
-                nvd->ti(new TypeInst(nvd->loc(), Type::parint()));
-                nvd->e(IntLit::a(l));
-              }
-            } else if(!(l == Gecode::Int::Limits::min || u == Gecode::Int::Limits::max)){
-              if(_only_range_domains && !holes) {
-                nvd->ti()->domain(new SetLit(nvd->loc(), IntSetVal::a(l, u)));
-              } else {
-                IntVarRanges ivr(intvar);
-                nvd->ti()->domain(new SetLit(nvd->loc(), IntSetVal::ai(ivr)));
-              }
-            }
-          } else if(bt == Type::BaseType::BT_BOOL) {
-            BoolVar boolvar = it->second.boolVar(_current_space);
-            int l = boolvar.min(),
-                u = boolvar.max();
-            if(l == u) {
-              if(nvd->e()) {
-                nvd->ti()->domain(constants().boollit(l));
-              } else {
-                nvd->type(Type::parbool());
-                nvd->ti(new TypeInst(nvd->loc(), Type::parbool()));
-                nvd->e(new BoolLit(nvd->loc(), l));
-              }
-            }
-#ifdef GECODE_HAS_FLOAT_VAR
-          } else if(bt == Type::BaseType::BT_FLOAT) {
-            Gecode::FloatVar floatvar = it->second.floatVar(_current_space);
-            if(floatvar.assigned() && !nvd->e()) {
-              FloatNum l = floatvar.min();
-              nvd->type(Type::parfloat());
-              nvd->ti(new TypeInst(nvd->loc(), Type::parfloat()));
-              nvd->e(FloatLit::a(l));
-            } else {
-              FloatNum l = floatvar.min(),
-                       u = floatvar.max();
-              nvd->ti()->domain(new SetLit(nvd->loc(), FloatSetVal::a(l, u)));
-            }
-#endif
-          }
-        }
-      }
+//             if(l==u) {
+//               if(nvd->e()) {
+//                 nvd->ti()->domain(new SetLit(nvd->loc(), IntSetVal::a(l, u)));
+//               } else {
+//                 nvd->type(Type::parint());
+//                 nvd->ti(new TypeInst(nvd->loc(), Type::parint()));
+//                 nvd->e(IntLit::a(l));
+//               }
+//             } else if(!(l == Gecode::Int::Limits::min || u == Gecode::Int::Limits::max)){
+//               if(_only_range_domains && !holes) {
+//                 nvd->ti()->domain(new SetLit(nvd->loc(), IntSetVal::a(l, u)));
+//               } else {
+//                 IntVarRanges ivr(intvar);
+//                 nvd->ti()->domain(new SetLit(nvd->loc(), IntSetVal::ai(ivr)));
+//               }
+//             }
+//           } else if(bt == Type::BaseType::BT_BOOL) {
+//             BoolVar boolvar = it->second.boolVar(_current_space);
+//             int l = boolvar.min(),
+//                 u = boolvar.max();
+//             if(l == u) {
+//               if(nvd->e()) {
+//                 nvd->ti()->domain(constants().boollit(l));
+//               } else {
+//                 nvd->type(Type::parbool());
+//                 nvd->ti(new TypeInst(nvd->loc(), Type::parbool()));
+//                 nvd->e(new BoolLit(nvd->loc(), l));
+//               }
+//             }
+// #ifdef GECODE_HAS_FLOAT_VAR
+//           } else if(bt == Type::BaseType::BT_FLOAT) {
+//             Gecode::FloatVar floatvar = it->second.floatVar(_current_space);
+//             if(floatvar.assigned() && !nvd->e()) {
+//               FloatNum l = floatvar.min();
+//               nvd->type(Type::parfloat());
+//               nvd->ti(new TypeInst(nvd->loc(), Type::parfloat()));
+//               nvd->e(FloatLit::a(l));
+//             } else {
+//               FloatNum l = floatvar.min(),
+//                        u = floatvar.max();
+//               nvd->ti()->domain(new SetLit(nvd->loc(), FloatSetVal::a(l, u)));
+//             }
+// #endif
+//           }
+//         }
+//       }
     }
     return true;
   }

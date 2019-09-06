@@ -144,12 +144,12 @@ namespace MiniZinc {
     void p_int_lin_CMP(GecodeSolverInstance& s, IntRelType irt, const Definition* call) {
       const Val& ann =call->ann();
       IntArgs ia = s.arg2intargs(call->arg(0));
-      ArrayLit* vars = s.arg2arraylit(call->arg(1));
+      const Val& vars = call->arg(1);
       int singleIntVar;
       if (s.isBoolArray(vars,singleIntVar)) {
         if (singleIntVar != -1) {
           if (std::abs(ia[singleIntVar]) == 1 && call->arg(2)().toInt() == 0) {
-            IntVar siv = s.arg2intvar((*vars)[singleIntVar]);
+            IntVar siv = s.arg2intvar(vars[singleIntVar]);
             BoolVarArgs iv = s.arg2boolvarargs(vars, 0, singleIntVar);
             IntArgs ia_tmp(ia.size()-1);
             int count = 0;
@@ -183,12 +183,12 @@ namespace MiniZinc {
         return;
       }
       IntArgs ia = s.arg2intargs(call->arg(0));
-      ArrayLit* vars = s.arg2arraylit(call->arg(1));
+      const Val& vars = call->arg(1);
       int singleIntVar;
       if (s.isBoolArray(vars,singleIntVar)) {
         if (singleIntVar != -1) {
           if (std::abs(ia[singleIntVar]) == 1 && call->arg(2)().toInt() == 0) {
-            IntVar siv = s.arg2intvar((*vars)[singleIntVar]);
+            IntVar siv = s.arg2intvar(vars[singleIntVar]);
             BoolVarArgs iv = s.arg2boolvarargs(vars, 0, singleIntVar);
             IntArgs ia_tmp(ia.size()-1);
             int count = 0;

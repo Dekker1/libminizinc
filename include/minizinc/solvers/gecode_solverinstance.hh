@@ -314,9 +314,9 @@ namespace MiniZinc {
                                       const Gecode::IntSet& od=Gecode::IntSet::empty);
      /// convert \a arg to an ArrayLit (throws InternalError if not possible)
     ArrayLit* arg2arraylit(Expression* arg);  
-    ArrayLit* arg2arraylit(const Val& arg);
     /// Check if \a b is array of Booleans (or has a single integer)
     bool isBoolArray(ArrayLit* a, int& singleInt);
+    bool isBoolArray(const Val& a, int& singleInt);
 #ifdef GECODE_HAS_FLOAT_VARS
     /// Convert \a n to FloatValArgs
     Gecode::FloatValArgs arg2floatargs(Expression* arg, int offset = 0);
@@ -365,7 +365,7 @@ namespace MiniZinc {
     GecodeSolver::Variable resolveVar(Definition* d);
 
     /// Inserts variable gv into _variableMap with key id
-    void insertVar(Id* id, GecodeVariable gv);
+    void insertVar(Definition* id, GecodeVariable gv);
 
   protected:
     void registerConstraints(void);
