@@ -1345,6 +1345,19 @@ namespace MiniZinc {
     }
   }
 
+  Val
+  GecodeSolverInstance::getSolutionValue(Definition* def) {
+    GecodeVariable var = resolveVar(def);
+
+    if (var.isbool()) {
+      assert(var.boolVar(_solution).assigned());
+      return Val(var.boolVar(_solution).val());
+    } else {
+      assert(var.intVar(_solution).assigned());
+      return Val(var.intVar(_solution).val());
+    }
+  }
+
   void
   GecodeSolverInstance::prepareEngine(void) {
     GCLock lock;

@@ -144,6 +144,7 @@ namespace MiniZinc {
     SolverInstanceBase::Options* getSI_OPT() { assert(si_opt); return si_opt; }
     bool get_flag_verbose() { return flag_verbose; /*getFlt()->get_flag_verbose();*/ }
     void printUsage();
+    void printSolution(SolverInstance::Status);
 
     void pushToSolver();
     void popFromSolver();

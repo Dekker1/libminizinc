@@ -266,7 +266,8 @@ namespace MiniZinc {
     virtual Status solve(void);
     virtual void resetSolver(void);
 
-    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def);
+    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
+    Val getSolutionValue(Definition* def) override;
 
     // Presolve the currently loaded model, updating variables with the same
     // names in the given Model* m.

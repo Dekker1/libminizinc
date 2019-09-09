@@ -626,15 +626,8 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
 
 SolverInstance::Status MznSolver::solve()
 {
-  { // To be able to clean up flatzinc after PrcessFlt()
-    GCLock lock;
-    getSI()->processFlatZinc();
-  }
   SolverInstance::Status status = getSI()->solve();
-  GCLock lock;
-  if ( false && !getSI()->getSolns2Out()->fStatusPrinted ){
-    getSI()->getSolns2Out()->evalStatus( status );
-  }
+  printSolution(status);
   if (si_opt->printStatistics)
     printStatistics();
   return status;
@@ -644,6 +637,42 @@ void MznSolver::printStatistics()
 { // from flattener too?   TODO
   if (si)
     getSI()->printStatistics();
+}
+
+void MznSolver::printSolution(SolverInstance::Status s)
+{
+  switch(s) {
+  case SolverInstance::SAT:
+  case SolverInstance::OPT:
+    {
+      Definition* head = interpreter->_agg[0].def_stack;
+      Definition* d = head->next(); //ignore dummy head
+      while (d != head) {
+        int timestamp = d->timestamp();
+        if (timestamp >= 0) {
+          std::cout << timestamp << " = ";
+          std::cout << si->getSolutionValue(d).toString();
+          std::cout << std::endl;
+        }
+        d = d->next();
+      }
+      std::cout << "----------" << std::endl;
+      if ( s == SolverInstance::OPT) {
+        std::cout << "==========" << std::endl;
+      }
+    }
+    break;
+  case SolverInstance::UNSAT:
+    std::cout << "=====UNSATISFIABLE=====" << std::endl;
+    break;
+  case SolverInstance::UNKNOWN:
+    std::cout << "=====UNKNOWN=====" << std::endl;
+    break;
+  case SolverInstance::ERROR:
+  default:
+    std::cout << "=====ERROR=====" << std::endl;
+    break;
+  }
 }
 
 SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, const std::string& filename,
@@ -702,8 +731,7 @@ SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, con
     }
     return SolverInstance::NONE;
   } else {
-    if ( !ifMzn2Fzn() )
-      s2out.evalStatus( getFltStatus() );
+    printSolution(getFltStatus());
     return getFltStatus();
   }                                   //  Add evalOutput() here?   TODO
 }

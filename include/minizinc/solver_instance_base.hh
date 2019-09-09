@@ -77,6 +77,7 @@ namespace MiniZinc {
     virtual Status status(void) {return _status;}
     
     virtual void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) = 0;
+    virtual Val getSolutionValue(Definition* def) = 0;
 
     /// reset the model to its core (removing temporary cts) and the solver to the root node of the search 
     void reset(void);
