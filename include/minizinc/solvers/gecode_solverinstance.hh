@@ -364,6 +364,8 @@ namespace MiniZinc {
     GecodeSolver::Variable resolveVar(Expression* e);
     GecodeSolver::Variable resolveVar(Definition* d);
 
+    Gecode::BoolVar reifyVar(const Definition* d);
+
     /// Inserts variable gv into _variableMap with key id
     inline void insertVar(const Definition* def, GecodeVariable gv) {
       _variableMap.emplace(def->timestamp(), gv);

@@ -65,11 +65,10 @@ namespace MiniZinc {
     }
 
     void p_int_CMP(GecodeSolverInstance& s, IntRelType irt, const Definition* ce) {
-      assert(static_cast<BytecodeProc::Mode>(ce->mode()) == BytecodeProc::ROOT);
       const Val& ann = ce->ann();
       const Val& lhs = ce->arg(0);
       const Val& rhs = ce->arg(1);
-      if (lhs.isDef()) { 
+      if (lhs.isDef()) {
         if (rhs.isDef()) {
           rel(*s._current_space, s.arg2intvar(lhs), irt, s.arg2intvar(rhs), s.ann2icl(ann));
         } else {
@@ -81,8 +80,30 @@ namespace MiniZinc {
     }
 
     void p_int_eq(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
-      p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
+      BytecodeProc::Mode m = static_cast<BytecodeProc::Mode>(call->mode());
+      switch(m) {
+      case BytecodeProc::ROOT:
+        p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
+        break;
+      case BytecodeProc::ROOT_NEG:
+        p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_NQ, call);
+        break;
+      case BytecodeProc::FUN:
+        p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_EQV, call);
+        break;
+      case BytecodeProc::FUN_NEG:
+        p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_EQV, call);
+        break;
+      case BytecodeProc::IMP:
+        p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_IMP, call);
+        break;
+      case BytecodeProc::IMP_NEG:
+        p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_IMP, call);
+        break;
+      case BytecodeProc::RAW:
+        assert(false);
+        break;
+      }
     }
     void p_int_ne(SolverInstanceBase& s, const Definition* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
@@ -105,29 +126,30 @@ namespace MiniZinc {
       p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LE, call);
     }
     void p_int_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
-      if (rm == RM_EQV && !call->arg(2).isDef()) {
-        if (call->arg(2)().toInt()) {
-          p_int_CMP(s, irt, call);
-        } else {
-          p_int_CMP(s, neg(irt), call);
-        }
-        return;
-      }
+      // TODO: Check if reification is already decided
+      // if (rm == RM_EQV && !call->arg(2).isDef()) {
+      //   if (call->arg(2)().toInt()) {
+      //     p_int_CMP(s, irt, call);
+      //   } else {
+      //     p_int_CMP(s, neg(irt), call);
+      //   }
+      //   return;
+      // }
+      auto var = s.reifyVar(call);
       if (call->arg(0).isDef()) {
         if (call->arg(1).isDef()) {
           rel(*s._current_space, s.arg2intvar(call->arg(0)), irt, s.arg2intvar(call->arg(1)),
-              Reify(s.arg2boolvar(call->arg(2)), rm), s.ann2icl(ann));
+              Reify(var, rm), s.ann2icl(ann));
         } else {
           rel(*s._current_space, s.arg2intvar(call->arg(0)), irt,
               call->arg(1)().toInt(),
-              Reify(s.arg2boolvar(call->arg(2)), rm), s.ann2icl(ann));
+              Reify(var, rm), s.ann2icl(ann));
         }
       } else {
         rel(*s._current_space, s.arg2intvar(call->arg(1)), swap(irt),
             call->arg(0)().toInt(),
-            Reify(s.arg2boolvar(call->arg(2)), rm), s.ann2icl(ann));
+            Reify(var, rm), s.ann2icl(ann));
       }
     }
 

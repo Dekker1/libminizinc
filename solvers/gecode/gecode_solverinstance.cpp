@@ -958,6 +958,15 @@ namespace MiniZinc {
   }
 
   Gecode::BoolVar
+  GecodeSolverInstance::reifyVar(const Definition* def) {
+    BoolVar boolVar(*_current_space, 0, 1);
+    _current_space->bv.push_back(boolVar);
+    insertVar(def, GecodeVariable(GecodeVariable::BOOL_TYPE, _current_space->bv.size()-1));
+    _current_space->bv_introduced.push_back(true);
+    return boolVar;
+  }
+
+  Gecode::BoolVar
   GecodeSolverInstance::arg2boolvar(const Val& v) {
     BoolVar x0;
     if (v.isDef()) {
