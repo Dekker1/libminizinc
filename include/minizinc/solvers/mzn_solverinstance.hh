@@ -38,16 +38,16 @@ namespace MiniZinc {
     
     ~MZNSolverInstance(void);
 
-    Status next(void) {return SolverInstance::ERROR;}
+    Status next(void) override {return SolverInstance::ERROR;}
 
-    Status solve(void);
+    Status solve(void) override;
 
-    void processFlatZinc(void);
+    void processFlatZinc(void) override;
     // TODO:
-    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def){};
+    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override {};
     Val getSolutionValue(Definition* def) override {return Val();};
 
-    void resetSolver(void);
+    void resetSolver(void) override;
   };
 
   class MZN_SolverFactory: public SolverFactory {

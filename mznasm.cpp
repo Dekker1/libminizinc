@@ -50,7 +50,7 @@ int main(int argc, const char** argv) {
 
   try {
     MznSolver slv(std::cout,std::cerr);
-    std::vector<std::string> args = {"--solver", "org.minizinc.gecode_presolver"};
+    std::vector<std::string> args = {"--solver", "chuffed"};
     if (verbose) {
       args.push_back("--verbose-compilation");
     }

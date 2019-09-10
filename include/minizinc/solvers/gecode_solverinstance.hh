@@ -261,10 +261,10 @@ namespace MiniZinc {
     GecodeSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
     virtual ~GecodeSolverInstance(void);
 
-    virtual Status next(void);    
-    virtual void processFlatZinc(void);    
-    virtual Status solve(void);
-    virtual void resetSolver(void);
+    Status next(void) override;
+    void processFlatZinc(void) override;
+    Status solve(void) override;
+    void resetSolver(void) override;
 
     void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
     Val getSolutionValue(Definition* def) override;
@@ -276,7 +276,7 @@ namespace MiniZinc {
     void print_stats();
 
     void processSolution(bool last_sol = false);
-    virtual Expression* getSolutionValue(Id* id);
+    Expression* getSolutionValue(Id* id) override;
 
     Gecode::Space* getGecodeModel(void);
 

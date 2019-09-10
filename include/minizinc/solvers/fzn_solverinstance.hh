@@ -48,31 +48,29 @@ namespace MiniZinc {
   class FZNSolverInstance : public SolverInstanceBase {
     private:
       std::string _fzn_solver;
-    protected:
-      Model* _fzn;
-      Model* _ozn;
-      bool changed = false;
+      std::unordered_map<int, VarDecl*> vdmap;
+      Model* _model;
+      Env env;
     public:
       FZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
 
       ~FZNSolverInstance(void);
 
-      Status next(void) {return SolverInstance::ERROR;}
+      Status next(void) override {return SolverInstance::ERROR;}
 
-      Status solve(void);
+      Status solve(void) override;
 
-      void processFlatZinc(void);
+      void processFlatZinc(void) override;
 
+      void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
       // TODO:
-      void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override {};
-    Val getSolutionValue(Definition* def) override { return Val(); };
+      Val getSolutionValue(Definition* def) override;
 
-      void resetSolver(void);
-
-      void changeModel(Model* newFZN) { if (changed) { delete _fzn; } _fzn = newFZN; changed = true; }
+      void resetSolver(void) override;
 
     protected:
-      Expression* getSolutionValue(Id* id);
+    void createFunctionItems();
+    Expression* getSolutionValue(Id* id);
   };
 
   class FZN_SolverFactory: public SolverFactory {

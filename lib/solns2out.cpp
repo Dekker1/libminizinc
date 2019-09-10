@@ -454,7 +454,7 @@ bool Solns2Out::feedRawDataChunk(const char* data) {
     if ( mapInputStatus.end()!=it ) {
       if ( SolverInstance::SAT==it->second ) {
         parseAssignments( solution );
-        evalOutput();
+        // evalOutput();
       } else {
         evalStatus( it->second );
       }

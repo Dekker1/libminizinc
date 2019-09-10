@@ -188,9 +188,65 @@ namespace MiniZinc {
 
 
   FZNSolverInstance::FZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* options)
-    : SolverInstanceBase(log, options) {}
+    : SolverInstanceBase(log, options), _model(new Model()), env(_model) {
+    auto ofs = new std::ofstream("/dev/null");
+    pS2Out = new Solns2Out(*ofs, log, "");
+  }
 
   FZNSolverInstance::~FZNSolverInstance(void) {}
+
+  void FZNSolverInstance::addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) {
+    GCLock lock;
+    Definition::toFZNItem(def, bs, _model, vdmap);
+    if (def->timestamp() >= 0) {
+      auto ti = new TypeInst(Location().introduce(), Type::parint(), nullptr);
+      auto vd = new VarDecl(Location().introduce(), ti, def->timestamp());
+      env.output()->addItem(new VarDeclI(Location().introduce(), vd));
+    }
+  };
+
+  Val FZNSolverInstance::getSolutionValue(Definition* def) {
+    GCLock lock;
+    Id id(Location().introduce(), def->timestamp(), nullptr);
+    auto de = getSolns2Out()->findOutputVar(id.str());
+    assert(de.first->e()); // A solution must have been assigned
+    return Val(eval_int(env.envi(), de.first->e()));
+  };
+
+  void FZNSolverInstance::createFunctionItems() {
+    GCLock lock;
+    std::vector<FunctionI*> toAdd;
+    for (auto ci = _model->begin_constraints(); ci != _model->end_constraints(); ++ci) {
+      auto call = ci->e()->cast<Call>();
+      FunctionI* fi = _model->matchFn(env.envi(), call, false);
+      if (!fi) {
+        std::vector<VarDecl*> args;
+        for (int i = 0; i < call->n_args(); ++i) {
+          TypeInst* ti;
+          if (call->arg(i)->type().dim() > 0) {
+            auto al = eval_array_lit(env.envi(), call->arg(i));
+            std::vector<TypeInst*> ranges(al->dims());
+            for (auto& range : ranges) {
+              range = new TypeInst(Location().introduce(), Type::parint(), nullptr);
+            }
+            ti = new TypeInst(Location().introduce(), call->arg(i)->type(), ranges, nullptr);
+          } else {
+            ti = new TypeInst(Location().introduce(), call->arg(i)->type(), nullptr);
+          }
+          args.push_back(new VarDecl(Location().introduce(), ti, i));
+        }
+        TypeInst* ti = new TypeInst(Location().introduce(), Type::varbool());
+        fi = new FunctionI(Location().introduce(), call->id().str(), ti, args, nullptr);
+        _model->registerFn(env.envi(), fi);
+        toAdd.push_back(fi);
+      }
+      call->decl(fi);
+    }
+    env.model(nullptr);
+    for (const auto& j : toAdd) {
+      _model->addItem(j);
+    }
+  }
 
   SolverInstance::Status
   FZNSolverInstance::solve(void) {
@@ -244,29 +300,34 @@ namespace MiniZinc {
     }
     int timelimit = opt.fzn_time_limit_ms;
     bool sigint = opt.fzn_sigint;
-    
+
     FileUtils::TmpFile fznFile(".fzn");
     std::ofstream os(fznFile.name());
     Printer p(os, 0, true);
-    for (FunctionIterator it = _fzn->begin_functions(); it != _fzn->end_functions(); ++it) {
+    createFunctionItems();
+    for (FunctionIterator it = _model->begin_functions(); it != _model->end_functions(); ++it) {
       if(!it->removed()) {
         Item& item = *it;
         p.print(&item);
       }
     }
-    for (VarDeclIterator it = _fzn->begin_vardecls(); it != _fzn->end_vardecls(); ++it) {
+    for (VarDeclIterator it = _model->begin_vardecls(); it != _model->end_vardecls(); ++it) {
       if(!it->removed()) {
         Item& item = *it;
         p.print(&item);
       }
     }
-    for (ConstraintIterator it = _fzn->begin_constraints(); it != _fzn->end_constraints(); ++it) {
+    for (ConstraintIterator it = _model->begin_constraints(); it != _model->end_constraints(); ++it) {
       if(!it->removed()) {
         Item& item = *it;
         p.print(&item);
       }
     }
-    p.print(_fzn->solveItem());
+    {
+      GCLock lock;
+      auto si = SolveI::sat(Location().introduce());
+      p.print(si);
+    }
     cmd_line.push_back(fznFile.name());
 
     FileUtils::TmpFile* pathsFile = NULL;
@@ -279,6 +340,7 @@ namespace MiniZinc {
     //   cmd_line.push_back("--paths");
     //   cmd_line.push_back(pathsFile->name());
     // }
+    getSolns2Out()->initFromEnv(&env);
 
     if(!opt.fzn_output_passthrough) {
       Process<Solns2Out> proc(cmd_line, getSolns2Out(), timelimit, sigint);
