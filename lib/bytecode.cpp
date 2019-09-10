@@ -202,8 +202,8 @@ namespace MiniZinc {
     {"int_lt", "int_ge"}
   };
 
-  void Definition::toFZN(Interpreter* interpreter, Definition* head, const std::vector<BytecodeProc>& bs,
-                          Model* model, std::unordered_map<int, VarDecl*>& vdmap) {
+  void Definition::toFZN(Definition* head, const std::vector<BytecodeProc>& bs, Model* model,
+                         std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter) {
     GCLock lock;
     auto fzn = model ? model : new Model();
     if (head->next()==head)
@@ -216,15 +216,15 @@ namespace MiniZinc {
         continue;
       }
       if (d->defs()) {
-        toFZN(interpreter, d->defs(), bs, fzn, vdmap);
+        toFZN(d->defs(), bs, fzn, vdmap, interpreter);
       }
-      toFZNItem(interpreter, d, bs, fzn, vdmap);
+      toFZNItem(d, bs, fzn, vdmap, interpreter);
       d = d->next();
     }
   }
 
-  void Definition::toFZNItem(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs,
-                             Model* model, std::unordered_map<int, VarDecl*>& vdmap) {
+  void Definition::toFZNItem(Definition* d, const std::vector<BytecodeProc>& bs,
+                             Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter) {
     const BytecodeProc& proc = bs[d->pred()];
     auto mode = static_cast<BytecodeProc::Mode>(d->mode());
     std::string name = proc.name;
@@ -255,7 +255,7 @@ namespace MiniZinc {
     } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
       std::vector<Expression*> args(proc.nargs);
       for (int i = 0; i < proc.nargs; ++i) {
-        Val v = Val::follow_alias(interpreter, d->arg(i));
+        Val v = Val::follow_alias(d->arg(i), interpreter);
         args[i] = v.toFZN(vdmap);
       }
       auto c = new Call(Location().introduce(), name, args);
@@ -269,7 +269,7 @@ namespace MiniZinc {
 
       std::vector<Expression*> args(proc.nargs + 1);
       for (int i = 0; i < proc.nargs; ++i) {
-        Val v = Val::follow_alias(interpreter, d->arg(i));
+        Val v = Val::follow_alias(d->arg(i), interpreter);
         args[i] = v.toFZN(vdmap);
       }
       args.back() = Val(d).toFZN(vdmap);
@@ -511,17 +511,19 @@ namespace MiniZinc {
     }
   }
 
-  Val Val::follow_alias(Interpreter* interpreter, const Val& v) {
+  Val Val::follow_alias(const Val& v, Interpreter* interpreter) {
     if (v.isDef() && v.toDef()->pred() == PrimitiveMap::ALIAS) {
       Val nval = v;
       while(nval.isDef() && nval.toDef()->pred() == PrimitiveMap::ALIAS) {
         assert(nval.toDef()->size() > 0);
         nval = nval.toDef()->arg(0);
       }
-      auto mut_v = const_cast<Val&>(v);
-      mut_v.destroy(interpreter);
-      mut_v._v = nval._v;
-      mut_v.construct(interpreter);
+      if (interpreter) {
+        auto mut_v = const_cast<Val&>(v);
+        mut_v.destroy(interpreter);
+        mut_v._v = nval._v;
+        mut_v.construct(interpreter);
+      }
       return nval;
     } else {
       return v;
@@ -563,7 +565,7 @@ namespace MiniZinc {
       it = _table[i].find(key);
     } while (it == _table[i].end() && i > 0);
     if (it != _table[i].end()) {
-      Val val = Val::follow_alias(interpreter, it->second.second);
+      Val val = Val::follow_alias(it->second.second, interpreter);
       BytecodeProc::Mode val_m = it->second.first;
       if (!val.exists()) {
         this->_table[i].erase(it);
@@ -1191,7 +1193,7 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
-          Val v = Val::follow_alias(this, frame->reg[r1]);
+          Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
             frame->reg.assign(this, r2, IntVal(1));
           } else if (v.isDef()) {
@@ -1251,7 +1253,7 @@ namespace MiniZinc {
           assert(frame->reg[r2].isInt());
           assert(frame->reg[r2]() > 0 && frame->reg[r2]() <= frame->reg[r1].size());
           DBG_INTERPRETER("GET_VEC R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          Val v = Val::follow_alias(this, frame->reg[r1][frame->reg[r2]().toInt()-1]);
+          Val v = Val::follow_alias(frame->reg[r1][frame->reg[r2]().toInt()-1], this);
           frame->reg.assign(this, r3, v);
           DBG_INTERPRETER(" R" << r3 <<  "(" << v.toString() << ")" <<  "\n");
         }
@@ -1261,7 +1263,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("LB R" << r1  << "(" << frame->reg[r1].toString() << ")");
-          Val v = Val::follow_alias(this, frame->reg[r1]);
+          Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
             frame->reg.assign(this, r2, v);
           } else if (v.isDef()) {
@@ -1283,7 +1285,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("UB R" << r1  << "(" << frame->reg[r1].toString() << ")");
-          Val v = Val::follow_alias(this, frame->reg[r1]);
+          Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
             frame->reg.assign(this, r2, v);
           } else if (v.isDef()) {
@@ -1305,7 +1307,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("DOM R" << r1  << "(" << frame->reg[r1].toString() << ")");
-          Val v = Val::follow_alias(this, frame->reg[r1]);
+          Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
             frame->reg.assign(this, r2, Val(Vec::a(this, newIdent(), {v,v})));
           } else if (v.isDef()) {
@@ -1327,8 +1329,8 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("INTERSECTION R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
-          Val v1 = Val::follow_alias(this, frame->reg[r1]);
-          Val v2 = Val::follow_alias(this, frame->reg[r2]);
+          Val v1 = Val::follow_alias(frame->reg[r1], this);
+          Val v2 = Val::follow_alias(frame->reg[r2], this);
           Val result_val;
           if (v1.isInt()) {
             result_val = v2;
@@ -1357,8 +1359,8 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("UNION R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
-          Val v1 = Val::follow_alias(this, frame->reg[r1]);
-          Val v2 = Val::follow_alias(this, frame->reg[r2]);
+          Val v1 = Val::follow_alias(frame->reg[r1], this);
+          Val v2 = Val::follow_alias(frame->reg[r2], this);
           Val result_val;
           if (v1.isInt()) {
             result_val = v1;
@@ -1387,8 +1389,8 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("INTERSECT_DOMAIN R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
-          Val v1 = Val::follow_alias(this, frame->reg[r1]);
-          Val v2 = Val::follow_alias(this, frame->reg[r2]);
+          Val v1 = Val::follow_alias(frame->reg[r1], this);
+          Val v2 = Val::follow_alias(frame->reg[r2], this);
 
           Val dom_val;
           if (v1.isDef()) {
@@ -1634,7 +1636,7 @@ namespace MiniZinc {
         {
           int r = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("POST R" << r << " (" << frame->reg[r].toString() << ")\n");
-          Val v1 = Val::follow_alias(this, frame->reg[r]);
+          Val v1 = Val::follow_alias(frame->reg[r], this);
           if (v1.isInt()) {
             if (v1() == 0) {
               _status = INCONSISTENT;
@@ -1950,7 +1952,7 @@ namespace MiniZinc {
       fzn->addItem(failI);
     } else if (!_agg.empty()) {
       std::unordered_map<int, VarDecl*> vdmap;
-      Definition::toFZN(this, _agg.back().def_stack, _procs, fzn, vdmap);
+      Definition::toFZN(_agg.back().def_stack, _procs, fzn, vdmap, this);
       Env env(fzn);
       std::vector<FunctionI*> toAdd;
       for (auto ci = fzn->begin_constraints(); ci != fzn->end_constraints(); ++ci) {

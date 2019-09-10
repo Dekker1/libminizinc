@@ -194,7 +194,7 @@ namespace MiniZinc {
     // Bit 0: 0=int, 1=RefCountedObject
     void* _v;
   public:
-    static Val follow_alias(Interpreter* interpreter, const Val& v);
+    static Val follow_alias(const Val& v, Interpreter* interpreter = nullptr);
 
     bool isRCO(void) const {
       return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == static_cast<ptrdiff_t>(1);
@@ -577,8 +577,8 @@ namespace MiniZinc {
     bool attached() { return !(this == _prev); }
 
     static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
-    static void toFZN(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap);
-    static void toFZNItem(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap);
+    static void toFZN(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
+    static void toFZNItem(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
     static void addToSolver(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
 
     // Propagation interface
