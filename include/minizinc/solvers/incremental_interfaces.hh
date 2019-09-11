@@ -20,16 +20,22 @@
 
 namespace MiniZinc {
 
-  class Restartable : public SolverInstanceBase {
+  class RestartableSolverInstance : public SolverInstanceBase {
   public:
+    RestartableSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt)
+      : SolverInstanceBase(log, opt){};
+
     // Able to return to the solver into a position where no search decisions
     // have been made. SolverInstance must allow addDefinition calls after
     // restart call.
     virtual void restart() = 0;
   };
 
-  class Trailable : public Restartable {
+  class TrailableSolverInstance : public RestartableSolverInstance {
   public:
+    TrailableSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt)
+      : RestartableSolverInstance(log, opt){};
+
     // Returns the number of stored states
     virtual size_t states() = 0;
 

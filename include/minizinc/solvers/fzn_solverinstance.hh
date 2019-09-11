@@ -45,12 +45,13 @@ namespace MiniZinc {
     std::vector<MZNFZNSolverFlag> fzn_solver_flags;
   };
 
-  class FZNSolverInstance : public SolverInstanceBase {
+  class FZNSolverInstance : public TrailableSolverInstance {
     private:
       std::string _fzn_solver;
       std::unordered_map<int, VarDecl*> vdmap;
       Model* _model;
       Env env;
+      std::vector<unsigned int> stack;
     public:
       FZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
 
@@ -63,8 +64,21 @@ namespace MiniZinc {
       void processFlatZinc(void) override;
 
       void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
-      // TODO:
       Val getSolutionValue(Definition* def) override;
+
+      // Able to return to the solver into a position where no search decisions
+      // have been made. SolverInstance must allow addDefinition calls after
+      // restart call.
+      void restart() override {};
+
+      // Returns the number of stored states
+      size_t states() override { return stack.size(); }
+
+      // Able to store the current solver state to the Trail.
+      void pushState() override;
+
+      // Able to restore the last solver state that was saved to the Trail.
+      void popState() override;
 
       void resetSolver(void) override;
 

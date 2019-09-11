@@ -188,7 +188,7 @@ namespace MiniZinc {
 
 
   FZNSolverInstance::FZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* options)
-    : SolverInstanceBase(log, options), _model(new Model()), env(_model) {
+    : TrailableSolverInstance(log, options), _model(new Model()), env(_model) {
     auto ofs = new std::ofstream("/dev/null");
     pS2Out = new Solns2Out(*ofs, log, "");
   }
@@ -212,6 +212,22 @@ namespace MiniZinc {
     assert(de.first->e()); // A solution must have been assigned
     return Val(eval_int(env.envi(), de.first->e()));
   };
+
+  void FZNSolverInstance::pushState() {
+    stack.emplace_back(_model->size());
+  }
+
+
+  void FZNSolverInstance::popState() {
+    for(auto i = stack.back(); i < _model->size(); ++i) {
+      Item* it = (*_model)[i];
+      if (!it->isa<FunctionI>()) {
+        it->remove();
+      }
+    }
+    _model->compact();
+    stack.pop_back();
+  }
 
   void FZNSolverInstance::createFunctionItems() {
     GCLock lock;

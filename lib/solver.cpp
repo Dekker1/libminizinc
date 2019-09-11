@@ -739,9 +739,9 @@ SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, con
 void MznSolver::pushToSolver() {
     assert(interpreter->trail.len() > 0);
 
-    if(auto rsi = dynamic_cast<Restartable*>(si)) {
+    if(auto rsi = dynamic_cast<RestartableSolverInstance*>(si)) {
       rsi->restart();
-      if(auto tsi = dynamic_cast<Trailable*>(si)) {
+      if(auto tsi = dynamic_cast<TrailableSolverInstance*>(si)) {
         assert(interpreter->trail.len() == tsi->states() + 1);
         tsi->pushState();
       }
@@ -773,7 +773,7 @@ void MznSolver::pushToSolver() {
 }
 
 void MznSolver::popFromSolver() {
-  if (auto tsi = dynamic_cast<Trailable*>(si)) {
+  if (auto tsi = dynamic_cast<TrailableSolverInstance*>(si)) {
     assert(interpreter->trail.len() == tsi->states() - 1);
     tsi->restart();
     tsi->popState();
