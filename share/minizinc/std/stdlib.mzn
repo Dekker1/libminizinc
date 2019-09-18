@@ -695,6 +695,10 @@ function var int: objective_deopt_(var opt int: x, bool: direction) =
     int: worst = if direction then lb(x)-1 else ub(x)+1 endif;
   } in if occurs(x) then deopt(x) else worst endif;
 
+/* TODO: predicate to temporarily replace the output items */
+
+predicate output_this(array[int] of var int: arr);
+
 /***
  @groupdef options Compiler options
 */

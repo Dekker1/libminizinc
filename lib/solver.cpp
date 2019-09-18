@@ -645,16 +645,32 @@ void MznSolver::printSolution(SolverInstance::Status s)
   case SolverInstance::SAT:
   case SolverInstance::OPT:
     {
-      Definition* head = interpreter->_agg[0].def_stack;
-      Definition* d = head->next(); //ignore dummy head
-      while (d != head) {
-        int timestamp = d->timestamp();
-        if (timestamp >= 0) {
-          std::cout << timestamp << " = ";
-          std::cout << si->getSolutionValue(d).toString();
-          std::cout << std::endl;
+      if (output) {
+        Val vec = output->arg(0);
+        std::cout << "[";
+        for (int i = 0; i < vec.size(); ++i) {
+          if (i > 0) {
+            std::cout << ", ";
+          }
+          if (vec[i].isDef()) {
+            std::cout << si->getSolutionValue(vec[i].toDef()).toString();
+          } else {
+            std::cout << vec[i].toString();
+          }
         }
-        d = d->next();
+        std::cout << "]" << endl;
+      } else {
+        Definition* head = interpreter->_agg[0].def_stack;
+        Definition* d = head->next(); //ignore dummy head
+        while (d != head) {
+          int timestamp = d->timestamp();
+          if (timestamp >= 0) {
+            std::cout << timestamp << " = ";
+            std::cout << si->getSolutionValue(d).toString();
+            std::cout << std::endl;
+          }
+          d = d->next();
+        }
       }
       std::cout << "----------" << std::endl;
       if ( s == SolverInstance::OPT) {
@@ -721,6 +737,11 @@ SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, con
       Definition* head = interpreter->_agg[0].def_stack;
       Definition* d = head->next(); //ignore dummy head
       while (d != head) {
+        if (interpreter->_procs[d->pred()].name == "output_this") {
+          output = d;
+          d = d->next();
+          continue;
+        }
         if (d->defs()) {
           Definition::addToSolver(interpreter, d->defs(), interpreter->_procs, si);
         }

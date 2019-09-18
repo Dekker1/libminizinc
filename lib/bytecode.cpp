@@ -304,8 +304,6 @@ namespace MiniZinc {
     }
   }
 
-  // ttestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjksltestdfjslfjkslestdfjslfjksl
-
   void Definition::alias(Interpreter* interpreter, Val v) {
     assert(size() >= 1);
     // Destroy old definition

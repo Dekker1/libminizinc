@@ -1501,6 +1501,15 @@ namespace MiniZinc {
   SolverInstanceBase::Status
   GecodeSolverInstance::solve(void) {
     GCLock lock;
+    GecodeOptions& _opt = static_cast<GecodeOptions&>(*_options);
+    _only_range_domains = _opt.only_range_domains;
+    _run_sac = _opt.sac;
+    _run_shave = _opt.shave;
+    _pre_passes = _opt.pre_passes;
+    _print_stats = _opt.statistics;
+    _all_solutions = _opt.all_solutions;
+    _n_max_solutions = _opt.n_solutions;
+    _allow_unbounded_vars = _opt.allow_unbounded_vars;
 
     prepareEngine();
 
