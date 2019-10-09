@@ -52,6 +52,7 @@ add_library(mzn
   lib/pathfileprinter.cpp
   lib/prettyprinter.cpp
   lib/process.cpp
+  lib/reader.cpp
   lib/solns2out.cpp
   lib/solver.cpp
   lib/solver_config.cpp
@@ -96,6 +97,7 @@ add_library(mzn
   include/minizinc/pathfileprinter.hh
   include/minizinc/prettyprinter.hh
   include/minizinc/process.hh
+  include/minizinc/reader.hh
   include/minizinc/solns2out.hh
   include/minizinc/solver.hh
   include/minizinc/solver_config.hh
