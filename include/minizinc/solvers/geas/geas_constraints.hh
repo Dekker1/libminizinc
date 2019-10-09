@@ -18,7 +18,7 @@
 namespace MiniZinc {
   namespace GeasConstraints {
 
-#define PosterImpl(X) void X(SolverInstanceBase& s, const Call* ce)
+#define PosterImpl(X) void X(SolverInstanceBase& s, const Definition* ce)
 
     /* Integer Comparison Constraints */
     PosterImpl(p_int_eq);

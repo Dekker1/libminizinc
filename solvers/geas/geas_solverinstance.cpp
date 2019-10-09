@@ -13,9 +13,10 @@
 #include <minizinc/solvers/geas/geas_constraints.hh>
 
 namespace MiniZinc{
-  GeasSolverInstance::GeasSolverInstance(Env &env, std::ostream &log, SolverInstanceBase::Options *opt)
-      : SolverInstanceImpl<GeasTypes>(env, log, opt), _flat(env.flat()) {
+  GeasSolverInstance::GeasSolverInstance(std::ostream &log, SolverInstanceBase::Options *opt)
+      : SolverInstanceImpl<GeasTypes>(log, opt) {
     registerConstraints();
+    zero = _solver.new_intvar(0, 0);
   }
 
   void GeasSolverInstance::registerConstraint(std::string name, poster p) {
@@ -166,259 +167,262 @@ namespace MiniZinc{
   }
 
   void GeasSolverInstance::processFlatZinc() {
-    auto _opt = static_cast<GeasOptions&>(*_options);
-    // Create variables
-    zero = _solver.new_intvar(0, 0);
-    for(auto it = _flat->begin_vardecls(); it != _flat->end_vardecls(); ++it) {
-      if (!it->removed() && it->e()->type().isvar() && it->e()->type().dim() == 0) {
-        VarDecl* vd = it->e();
-
-        if(vd->type().isbool()) {
-          if(!vd->e()) {
-            Expression* domain = vd->ti()->domain();
-            long long int lb, ub;
-            if(domain) {
-              IntBounds ib = compute_int_bounds(_env.envi(), domain);
-              lb = ib.l.toInt();
-              ub = ib.u.toInt();
-            } else {
-              lb = 0;
-              ub = 1;
-            }
-            if (lb == ub) {
-              geas::patom_t val = (lb == 0) ? geas::at_False : geas::at_True;
-              _variableMap.insert(vd->id(), GeasVariable(val));
-            } else {
-              auto var = _solver.new_boolvar();
-              _variableMap.insert(vd->id(), GeasVariable(var));
-            }
-          } else {
-            Expression* init = vd->e();
-            if (init->isa<Id>() || init->isa<ArrayAccess>()) {
-              GeasVariable& var = resolveVar(init);
-              assert(var.isBool());
-              _variableMap.insert(vd->id(), GeasVariable(var.boolVar()));
-            } else {
-              auto b = init->cast<BoolLit>()->v();
-              geas::patom_t val = b ? geas::at_True : geas::at_False;
-              _variableMap.insert(vd->id(), GeasVariable(val));
-            }
-          }
-        } else if(vd->type().isfloat()) {
-          if(!vd->e()) {
-            Expression* domain = vd->ti()->domain();
-            double lb, ub;
-            if (domain) {
-              FloatBounds fb = compute_float_bounds(_env.envi(), vd->id());
-              lb = fb.l.toDouble();
-              ub = fb.u.toDouble();
-            } else {
-              throw Error("GeasSolverInstance::processFlatZinc: Error: Unbounded variable: " + vd->id()->str().str());
-            }
-            // TODO: Error correction from double to float??
-            auto var = _solver.new_floatvar(static_cast<geas::fp::val_t>(lb), static_cast<geas::fp::val_t>(ub));
-            _variableMap.insert(vd->id(), GeasVariable(var));
-          } else {
-            Expression* init = vd->e();
-            if (init->isa<Id>() || init->isa<ArrayAccess>()) {
-              GeasVariable& var = resolveVar(init);
-              assert(var.isFloat());
-              _variableMap.insert(vd->id(), GeasVariable(var.floatVar()));
-            } else {
-              double fl = init->cast<FloatLit>()->v().toDouble();
-              auto var = _solver.new_floatvar(static_cast<geas::fp::val_t>(fl), static_cast<geas::fp::val_t>(fl));
-              _variableMap.insert(vd->id(), GeasVariable(var));
-            }
-          }
-        } else if (vd->type().isint()) {
-          if (!vd->e()) {
-            Expression* domain = vd->ti()->domain();
-            if (domain) {
-              IntSetVal* isv = eval_intset(env().envi(), domain);
-              auto var = _solver.new_intvar(static_cast<geas::intvar::val_t>(isv->min().toInt()), static_cast<geas::intvar::val_t>(isv->max().toInt()));
-              if (isv->size() > 1) {
-                vec<int> vals(static_cast<int>(isv->card().toInt()));
-                int i = 0;
-                for (int j = 0; j < isv->size(); ++j) {
-                  for (auto k = isv->min(i).toInt(); k <= isv->max(j).toInt(); ++k) {
-                    vals[i++] = static_cast<int>(k);
-                  }
-                }
-                assert(i == isv->card().toInt());
-                auto res = geas::make_sparse(var, vals);
-                assert(res);
-              }
-              _variableMap.insert(vd->id(), GeasVariable(var));
-            } else {
-              throw Error("GeasSolverInstance::processFlatZinc: Error: Unbounded variable: " + vd->id()->str().str());
-            }
-          } else {
-            Expression* init = vd->e();
-            if (init->isa<Id>() || init->isa<ArrayAccess>()) {
-              GeasVariable& var = resolveVar(init);
-              assert(var.isInt());
-              _variableMap.insert(vd->id(), GeasVariable(var.intVar()));
-            } else {
-              auto il = init->cast<IntLit>()->v().toInt();
-              auto var = _solver.new_intvar(static_cast<geas::intvar::val_t>(il), static_cast<geas::intvar::val_t>(il));
-              _variableMap.insert(vd->id(), GeasVariable(var));
-            }
-          }
-        } else {
-          std::stringstream ssm;
-          ssm << "Type " << *vd->ti() << " is currently not supported by Geas.";
-          throw InternalError(ssm.str());
-        }
-      }
-    }
-
-    // Post constraints
-    for (ConstraintIterator it = _flat->begin_constraints(); it != _flat->end_constraints(); ++it) {
-      if(!it->removed()) {
-        if (auto c = it->e()->dyn_cast<Call>()) {
-          _constraintRegistry.post(c);
-        }
-      }
-    }
-    // Set objective
-    SolveI* si = _flat->solveItem();
-    if(si->e()) {
-      _obj_type = si->st();
-      if (_obj_type == SolveI::ST_MIN) {
-        _obj_var = std::unique_ptr<GeasTypes::Variable>(new GeasTypes::Variable(resolveVar(si->e())));
-      } else if (_obj_type == SolveI::ST_MAX) {
-        _obj_type = SolveI::ST_MIN;
-        _obj_var = std::unique_ptr<GeasTypes::Variable>(new GeasTypes::Variable(-asIntVar(si->e())));
-      }
-    }
-    if (!si->ann().isEmpty()) {
-      std::vector<Expression*> flatAnn;
-      flattenSearchAnnotations(si->ann(), flatAnn);
-
-      for (auto &ann : flatAnn) {
-        if (ann->isa<Call>()) {
-          Call* call = ann->cast<Call>();
-          if (call->id().str() == "warm_start") {
-            auto vars = eval_array_lit(env().envi(), call->arg(0));
-            auto vals = eval_array_lit(env().envi(), call->arg(1));
-            assert(vars->size() == vals->size());
-            vec<geas::patom_t> ws(vars->size());
-
-            if (vars->type().isintarray()) {
-              assert(vals->type().isintarray());
-              for (int i = 0; i < vars->size(); ++i) {
-                geas::intvar var = asIntVar((*vars)[i]);
-                int val = asInt((*vals)[i]);
-                ws.push(var == val);
-              }
-            } else if (vars->type().isboolarray()) {
-              assert(vals->type().isboolarray());
-              for (int i = 0; i < vars->size(); ++i) {
-                geas::patom_t var = asBoolVar((*vars)[i]);
-                bool val = asBool((*vals)[i]);
-                ws.push(val ? var : ~var);
-              }
-            } else {
-              std::cerr << "WARNING Geas: ignoring warm start annotation of invalid type: " << *ann << std::endl;
-              continue;
-            }
-            _solver.data->branchers.push(geas::warmstart_brancher(ws));
-            continue;
-          }
-
-          vec<geas::pid_t> pids;
-          geas::VarChoice select = geas::Var_FirstFail;
-          geas::ValChoice choice = geas::Val_Min;
-          if (call->id().str() == "int_search") {
-            vec<geas::intvar> iv = asIntVar(eval_array_lit(env().envi(), call->arg(0)));
-            pids.growTo(iv.size());
-            for (int i = 0; i < iv.size(); ++i) {
-              pids[i] = iv[i].p;
-            }
-          } else if (call->id().str() == "bool_search") {
-            vec<geas::patom_t> bv = asBoolVar(eval_array_lit(env().envi(), call->arg(0)));
-            pids.growTo(bv.size());
-            for (int i = 0; i < bv.size(); ++i) {
-              pids[i] = bv[i].pid;
-            }
-          } else {
-            std::cerr << "WARNING Geas: ignoring unknown search annotation: " << *ann << std::endl;
-            continue;
-          }
-          const std::string& select_str = call->arg(1)->cast<Id>()->str().str();
-          if (select_str == "input_order") {
-            select = geas::Var_InputOrder;
-          } else if (select_str == "first_fail") {
-            select = geas::Var_FirstFail;
-          } else if (select_str == "largest") {
-            select = geas::Var_Largest;
-          } else if (select_str == "smallest") {
-            select = geas::Var_Smallest;
-          } else {
-            std::cerr << "WARNING Geas: unknown variable selection '" << select_str << "', using default value First Fail." << std::endl;
-          }
-          const std::string& choice_str = call->arg(2)->cast<Id>()->str().str();
-          if (choice_str == "indomain_max") {
-            choice = geas::Val_Max;
-          } else if (choice_str == "indomain_min") {
-            choice = geas::Val_Min;
-          } else if (choice_str == "indomain_split") {
-            choice = geas::Val_Split;
-          } else {
-            std::cerr << "WARNING Geas: unknown value selection '" << choice_str << "', using Indomain Min." << std::endl;
-          }
-
-          geas::brancher* b = geas::basic_brancher(select, choice, pids);
-          if (_opt.free_search) {
-            vec<geas::brancher*> brv({b,_solver.data->last_branch});
-            _solver.data->branchers.push(geas::toggle_brancher(brv));
-          } else {
-            _solver.data->branchers.push(b);
-          }
-        }
-      }
-    }
+    assert(false);
+//    auto _opt = static_cast<GeasOptions&>(*_options);
+//    // Create variables
+//    zero = _solver.new_intvar(0, 0);
+//    for(auto it = _flat->begin_vardecls(); it != _flat->end_vardecls(); ++it) {
+//      if (!it->removed() && it->e()->type().isvar() && it->e()->type().dim() == 0) {
+//        VarDecl* vd = it->e();
+//
+//        if(vd->type().isbool()) {
+//          if(!vd->e()) {
+//            Expression* domain = vd->ti()->domain();
+//            long long int lb, ub;
+//            if(domain) {
+//              IntBounds ib = compute_int_bounds(_env.envi(), domain);
+//              lb = ib.l.toInt();
+//              ub = ib.u.toInt();
+//            } else {
+//              lb = 0;
+//              ub = 1;
+//            }
+//            if (lb == ub) {
+//              geas::patom_t val = (lb == 0) ? geas::at_False : geas::at_True;
+//              _variableMap.insert(vd->id(), GeasVariable(val));
+//            } else {
+//              auto var = _solver.new_boolvar();
+//              _variableMap.insert(vd->id(), GeasVariable(var));
+//            }
+//          } else {
+//            Expression* init = vd->e();
+//            if (init->isa<Id>() || init->isa<ArrayAccess>()) {
+//              GeasVariable& var = resolveVar(init);
+//              assert(var.isBool());
+//              _variableMap.insert(vd->id(), GeasVariable(var.boolVar()));
+//            } else {
+//              auto b = init->cast<BoolLit>()->v();
+//              geas::patom_t val = b ? geas::at_True : geas::at_False;
+//              _variableMap.insert(vd->id(), GeasVariable(val));
+//            }
+//          }
+//        } else if(vd->type().isfloat()) {
+//          if(!vd->e()) {
+//            Expression* domain = vd->ti()->domain();
+//            double lb, ub;
+//            if (domain) {
+//              FloatBounds fb = compute_float_bounds(_env.envi(), vd->id());
+//              lb = fb.l.toDouble();
+//              ub = fb.u.toDouble();
+//            } else {
+//              throw Error("GeasSolverInstance::processFlatZinc: Error: Unbounded variable: " + vd->id()->str().str());
+//            }
+//            // TODO: Error correction from double to float??
+//            auto var = _solver.new_floatvar(static_cast<geas::fp::val_t>(lb), static_cast<geas::fp::val_t>(ub));
+//            _variableMap.insert(vd->id(), GeasVariable(var));
+//          } else {
+//            Expression* init = vd->e();
+//            if (init->isa<Id>() || init->isa<ArrayAccess>()) {
+//              GeasVariable& var = resolveVar(init);
+//              assert(var.isFloat());
+//              _variableMap.insert(vd->id(), GeasVariable(var.floatVar()));
+//            } else {
+//              double fl = init->cast<FloatLit>()->v().toDouble();
+//              auto var = _solver.new_floatvar(static_cast<geas::fp::val_t>(fl), static_cast<geas::fp::val_t>(fl));
+//              _variableMap.insert(vd->id(), GeasVariable(var));
+//            }
+//          }
+//        } else if (vd->type().isint()) {
+//          if (!vd->e()) {
+//            Expression* domain = vd->ti()->domain();
+//            if (domain) {
+//              IntSetVal* isv = eval_intset(env().envi(), domain);
+//              auto var = _solver.new_intvar(static_cast<geas::intvar::val_t>(isv->min().toInt()), static_cast<geas::intvar::val_t>(isv->max().toInt()));
+//              if (isv->size() > 1) {
+//                vec<int> vals(static_cast<int>(isv->card().toInt()));
+//                int i = 0;
+//                for (int j = 0; j < isv->size(); ++j) {
+//                  for (auto k = isv->min(i).toInt(); k <= isv->max(j).toInt(); ++k) {
+//                    vals[i++] = static_cast<int>(k);
+//                  }
+//                }
+//                assert(i == isv->card().toInt());
+//                auto res = geas::make_sparse(var, vals);
+//                assert(res);
+//              }
+//              _variableMap.insert(vd->id(), GeasVariable(var));
+//            } else {
+//              throw Error("GeasSolverInstance::processFlatZinc: Error: Unbounded variable: " + vd->id()->str().str());
+//            }
+//          } else {
+//            Expression* init = vd->e();
+//            if (init->isa<Id>() || init->isa<ArrayAccess>()) {
+//              GeasVariable& var = resolveVar(init);
+//              assert(var.isInt());
+//              _variableMap.insert(vd->id(), GeasVariable(var.intVar()));
+//            } else {
+//              auto il = init->cast<IntLit>()->v().toInt();
+//              auto var = _solver.new_intvar(static_cast<geas::intvar::val_t>(il), static_cast<geas::intvar::val_t>(il));
+//              _variableMap.insert(vd->id(), GeasVariable(var));
+//            }
+//          }
+//        } else {
+//          std::stringstream ssm;
+//          ssm << "Type " << *vd->ti() << " is currently not supported by Geas.";
+//          throw InternalError(ssm.str());
+//        }
+//      }
+//    }
+//
+//    // Post constraints
+//    for (ConstraintIterator it = _flat->begin_constraints(); it != _flat->end_constraints(); ++it) {
+//      if(!it->removed()) {
+//        if (auto c = it->e()->dyn_cast<Call>()) {
+//          _constraintRegistry.post(c);
+//        }
+//      }
+//    }
+//    // Set objective
+//    SolveI* si = _flat->solveItem();
+//    if(si->e()) {
+//      _obj_type = si->st();
+//      if (_obj_type == SolveI::ST_MIN) {
+//        _obj_var = std::unique_ptr<GeasTypes::Variable>(new GeasTypes::Variable(resolveVar(si->e())));
+//      } else if (_obj_type == SolveI::ST_MAX) {
+//        _obj_type = SolveI::ST_MIN;
+//        _obj_var = std::unique_ptr<GeasTypes::Variable>(new GeasTypes::Variable(-asIntVar(si->e())));
+//      }
+//    }
+//    if (!si->ann().isEmpty()) {
+//      std::vector<Expression*> flatAnn;
+//      flattenSearchAnnotations(si->ann(), flatAnn);
+//
+//      for (auto &ann : flatAnn) {
+//        if (ann->isa<Call>()) {
+//          Call* call = ann->cast<Call>();
+//          if (call->id().str() == "warm_start") {
+//            auto vars = eval_array_lit(env().envi(), call->arg(0));
+//            auto vals = eval_array_lit(env().envi(), call->arg(1));
+//            assert(vars->size() == vals->size());
+//            vec<geas::patom_t> ws(vars->size());
+//
+//            if (vars->type().isintarray()) {
+//              assert(vals->type().isintarray());
+//              for (int i = 0; i < vars->size(); ++i) {
+//                geas::intvar var = asIntVar((*vars)[i]);
+//                int val = asInt((*vals)[i]);
+//                ws.push(var == val);
+//              }
+//            } else if (vars->type().isboolarray()) {
+//              assert(vals->type().isboolarray());
+//              for (int i = 0; i < vars->size(); ++i) {
+//                geas::patom_t var = asBoolVar((*vars)[i]);
+//                bool val = asBool((*vals)[i]);
+//                ws.push(val ? var : ~var);
+//              }
+//            } else {
+//              std::cerr << "WARNING Geas: ignoring warm start annotation of invalid type: " << *ann << std::endl;
+//              continue;
+//            }
+//            _solver.data->branchers.push(geas::warmstart_brancher(ws));
+//            continue;
+//          }
+//
+//          vec<geas::pid_t> pids;
+//          geas::VarChoice select = geas::Var_FirstFail;
+//          geas::ValChoice choice = geas::Val_Min;
+//          if (call->id().str() == "int_search") {
+//            vec<geas::intvar> iv = asIntVar(eval_array_lit(env().envi(), call->arg(0)));
+//            pids.growTo(iv.size());
+//            for (int i = 0; i < iv.size(); ++i) {
+//              pids[i] = iv[i].p;
+//            }
+//          } else if (call->id().str() == "bool_search") {
+//            vec<geas::patom_t> bv = asBoolVar(eval_array_lit(env().envi(), call->arg(0)));
+//            pids.growTo(bv.size());
+//            for (int i = 0; i < bv.size(); ++i) {
+//              pids[i] = bv[i].pid;
+//            }
+//          } else {
+//            std::cerr << "WARNING Geas: ignoring unknown search annotation: " << *ann << std::endl;
+//            continue;
+//          }
+//          const std::string& select_str = call->arg(1)->cast<Id>()->str().str();
+//          if (select_str == "input_order") {
+//            select = geas::Var_InputOrder;
+//          } else if (select_str == "first_fail") {
+//            select = geas::Var_FirstFail;
+//          } else if (select_str == "largest") {
+//            select = geas::Var_Largest;
+//          } else if (select_str == "smallest") {
+//            select = geas::Var_Smallest;
+//          } else {
+//            std::cerr << "WARNING Geas: unknown variable selection '" << select_str << "', using default value First Fail." << std::endl;
+//          }
+//          const std::string& choice_str = call->arg(2)->cast<Id>()->str().str();
+//          if (choice_str == "indomain_max") {
+//            choice = geas::Val_Max;
+//          } else if (choice_str == "indomain_min") {
+//            choice = geas::Val_Min;
+//          } else if (choice_str == "indomain_split") {
+//            choice = geas::Val_Split;
+//          } else {
+//            std::cerr << "WARNING Geas: unknown value selection '" << choice_str << "', using Indomain Min." << std::endl;
+//          }
+//
+//          geas::brancher* b = geas::basic_brancher(select, choice, pids);
+//          if (_opt.free_search) {
+//            vec<geas::brancher*> brv({b,_solver.data->last_branch});
+//            _solver.data->branchers.push(geas::toggle_brancher(brv));
+//          } else {
+//            _solver.data->branchers.push(b);
+//          }
+//        }
+//      }
+//    }
   }
 
   bool GeasSolverInstance::addSolutionNoGood() {
     assert(!_varsWithOutput.empty());
     geas::model solution = _solver.get_model();
     vec<geas::clause_elt> clause;
-    for (auto &var : _varsWithOutput) {
-      if (Expression::dyn_cast<Call>(getAnnotation(var->ann(), constants().ann.output_array.aststr()))) {
-        if (auto al = var->e()->dyn_cast<ArrayLit>()) {
-          for(unsigned int j=0; j<al->size(); j++) {
-            if(Id* id = (*al)[j]->dyn_cast<Id>()) {
-              auto geas_var = resolveVar(id);
-              if (geas_var.isBool()) {
-                geas::patom_t bv = geas_var.boolVar();
-                clause.push(solution.value(bv) ? ~bv : bv);
-              } else if (geas_var.isFloat()) {
-                geas::fp::fpvar fv = geas_var.floatVar();
-                clause.push(fv < solution[fv]);
-                clause.push(fv > solution[fv]);
-              } else {
-                geas::intvar iv = geas_var.intVar();
-                clause.push(~(iv == solution[iv]));
-              }
-            }
-          }
-        }
-      } else {
-        auto geas_var = resolveVar(var);
-        if (geas_var.isBool()) {
-          geas::patom_t bv = geas_var.boolVar();
-          clause.push(solution.value(bv) ? ~bv : bv);
-        } else if (geas_var.isFloat()) {
-          geas::fp::fpvar fv = geas_var.floatVar();
-          clause.push(fv < solution[fv]);
-          clause.push(fv > solution[fv]);
-        } else {
-          geas::intvar iv = geas_var.intVar();
-          clause.push(iv != solution[iv]);
-        }
-      }
-    }
+    // TODO:
+    assert(false);
+//    for (auto &var : _varsWithOutput) {
+//      if (Expression::dyn_cast<Call>(getAnnotation(var->ann(), constants().ann.output_array.aststr()))) {
+//        if (auto al = var->e()->dyn_cast<ArrayLit>()) {
+//          for(unsigned int j=0; j<al->size(); j++) {
+//            if(Id* id = (*al)[j]->dyn_cast<Id>()) {
+//              auto geas_var = resolveVar(id);
+//              if (geas_var.isBool()) {
+//                geas::patom_t bv = geas_var.boolVar();
+//                clause.push(solution.value(bv) ? ~bv : bv);
+//              } else if (geas_var.isFloat()) {
+//                geas::fp::fpvar fv = geas_var.floatVar();
+//                clause.push(fv < solution[fv]);
+//                clause.push(fv > solution[fv]);
+//              } else {
+//                geas::intvar iv = geas_var.intVar();
+//                clause.push(~(iv == solution[iv]));
+//              }
+//            }
+//          }
+//        }
+//      } else {
+//        auto geas_var = resolveVar(var);
+//        if (geas_var.isBool()) {
+//          geas::patom_t bv = geas_var.boolVar();
+//          clause.push(solution.value(bv) ? ~bv : bv);
+//        } else if (geas_var.isFloat()) {
+//          geas::fp::fpvar fv = geas_var.floatVar();
+//          clause.push(fv < solution[fv]);
+//          clause.push(fv > solution[fv]);
+//        } else {
+//          geas::intvar iv = geas_var.intVar();
+//          clause.push(iv != solution[iv]);
+//        }
+//      }
+//    }
     return geas::add_clause(*_solver.data, clause);
   }
 
@@ -542,101 +546,90 @@ namespace MiniZinc{
   }
 
   Expression* GeasSolverInstance::getSolutionValue(Id* id) {
-    id = id->decl()->id();
-    if(id->type().isvar()) {
-      GeasVariable& var = resolveVar(id->decl()->id());
-      geas::model solution = _solver.get_model();
-      switch (id->type().bt()) {
-        case Type::BT_BOOL:
-          assert(var.isBool());
-          return constants().boollit(solution.value(var.boolVar()));
-        case Type::BT_FLOAT:
-          assert(var.isFloat());
-          return FloatLit::a(solution[var.floatVar()]);
-        case Type::BT_INT:
-          assert(var.isInt());
-          return IntLit::a(solution[var.intVar()]);
-        default:
-          return nullptr;
-      }
-    } else {
-      return id->decl()->e();
-    }
+    assert(false);
+    return nullptr;
+//    id = id->decl()->id();
+//    if(id->type().isvar()) {
+//      GeasVariable& var = resolveVar(id->decl()->id());
+//      geas::model solution = _solver.get_model();
+//      switch (id->type().bt()) {
+//        case Type::BT_BOOL:
+//          assert(var.isBool());
+//          return constants().boollit(solution.value(var.boolVar()));
+//        case Type::BT_FLOAT:
+//          assert(var.isFloat());
+//          return FloatLit::a(solution[var.floatVar()]);
+//        case Type::BT_INT:
+//          assert(var.isInt());
+//          return IntLit::a(solution[var.intVar()]);
+//        default:
+//          return nullptr;
+//      }
+//    } else {
+//      return id->decl()->e();
+//    }
   }
 
   void GeasSolverInstance::resetSolver() {
     assert(false);
   }
 
-  GeasTypes::Variable& GeasSolverInstance::resolveVar(Expression* e) {
-    if (auto id = e->dyn_cast<Id>()) {
-      return _variableMap.get(id->decl()->id());
-    } else if (auto vd = e->dyn_cast<VarDecl>()) {
-      return _variableMap.get(vd->id()->decl()->id());
-    } else if (auto aa = e->dyn_cast<ArrayAccess>()) {
-      auto ad = aa->v()->cast<Id>()->decl();
-      auto idx = aa->idx()[0]->cast<IntLit>()->v().toInt();
-      auto al = eval_array_lit(_env.envi(), ad->e());
-      return _variableMap.get((*al)[idx]->cast<Id>());
-    } else {
-      std::stringstream ssm;
-      ssm << "Expected Id, VarDecl or ArrayAccess instead of \"" << *e << "\"";
-      throw InternalError(ssm.str());
-    }
+  GeasTypes::Variable& GeasSolverInstance::resolveVar(Definition* def) {
+    auto it = _variableMap.find(def->timestamp());
+    assert(it != _variableMap.end());
+    return it->second;
   }
 
-  vec<bool> GeasSolverInstance::asBool(ArrayLit* al) {
-    vec<bool> vec(al->size());
-    for (int i = 0; i < al->size(); ++i) {
-      vec[i] = asBool((*al)[i]);
+  vec<bool> GeasSolverInstance::asBoolVec(const Val& val) {
+    vec<bool> vec(val.size());
+    for (int i = 0; i < val.size(); ++i) {
+      vec[i] = asBool(val[i]);
     }
     return vec;
   }
 
-  geas::patom_t GeasSolverInstance::asBoolVar(Expression* e) {
-    if (e->type().isvar()) {
-      GeasVariable& var = resolveVar(follow_id_to_decl(e));
+  geas::patom_t GeasSolverInstance::asBoolVar(const Val& val) {
+    if (val.isDef()) {
+      GeasVariable& var = resolveVar(val.toDef());
       assert(var.isBool());
       return var.boolVar();
     } else {
-      if(auto bl = e->dyn_cast<BoolLit>()) {
-        return bl->v() ? geas::at_True : geas::at_False;
+      if(val.isInt()) {
+        return val().toInt() ? geas::at_True : geas::at_False;
       } else {
-        std::stringstream ssm; ssm << "Expected bool or int literal instead of: " << *e;
+        std::stringstream ssm; ssm << "Expected bool or int literal instead of: " << val.toString();
         throw InternalError(ssm.str());
       }
     }
   }
 
-  vec<geas::patom_t> GeasSolverInstance::asBoolVar(ArrayLit* al) {
-    vec<geas::patom_t> vec(al->size());
-    for (int i = 0; i < al->size(); ++i) {
-      vec[i] = this->asBoolVar((*al)[i]);
+  vec<geas::patom_t> GeasSolverInstance::asBoolVarVec(const Val& val) {
+    vec<geas::patom_t> vec(val.size());
+    for (int i = 0; i < val.size(); ++i) {
+      vec[i] = this->asBoolVar(val[i]);
     }
     return vec;
   }
 
-  vec<int> GeasSolverInstance::asInt(ArrayLit* al) {
-    vec<int> vec(al->size());
-    for (int i = 0; i < al->size(); ++i) {
-      vec[i] = this->asInt((*al)[i]);
+  vec<int> GeasSolverInstance::asIntVec(const Val& val) {
+    vec<int> vec(val.size());
+    for (int i = 0; i < val.size(); ++i) {
+      vec[i] = MiniZinc::GeasSolverInstance::asInt(val[i]);
     }
     return vec;
   }
 
-  geas::intvar GeasSolverInstance::asIntVar(Expression* e) {
-    if (e->type().isvar()) {
-      GeasVariable& var = resolveVar(follow_id_to_decl(e));
+  geas::intvar GeasSolverInstance::asIntVar(const Val& val) {
+    if (val.isDef()) {
+      GeasVariable& var = resolveVar(val.toDef());
       assert(var.isInt());
       return var.intVar();
     } else {
       IntVal i;
-      if(auto il = e->dyn_cast<IntLit>()) {
-        i = il->v().toInt();
-      } else if(auto bl = e->dyn_cast<BoolLit>()) {
-        i = bl->v();
+      if(val.isInt()) {
+        i = val().toInt();
       } else {
-        std::stringstream ssm; ssm << "Expected bool or int literal instead of: " << *e;
+        std::stringstream ssm; ssm << "Expected int literal instead of: " << val.toString();
         throw InternalError(ssm.str());
       }
       if (i == 0) {
@@ -647,10 +640,10 @@ namespace MiniZinc{
     }
   }
 
-  vec<geas::intvar> GeasSolverInstance::asIntVar(ArrayLit* al) {
-    vec<geas::intvar> vec(al->size());
-    for (int i = 0; i < al->size(); ++i) {
-      vec[i] = this->asIntVar((*al)[i]);
+  vec<geas::intvar> GeasSolverInstance::asIntVarVec(const Val& val) {
+    vec<geas::intvar> vec(val.size());
+    for (int i = 0; i < val.size(); ++i) {
+      vec[i] = this->asIntVar(val[i]);
     }
     return vec;
   }
@@ -665,6 +658,25 @@ namespace MiniZinc{
     out << "%%%mzn-stat: restarts=" << st.restarts << std::endl;
     out << "%%%mzn-stat: nogoods=" << st.num_learnts << std::endl; // TODO: Statistic name
     out << "%%%mzn-stat: learntLiterals=" << st.num_learnt_lits << std::endl; // TODO: Statistic name
+  }
+
+  void GeasSolverInstance::addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) {
+    _constraintRegistry.post(bs[def->pred()].name, def);
+  }
+
+  Val GeasSolverInstance::getSolutionValue(Definition* def) {
+    GeasVariable& var = resolveVar(def);
+    geas::model solution = _solver.get_model();
+    if (var.isBool()) {
+      return Val(solution.value(var.boolVar()));
+    } else if (var.isFloat()) {
+//      return FloatLit::a(solution[var.floatVar()]);
+      assert(false);
+      return Val();
+    } else {
+      assert(var.isInt());
+      return Val(solution[var.intVar()]);
+    }
   }
 
   Geas_SolverFactory::Geas_SolverFactory() {
@@ -687,8 +699,8 @@ namespace MiniZinc{
     return new GeasOptions;
   }
 
-  SolverInstanceBase* Geas_SolverFactory::doCreateSI(Env& env, std::ostream& log, SolverInstanceBase::Options* opt) {
-    return new GeasSolverInstance(env, log, opt);
+  SolverInstanceBase* Geas_SolverFactory::doCreateSI(std::ostream& log, SolverInstanceBase::Options* opt) {
+    return new GeasSolverInstance(log, opt);
   }
 
   bool Geas_SolverFactory::processOption(SolverInstanceBase::Options* opt, int &i, std::vector<std::string> &argv) {

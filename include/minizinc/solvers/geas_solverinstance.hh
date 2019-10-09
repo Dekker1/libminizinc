@@ -69,7 +69,7 @@ namespace MiniZinc {
 
   class GeasSolverInstance : public SolverInstanceImpl<GeasTypes> {
   public:
-    GeasSolverInstance(Env& env, std::ostream& log, SolverInstanceBase::Options* opt);
+    GeasSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
     ~GeasSolverInstance() override = default;
     void processFlatZinc() override;
     geas::solver_data* solver_data() { return _solver.data; }
@@ -82,15 +82,20 @@ namespace MiniZinc {
     Expression* getSolutionValue(Id* id) override;
     void printStatistics(bool fLegend) override;
 
+    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
+    Val getSolutionValue(Definition* def) override;
+
     // MiniZinc to Geas conversions
-    bool asBool(Expression* e) { return eval_bool(env().envi(), e); }
-    vec<bool> asBool(ArrayLit* al);
-    geas::patom_t asBoolVar(Expression* e);
-    vec<geas::patom_t> asBoolVar(ArrayLit* al);
-    vec<int> asInt(ArrayLit* al);
-    int asInt(Expression* e) { return static_cast<int>(eval_int(env().envi(), e).toInt()); }
-    geas::intvar asIntVar(Expression* e);
-    vec<geas::intvar> asIntVar(ArrayLit* al);
+    static bool asBool(const Val& val) { return val().toInt() != 0; }
+    vec<bool> asBoolVec(const Val& val);
+    geas::patom_t asBoolVar(const Val& val);
+    vec<geas::patom_t> asBoolVarVec(const Val& val);
+    vec<int> asIntVec(const Val& val);
+    static int asInt(const Val& val) { return val().toInt(); }
+    geas::intvar asIntVar(const Val& val);
+    vec<geas::intvar> asIntVarVec(const Val& val);
+
+    void insertVar(const Definition* def, GeasVariable gv) { _variableMap.insert({def->timestamp(), gv}); };
 
     // TODO: create only when necessary or use Geas internal
     geas::intvar zero;
@@ -101,7 +106,7 @@ namespace MiniZinc {
     SolveI::SolveType _obj_type = SolveI::ST_SAT;
     std::unique_ptr<GeasTypes::Variable> _obj_var;
 
-    GeasTypes::Variable& resolveVar(Expression* e);
+    GeasTypes::Variable& resolveVar(Definition* val);
     bool addSolutionNoGood();
 
     void registerConstraint(std::string name, poster p);
@@ -112,7 +117,7 @@ namespace MiniZinc {
   public:
     Geas_SolverFactory();
     SolverInstanceBase::Options* createOptions() override;
-    SolverInstanceBase* doCreateSI(Env& env, std::ostream& log, SolverInstanceBase::Options* opt) override;
+    SolverInstanceBase* doCreateSI(std::ostream& log, SolverInstanceBase::Options* opt) override;
 
     std::string getDescription(SolverInstanceBase::Options* opt) override { return "Elsie Geas - Another Lazy Clause Generation Solver"; };
     std::string getVersion(SolverInstanceBase::Options* opt) override { return "0.0.1"; }
