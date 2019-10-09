@@ -41,50 +41,59 @@ using namespace MiniZinc;
 
 #ifdef HAS_GUROBI
 #include <minizinc/solvers/MIP/MIP_gurobi_solverfactory.hh>
-namespace {
-  Gurobi_SolverFactoryInitialiser _gurobi_init;
-}
 #endif
 #ifdef HAS_CPLEX
 #include <minizinc/solvers/MIP/MIP_cplex_solverfactory.hh>
-namespace {
-  Cplex_SolverFactoryInitialiser _cplex_init;
-}
 #endif
 #ifdef HAS_OSICBC
 #include <minizinc/solvers/MIP/MIP_osicbc_solverfactory.hh>
-namespace {
-  OSICBC_SolverFactoryInitialiser _osicbc_init;
-}
 #endif
 #ifdef HAS_XPRESS
 #include <minizinc/solvers/MIP/MIP_xpress_solverfactory.hh>
-namespace {
-  Xpress_SolverFactoryInitialiser _xpress_init;
-}
 #endif
 #ifdef HAS_GECODE
 #include <minizinc/solvers/gecode_solverfactory.hh>
-namespace {
-  Gecode_SolverFactoryInitialiser _gecode_init;
-}
+#endif
+#ifdef HAS_GEAS
+#include <minizinc/solvers/geas_solverfactory.hh>
 #endif
 #ifdef HAS_SCIP
 #include <minizinc/solvers/MIP/MIP_scip_solverfactory.hh>
-namespace {
-  SCIP_SolverFactoryInitialiser _scip_init;
-}
 #endif
-
 #include <minizinc/solvers/fzn_solverfactory.hh>
 #include <minizinc/solvers/fzn_solverinstance.hh>
 #include <minizinc/solvers/mzn_solverfactory.hh>
 #include <minizinc/solvers/mzn_solverinstance.hh>
-namespace {
-  FZN_SolverFactoryInitialiser _fzn_init;
-  MZN_SolverFactoryInitialiser _mzn_init;
-}
+#include <minizinc/solvers/nl/nl_solverfactory.hh>
+#include <minizinc/solvers/nl/nl_solverinstance.hh>
 
+SolverInitialiser::SolverInitialiser(void) {
+  #ifdef HAS_GUROBI
+  Gurobi_SolverFactoryInitialiser _gurobi_init;
+  #endif
+  #ifdef HAS_CPLEX
+  static Cplex_SolverFactoryInitialiser _cplex_init;
+  #endif
+  #ifdef HAS_OSICBC
+  static OSICBC_SolverFactoryInitialiser _osicbc_init;
+  #endif
+  #ifdef HAS_XPRESS
+  static Xpress_SolverFactoryInitialiser _xpress_init;
+  #endif
+  #ifdef HAS_GECODE
+  static Gecode_SolverFactoryInitialiser _gecode_init;
+  #endif
+  #ifdef HAS_GEAS
+  static Geas_SolverFactoryInitialiser _geas_init;
+  #endif
+  #ifdef HAS_SCIP
+  static SCIP_SolverFactoryInitialiser _scip_init;
+  #endif
+  static FZN_SolverFactoryInitialiser _fzn_init;
+  static MZN_SolverFactoryInitialiser _mzn_init;
+  static NL_SolverFactoryInitialiser _nl_init;
+}
+  
 MZNFZNSolverFlag MZNFZNSolverFlag::std(const std::string& n0) {
   const std::string argFlags("-I -n -p -r");
   if (argFlags.find(n0) != std::string::npos)
@@ -151,6 +160,7 @@ MznSolver::~MznSolver()
   // TODO cleanup the used solver interfaces
   delete interpreter;
   si=0;
+  si_opt=nullptr;
   GC::trigger();
 }
 
@@ -290,6 +300,7 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
     is_mzn2fzn=true;
   } else if (executable_name=="solns2out") {
     s2out._opt.flag_standaloneSolns2Out=true;
+    flag_is_solns2out=true;
   }
   bool compileSolutionChecker = false;
   int i=1, j=1;
@@ -374,6 +385,9 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
       if (argv[i]=="--compile-solution-checker") {
         compileSolutionChecker = true;
       }
+      if (argv[i]=="--ozn-file") {
+        flag_is_solns2out = true;
+      }
       argv[j++] = argv[i];
     }
   }
@@ -397,16 +411,31 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
 
   bool isMznMzn = false;
   
-  if (!ifSolns2out()) {
+  if (!flag_is_solns2out) {
     try {
       const SolverConfig& sc = solver_configs.config(solver);
-      string solverId = sc.executable().empty() ? sc.id() : (sc.supportsMzn() ?  string("org.minizinc.mzn-mzn") : string("org.minizinc.mzn-fzn"));
+      string solverId;
+      if (sc.executable().empty()) {
+        solverId = sc.id();
+      } else if (sc.supportsMzn()) {
+        solverId = "org.minizinc.mzn-mzn";
+      } else if (sc.supportsFzn()) {
+        solverId = "org.minizinc.mzn-fzn";
+      } else if (sc.supportsNL()) {
+        solverId = "org.minizinc.mzn-nl";
+      } else {
+        log << "Selected solver does not support MiniZinc, FlatZinc or NL input." << endl;
+        return OPTION_ERROR;
+      }
       for (auto it = getGlobalSolverRegistry()->getSolverFactories().begin();
            it != getGlobalSolverRegistry()->getSolverFactories().end(); ++it) {
         if ((*it)->getId()==solverId) { /// TODO: also check version (currently assumes all ids are unique)
           sf = *it;
+          if (si_opt) {
+            delete si_opt;
+          }
           si_opt = sf->createOptions();
-          if (!sc.executable().empty() || solverId=="org.minizinc.mzn-fzn") {
+          if (!sc.executable().empty() || solverId=="org.minizinc.mzn-fzn" || solverId=="org.minizinc.mzn-nl") {
             std::vector<MZNFZNSolverFlag> acceptedFlags;
             for (auto& sf : sc.stdFlags())
               acceptedFlags.push_back(MZNFZNSolverFlag::std(sf));
@@ -468,16 +497,26 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
                 }
               }
             } else {
-              static_cast<FZN_SolverFactory*>(sf)->setAcceptedFlags(si_opt, acceptedFlags);
+              // supports fzn or nl
               std::vector<std::string> additionalArgs;
-              additionalArgs.push_back("--fzn-cmd");
+              if (sc.supportsFzn()) {
+                static_cast<FZN_SolverFactory*>(sf)->setAcceptedFlags(si_opt, acceptedFlags);
+                additionalArgs.push_back("--fzn-cmd");
+              } else {
+                // supports nl
+                additionalArgs.push_back("--nl-cmd");
+              }
               if (sc.executable_resolved().size()) {
                 additionalArgs.push_back(sc.executable_resolved());
               } else {
                 additionalArgs.push_back(sc.executable());
               }
               if(!fzn_mzn_flags.empty()) {
-                addFlags("--fzn-flag", fzn_mzn_flags, additionalArgs);
+                if (sc.supportsFzn()) {
+                  addFlags("--fzn-flag", fzn_mzn_flags, additionalArgs);
+                } else {
+                  addFlags("--nl-flag", fzn_mzn_flags, additionalArgs);
+                }
               }
               if (sc.needsPathsFile()) {
                 // Instruct flattener to hold onto paths
@@ -629,7 +668,9 @@ SolverInstance::Status MznSolver::solve()
   SolverInstance::Status status = getSI()->solve();
   printSolution(status);
   if (si_opt->printStatistics)
-    printStatistics();
+      getSI()->printStatistics();
+  if (flag_statistics)
+    getSI()->getSolns2Out()->printStatistics(log);
   return status;
 }
 

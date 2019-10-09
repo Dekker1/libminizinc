@@ -1,18 +1,26 @@
 ### MiniZinc SCIP Solver Target
 
 if(SCIP_FOUND AND USE_SCIP)
-  add_library(minizinc_scip
-              solvers/MIP/MIP_solverinstance.cpp solvers/MIP/MIP_scip_wrap.cpp
-              solvers/MIP/MIP_scip_solverfactory.cpp lib/algorithms/min_cut.cpp)
-  target_include_directories(minizinc_scip PRIVATE ${SCIP_INCLUDE_DIRS})
-  target_link_libraries(minizinc_scip minizinc_compiler ${SCIP_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
-  set(EXTRA_TARGETS ${EXTRA_TARGETS} minizinc_scip)
-  install(
-    TARGETS minizinc_scip
-    EXPORT libminizincTargets
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
+  ### Compile target for the SCIP interface
+  add_library(minizinc_scip OBJECT
+    lib/algorithms/min_cut.cpp
+
+    solvers/MIP/MIP_scip_solverfactory.cpp
+    solvers/MIP/MIP_scip_wrap.cpp
+    solvers/MIP/MIP_solverinstance.cpp
+
+    include/minizinc/solvers/MIP/MIP_scip_solverfactory.hh
+    include/minizinc/solvers/MIP/MIP_scip_wrap.hh
+    include/minizinc/solvers/MIP/MIP_solverinstance.hh
+    include/minizinc/solvers/MIP/MIP_solverinstance.hpp
   )
+  target_include_directories(minizinc_scip PRIVATE ${SCIP_INCLUDE_DIRS})
+  add_dependencies(minizinc_scip minizinc_parser)
+
+  ### Setup correct compilation into the MiniZinc library
+  target_compile_definitions(mzn PRIVATE HAS_SCIP)
+  target_sources(mzn PRIVATE $<TARGET_OBJECTS:minizinc_scip>)
+  target_link_libraries(mzn ${SCIP_LIBRARIES})
+
 endif()

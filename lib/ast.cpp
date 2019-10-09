@@ -1493,7 +1493,9 @@ namespace MiniZinc {
 #endif
     ann.rhs_from_assignment = new Id(Location(), ASTString("mzn_rhs_from_assignment"), NULL);
     ann.rhs_from_assignment->type(Type::ann());
-    
+    ann.domain_change_constraint = new Id(Location(), ASTString("domain_change_constraint"), NULL);
+    ann.domain_change_constraint->type(Type::ann());
+
     var_redef = new FunctionI(Location(),"__internal_var_redef",new TypeInst(Location(),Type::varbool()),
                               std::vector<VarDecl*>());
     
@@ -1703,6 +1705,7 @@ namespace MiniZinc {
     v.push_back(ann.mzn_break_here);
 #endif
     v.push_back(ann.rhs_from_assignment);
+    v.push_back(ann.domain_change_constraint);
 
     v.push_back(new StringLit(Location(),cli.cmdlineData_short_str));
     v.push_back(new StringLit(Location(),cli.cmdlineData_str));
@@ -1859,7 +1862,7 @@ namespace MiniZinc {
   }
   
   Call*
-  Annotation::getCall(const ASTString& id) {
+  Annotation::getCall(const ASTString& id) const {
     if (_s==NULL)
       return NULL;
     for (ExpressionSetIter it=_s->begin(); it != _s->end(); ++it) {
@@ -1872,7 +1875,7 @@ namespace MiniZinc {
   }
   
   bool
-  Annotation::containsCall(const MiniZinc::ASTString& id) {
+  Annotation::containsCall(const MiniZinc::ASTString& id) const {
     if (_s==NULL)
       return false;
     for (ExpressionSetIter it=_s->begin(); it != _s->end(); ++it) {

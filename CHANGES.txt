@@ -5,6 +5,142 @@
 All bug numbers refer to the issue tracker at
 https://github.com/MiniZinc/libminizinc/issues
 
+Version 2.3.2
+=============
+
+Changes:
+- Add warm starts and subtour cuts to CBC interface.
+- Add documentation and assertion requiring that mdds are deterministic,
+  and add nondeterministic variant of mdd constraint.
+- Add -s to the standard flags supported by MIP interfaces.
+- Add flag --output-output-item to include user specified output item in
+  the formatted JSON and DZN output.
+
+Bug fixes:
+- Fix a bug that could leave unused variables in the resulting FlatZinc.
+- bounded_dpath should rewrite to fzn_bounded_dpath. Fixes #300.
+- Fix definition of sum_set.
+- Check if overloaded function required for output. Fixes #303.
+- Move regular constraint with set argument to its own file.
+- Flatten assignment generators if necessary.
+- Simplify fzn_value_precede_chain_int and avoid use of element predicate.
+  Fixes #307.
+- Only initialise par opt variables as absent if they are not arrays.
+- Fix the description of the neural_net predicate.
+- Fix regular constraint with regular expressions (stopped working in 2.3.0).
+- Fix the model interface output to include the same variables as the generated
+  output statement.
+- Fix CSE for removed variable declarations. Could lead to reified constraints
+  not being compiled correctly when the control variable got fixed to true.
+
+Version 2.3.1
+=============
+
+Bug fixes:
+
+- Report error when trying to assign an array literal to an array variable with incompatible index set.
+- Fix partial evaluation of expressions, so that only par expressions are fully evaluated. Fixes #298.
+- Remove carriage returns when reading piped solver output on Windows.
+- Canonicalize paths of executables to avoid spurious warnings about multiple executables for the same solver.
+- Add implementations for != on arrays.
+- Compute quotient bounds before decomposition of int_div in linearisation library.
+- Propagate domain constraints on variables that are aliased (previously domain constraints could get lost).
+- Propagate domain constraints from left-hand-side to right-hand-side in variable assignments.
+- piecewise-linear: reuse decomposition for X when only Y-values change.
+- nosets: add set_in_imp(var set) and simplify set_in_reif, set_eq(var set, var set).
+- linearisation: improved compilation of set_in constraints.
+
+Version 2.3
+===========
+
+Major Changes:
+
+- The compiler can now generate FlatZinc with half reified constraints. See
+  https://www.minizinc.org/doc-2.3.0/en/fzn-spec.html#reified-and-half-reified-predicates
+  for more details.
+- The standard library of global constraints has been reorganised, making it
+  easier for solvers to override just the bits that they support. See
+  https://www.minizinc.org/doc-2.3.0/en/fzn-spec.html#solver-specific-libraries
+  for more details.
+- There is experimental support for solvers that can read AMPL NL files.
+
+Minor Changes:
+
+- The JSON input and output has been improved, with full support for enums and
+  optional types.
+- A new compiler option -g has been added, which turns variable domain changes
+  into constraints (useful for debugging models).
+- The SCIP interface has been updated, with support for indicator constraints,
+  bounds disjunctions and a native cumulative constraint.
+- Error reporting has been improved, with location information available for
+  errors in par float expressions as well as include items.
+- The timeout command line parameter now also applies to compilation itself
+  (#281).
+- Operations on par float values are now checked for overflows.
+- The arg_min/arg_max constraints have been improved, with new special versions
+  for Boolean variables, and a better standard decomposition.
+- if-then-else-endif expressions with variable conditions are now compiled to a
+  predicate call (rather than handled by the compiler), which enables solver
+  libraries to implement these as native constraints or special decompositions.
+- Dividing a variable by a constant is now translated as a multiplication (to
+  keep the constraints linear).
+- A new piecewise_linear predicate has been added to the library to make it
+  easier to specify piecewise linear constraints.
+- Print number of solutions as mzn-stat after solving (#244).
+- Make search annotations work for arbitrary array index sets.
+
+Bug fixes:
+
+- Translate let expressions that contain constraints or variables as var
+  type-inst. Fixes #263.
+- Fix JSON array parsing by counting elements instead of commas.
+- Fix parsing of the -p flag (#271).
+- Fix type checking for array declarations with single enum type inst 
+  identifier. E.g. array[$$T] of $U previously matched any multi-dimensional 
+  array, and now only matches one-dimensional arrays with any enum index set.
+- Fix computation of function return type when using type inst variables (#272).
+- Evaluate each variable declaration only once in a par let expression.
+- Check domain constraints on variable declarations in par let expressions.
+- Try .exe/.bat on windows when using (constructed) absolute paths.
+- Fix array slicing to support empty slices (#275).
+- Fix a bug in the parser that could cause crashes on certain syntax errors.
+- Fix the type of bool2int for arrays.
+- Initialise counter for introduced variable ids based on names in original 
+  model. This avoids reusing variable names if the user model contains names 
+  such as X_INTRODUCED_0_.
+- Fix compilation of nested clause/exist constraints, and improve handling of 
+  negation. Tries to use primitive negation instead of creating negated 
+  constraints. Should help with half-reification by creating more positive 
+  contexts.
+- Reorder fields in basic data structures to reduce padding on 64 bit platforms 
+  (improved memory footprint).
+- Perform type coercion after desugaring array slicing.
+- Translate arguments to bool2int, exists, forall in positive context even if 
+  those functions are redefined.
+- Don't evaluate par array literals twice (inefficient, and can lead to 
+  incorrect results when using random number generators).
+- Terminate child processes when minizinc process is terminated by signal.
+- Fix function return value array index check for empty arrays (#286).
+- Fix translation of constant false where clause in array comprehension.
+- Report error when json multi-dimensional array is not rectangular.
+- Check index sets of function arguments (#273).
+- Ignore partiality variables from CSE table when compiling _reif and _imp 
+  predicates (#269).
+- Flatten comprehensions with variable generators or where conditions before 
+  evaluating any par functions on them (#259).
+- Add missing redefinitions of basic operators and search annotations for 
+  optional integers.
+- Resolve filenames given on the command line relative to working directory,
+  and warn if file in working directory has same name as included file from the
+  library. Fixes #276.
+- Update nosets library with a valid redefinition of set_less over booleans.
+- Fix translation of showJSON (#294).
+- Only apply set2array coercion for supported types, otherwise report error 
+  (#295).
+- Improve special case reasoning for abs on strictly negative variables.
+- Add bounds for floating point min/max result in the standard library.
+
+
 Version 2.2.3
 =============
 

@@ -28,9 +28,11 @@ namespace MiniZinc {
     env.flat_removeItem(i);
   }
 
-  void ChainCompressor::addItem(Item *i) {
+  int ChainCompressor::addItem(Item *i) {
     env.flat_addItem(i);
+    int item_idx = env.flat()->size()-1;
     trackItem(i);
+    return item_idx;
   }
 
   void ChainCompressor::updateCount() {
@@ -87,7 +89,7 @@ namespace MiniZinc {
             storeItem(vdi->e(), i);
             return true;
           // x ::ctx_pos = pred(...); potentially: pred_imp(..., x); i.e. x -> pred(...)
-          } else if (vdi->e()->ann().contains(constants().ctx.pos)) {
+          } else if (env.fopts.enable_imp && vdi->e()->ann().contains(constants().ctx.pos)) {
             GCLock lock;
             auto cid = env.halfReifyId(c->id());
             std::vector<Type> args;
@@ -159,6 +161,7 @@ namespace MiniZinc {
         for (auto match = range.first; match != range.second;) {
           bool succes = compressItem(match->second, lhs);
           assert(succes);
+          env.n_imp_del++;
           match = items.erase(match);
         }
 
@@ -181,7 +184,7 @@ namespace MiniZinc {
         auto rhs = (*positive)[0]->cast<Id>();
         if (rhs->decl() != newLHS) {
           ConstraintI *nci = constructClause(positive, newLHS->id());
-          addItem(nci);
+          boolConstraints.push_back(addItem(nci));
         }
         removeItem(i);
         return true;
@@ -202,7 +205,7 @@ namespace MiniZinc {
           auto rhs = (*exprs)[j]->cast<Id>();
           if (rhs->decl() != newLHS) {
             ConstraintI *nci = constructClause(rhs, newLHS->id());
-            addItem(nci);
+            boolConstraints.push_back(addItem(nci));
           }
         }
         return true;
@@ -250,6 +253,7 @@ namespace MiniZinc {
   }
 
   ConstraintI *ImpCompressor::constructHalfReif(Call *call, Id *control) {
+    assert(env.fopts.enable_imp);
     assert(GC::locked());
     auto cid = env.halfReifyId(call->id());
     std::vector<Expression*> args(call->n_args());
@@ -308,9 +312,10 @@ namespace MiniZinc {
       if (Expression* vde = vdi->e()->e()) {
         if (auto call = vde->dyn_cast<Call>()) {
           if (call->id() == constants().ids.int2float) {
-            auto alias = follow_id_to_decl(vdi->e())->cast<VarDecl>();
-            auto vd = follow_id_to_decl(call->arg(0))->cast<VarDecl>();
-            aliasMap[vd] = alias;
+            if (auto vd = follow_id_to_decl(call->arg(0))->dyn_cast<VarDecl>()) {
+              auto alias = follow_id_to_decl(vdi->e())->cast<VarDecl>();
+              aliasMap[vd] = alias;  
+            }
           }
         }
       }
@@ -416,6 +421,7 @@ namespace MiniZinc {
 
         assert(!rhs->ann().contains(constants().ann.output_var));
         removeItem(it->second);
+        env.n_lin_del++;
         it = items.erase(it);
       } else {
         ++it;
@@ -456,6 +462,7 @@ namespace MiniZinc {
     simplify_lin<Lit>(coeffs, x, d);
     if (coeffs.empty()) {
       env.flat_removeItem(i);
+      env.n_lin_del++;
       return;
     } else {
       std::vector<Expression*> coeffs_e(coeffs.size());
@@ -495,11 +502,13 @@ namespace MiniZinc {
 
   bool LECompressor::eqBounds(Expression *a, Expression *b) {
     // TODO: (To optimise) Check lb(lhs) >= lb(rhs) and enforce ub(lhs) <= ub(rhs)
-    IntSetVal* dom_a;
-    IntSetVal* dom_b;
+    IntSetVal* dom_a = nullptr;
+    IntSetVal* dom_b = nullptr;
 
     if(auto a_decl = follow_id_to_decl(a)->dyn_cast<VarDecl>()) {
-      dom_a = eval_intset(env, a_decl->ti()->domain());
+      if (a_decl->ti()->domain()) {
+        dom_a = eval_intset(env, a_decl->ti()->domain());
+      }
     } else {
       assert(a->dyn_cast<IntLit>());
       auto a_val = a->cast<IntLit>();
@@ -507,7 +516,9 @@ namespace MiniZinc {
     }
 
     if(auto b_decl = follow_id_to_decl(b)->dyn_cast<VarDecl>()) {
-      dom_b = eval_intset(env, b_decl->ti()->domain());
+      if (b_decl->ti()->domain()) {
+        dom_b = eval_intset(env, b_decl->ti()->domain());
+      }
     } else {
       assert(b->dyn_cast<IntLit>());
       auto b_val = b->cast<IntLit>();

@@ -101,6 +101,11 @@ namespace MiniZinc {
     std::vector<int> modifiedVarDecls;
     int in_redundant_constraint;
     int in_maybe_partial;
+    int n_reif_ct;
+    int n_imp_ct;
+    int n_imp_del;
+    int n_lin_del;
+    bool in_reverse_map_var;
     FlatteningOptions fopts;
     unsigned int pathUse;
     std::unordered_map<std::string, int> reverseEnum;
@@ -135,6 +140,8 @@ namespace MiniZinc {
     EnvI(Model* orig0, std::ostream& outstream0=std::cout, std::ostream& errstream0=std::cerr);
     ~EnvI(void);
     long long int genId(void);
+    /// Set minimum new temporary id to \a i+1
+    void minId(unsigned int i) { ids = std::max(ids, i+1); }
     void cse_map_insert(Expression* e, const EE& ee);
     CSEMap::iterator cse_map_find(Expression* e);
     void cse_map_remove(Expression* e);
@@ -176,8 +183,10 @@ namespace MiniZinc {
 
     void cleanupExceptOutput();
   };
-
+  
+  void setComputedDomain(EnvI& envi, VarDecl* vd, Expression* domain, bool is_computed);
   EE flat_exp(EnvI& env, Ctx ctx, Expression* e, VarDecl* r, VarDecl* b);
+  EE flatten_id(EnvI& env, Ctx ctx, Expression* e, VarDecl* r, VarDecl* b, bool doNotFollowChains);
 
   class CmpExpIdx {
   public:

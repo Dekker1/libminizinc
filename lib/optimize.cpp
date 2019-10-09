@@ -60,6 +60,12 @@ namespace MiniZinc {
     return static_cast<int>(vi->second.size());
   }
   
+  void VarOccurrences::removeAllOccurrences(VarDecl* v) {
+    IdMap<Items>::iterator vi = _m.find(v->id()->decl()->id());
+    assert(vi!=_m.end());
+    vi->second.clear();
+  }
+  
   void VarOccurrences::unify(EnvI& env, Model* m, Id* id0_0, Id *id1_0) {
     Id* id0 = id0_0->decl()->id();
     Id* id1 = id1_0->decl()->id();
@@ -291,7 +297,7 @@ namespace MiniZinc {
     
   }
   
-  void optimize(Env& env) {
+  void optimize(Env& env, bool chain_compression) {
     if (env.envi().failed())
       return;
     try {
@@ -356,6 +362,29 @@ namespace MiniZinc {
                 topDown(cd,c);
                 ci->e(constants().lit_true);
                 envi.flat_removeItem(i);
+              } else if ( c->id() == constants().ids.int_.lin_eq &&
+                         Expression::equal(c->arg(2), IntLit::a(0))) {
+                ArrayLit* al_c = follow_id(c->arg(0))->cast<ArrayLit>();
+                if (al_c->size()==2 && (*al_c)[0]->cast<IntLit>()->v() == -(*al_c)[1]->cast<IntLit>()->v()) {
+                  ArrayLit* al_x = follow_id(c->arg(1))->cast<ArrayLit>();
+                  if ((*al_x)[0]->isa<Id>() && (*al_x)[1]->isa<Id>() &&
+                      ((*al_x)[0]->cast<Id>()->decl()->e()==NULL || (*al_x)[1]->cast<Id>()->decl()->e()==NULL)) {
+                    // Equality constraint between two identifiers: unify
+                    
+                    unify(envi, deletedVarDecls, (*al_x)[0]->cast<Id>(), (*al_x)[1]->cast<Id>());
+                    {
+                      VarDecl* vd = (*al_x)[0]->cast<Id>()->decl();
+                      int v0idx = envi.vo.find(vd);
+                      pushVarDecl(envi, m[v0idx]->cast<VarDeclI>(), v0idx, vardeclQueue);
+                    }
+                    
+                    pushDependentConstraints(envi, (*al_x)[0]->cast<Id>(), constraintQueue);
+                    CollectDecls cd(envi.vo,deletedVarDecls,ci);
+                    topDown(cd,c);
+                    ci->e(constants().lit_true);
+                    envi.flat_removeItem(i);
+                  }
+                }
               } else if (c->id()==constants().ids.forall) {
 
                 // Remove forall constraints, assign variables inside the forall to true
@@ -731,8 +760,8 @@ namespace MiniZinc {
       }
 
       // Phase 4: Chain Breaking
-      {
-        ImpCompressor imp(envi, m, deletedVarDecls);
+      if (chain_compression) {
+        ImpCompressor imp(envi, m, deletedVarDecls, boolConstraints);
         LECompressor le(envi, m, deletedVarDecls);
         for (auto &item : m) {
           imp.trackItem(item);

@@ -942,12 +942,12 @@ static const yytype_uint16 yyrline[] =
     1270,  1272,  1274,  1276,  1278,  1280,  1282,  1284,  1286,  1288,
     1290,  1292,  1294,  1296,  1298,  1300,  1302,  1304,  1306,  1308,
     1310,  1312,  1314,  1316,  1318,  1322,  1330,  1362,  1364,  1365,
-    1385,  1440,  1443,  1446,  1449,  1451,  1455,  1462,  1471,  1473,
-    1481,  1483,  1492,  1492,  1495,  1501,  1512,  1513,  1516,  1518,
-    1522,  1526,  1530,  1532,  1534,  1536,  1538,  1540,  1542,  1544,
-    1546,  1548,  1550,  1552,  1554,  1556,  1558,  1560,  1562,  1564,
-    1566,  1568,  1570,  1572,  1574,  1576,  1578,  1580,  1582,  1584,
-    1586,  1588
+    1385,  1440,  1443,  1449,  1455,  1457,  1461,  1468,  1477,  1479,
+    1487,  1489,  1498,  1498,  1501,  1507,  1518,  1519,  1522,  1524,
+    1528,  1532,  1536,  1538,  1540,  1542,  1544,  1546,  1548,  1550,
+    1552,  1554,  1556,  1558,  1560,  1562,  1564,  1566,  1568,  1570,
+    1572,  1574,  1576,  1578,  1580,  1582,  1584,  1586,  1588,  1590,
+    1592,  1594
 };
 #endif
 
@@ -3343,7 +3343,7 @@ yyreduce:
           string fbase = FileUtils::base_name(pp->filename);
           if (fpath=="")
             fpath="./";
-          ParseWorkItem pm(im, fpath, (yyvsp[(2) - (2)].sValue));
+          ParseWorkItem pm(im, ii, fpath, (yyvsp[(2) - (2)].sValue));
           pp->files.push_back(pm);
           ii->m(im);
           pp->seenModels.insert(pair<string,Model*>((yyvsp[(2) - (2)].sValue),im));
@@ -3479,7 +3479,7 @@ yyreduce:
   case 50:
 
     { (yyval.item) = new ConstraintI((yyloc),(yyvsp[(4) - (4)].expression));
-        if ((yyval.item) && (yyvsp[(3) - (4)].expression))
+        if ((yyvsp[(4) - (4)].expression) && (yyvsp[(3) - (4)].expression))
           (yyval.item)->cast<ConstraintI>()->e()->ann().add(new Call((yylsp[(2) - (4)]), ASTString("mzn_constraint_name"), {(yyvsp[(3) - (4)].expression)}));
       ;}
     break;
@@ -4923,13 +4923,19 @@ yyreduce:
   case 272:
 
     { (yyval.expression_p)=new vector<pair<Expression*,Expression*> >;
-        (yyval.expression_p)->push_back(pair<Expression*,Expression*>((yyvsp[(1) - (1)].expression),NULL)); ;}
+        if ((yyvsp[(1) - (1)].expression)) {
+          (yyval.expression_p)->push_back(pair<Expression*,Expression*>((yyvsp[(1) - (1)].expression),NULL));
+        }
+      ;}
     break;
 
   case 273:
 
     { (yyval.expression_p)=new vector<pair<Expression*,Expression*> >;
-        (yyval.expression_p)->push_back(pair<Expression*,Expression*>((yyvsp[(1) - (3)].expression),(yyvsp[(3) - (3)].expression))); ;}
+        if ((yyvsp[(1) - (3)].expression) && (yyvsp[(3) - (3)].expression)) {
+          (yyval.expression_p)->push_back(pair<Expression*,Expression*>((yyvsp[(1) - (3)].expression),(yyvsp[(3) - (3)].expression)));
+        }
+      ;}
     break;
 
   case 274:

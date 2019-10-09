@@ -66,7 +66,7 @@ vector<string> MIP_xpress_wrapper::getTags() {
 }
 
 vector<string> MIP_xpress_wrapper::getStdFlags() {
-  return {"-a", "-n"};
+  return {"-a", "-n", "-s"};
 }
 
 void MIP_xpress_wrapper::Options::printHelp(ostream &os) {
@@ -286,6 +286,10 @@ void MIP_xpress_wrapper::solve() {
 
   setOutputVariables(&output, &variables);
   setOutputAttributes(&output,  problem.getXPRSprob());
+
+  if ( !options->printAllSolutions && cbui.solcbfn) {
+    cbui.solcbfn(output, cbui.ppp);
+  }
 }
 
 void MIP_xpress_wrapper::setUserSolutionCallback() {

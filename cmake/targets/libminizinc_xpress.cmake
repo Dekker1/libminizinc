@@ -2,20 +2,27 @@
 
 if(XPRESS_FOUND AND USE_XPRESS)
 
-  add_library(minizinc_xpress
-              solvers/MIP/MIP_solverinstance.cpp solvers/MIP/MIP_xpress_wrap.cpp solvers/MIP/MIP_xpress_solverfactory.cpp
-              include/minizinc/solvers/MIP/MIP_xpress_wrap.hh include/minizinc/solvers/MIP/MIP_xpress_solverfactory.hh
-              include/minizinc/solvers/MIP/MIP_solverinstance.hh include/minizinc/solvers/MIP/MIP_solverinstance.hpp)
+  ### Compile target for the Xpress interface
+  add_library(minizinc_xpress OBJECT
+    lib/algorithms/min_cut.cpp
+
+    solvers/MIP/MIP_solverinstance.cpp
+    solvers/MIP/MIP_xpress_solverfactory.cpp
+    solvers/MIP/MIP_xpress_wrap.cpp
+
+    include/minizinc/solvers/MIP/MIP_solverinstance.hh
+    include/minizinc/solvers/MIP/MIP_solverinstance.hpp
+    include/minizinc/solvers/MIP/MIP_xpress_solverfactory.hh
+    include/minizinc/solvers/MIP/MIP_xpress_wrap.hh
+  )
 
   target_include_directories(minizinc_xpress PRIVATE ${XPRESS_INCLUDE_DIRS})
-  target_link_libraries(minizinc_xpress minizinc_compiler xprb xprs ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries(minizinc_xpress minizinc_core ${XPRESS_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+  add_dependencies(minizinc_xpress minizinc_parser)
 
-  set(EXTRA_TARGETS ${EXTRA_TARGETS} minizinc_xpress)
-  install(
-    TARGETS minizinc_xpress
-    EXPORT libminizincTargets
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-  )
+  ### Setup correct compilation into the MiniZinc library
+  target_compile_definitions(mzn PRIVATE HAS_XPRESS)
+  target_sources(mzn PRIVATE $<TARGET_OBJECTS:minizinc_xpress>)
+  target_link_libraries(mzn ${XPRESS_LIBRARIES})
+
 endif()

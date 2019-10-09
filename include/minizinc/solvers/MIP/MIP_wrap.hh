@@ -137,7 +137,7 @@ class MIP_wrapper {
       MIP_wrapper* wrapper = 0;
       MIP_wrapper::Output* pOutput=0;
       MIP_wrapper::Output* pCutOutput=0;
-      void *ppp=0;  // external info. Intended to keep MIP_solverinstance
+      void *psi=0;  // external info. Intended to keep MIP_solverinstance
       SolCallbackFn solcbfn=0;
       CutCallbackFn cutcbfn=0;
       /// Union of all flags used for the registered callback cuts
@@ -147,11 +147,13 @@ class MIP_wrapper {
       int cutMask = 0; // can be any combination of User/Lazy
       bool fVerb = false;              // used in Gurobi
       bool printed = false;            // whether any solution was output
+      double nTimeoutFeas = -1.0;      // >=0 => stop that long after 1st feas
+      double nTime1Feas = -1e100;      // time of the 1st feas
     };
     CBUserInfo cbui;
 
   public:
-//     MIP_wrapper() { /*resetModel();*/ }
+    MIP_wrapper() { cbui.wrapper = this; }
     virtual ~MIP_wrapper() { /* cleanup(); */ }
 
     /// derived should overload and call the ancestor
@@ -204,7 +206,7 @@ class MIP_wrapper {
     
     /// adding a variable, at once to the solver, this is for the 2nd phase
     virtual VarId addVar(double obj, double lb, double ub, 
-                             VarType vt, std::string name=0) {
+                             VarType vt, std::string name="") {
 //       cerr << "  AddVar: " << lb << ":   ";
       VarId res = addVarLocal(obj, lb, ub, vt, name);
       if (fPhase1Over)
@@ -258,6 +260,14 @@ class MIP_wrapper {
                         LinConType sense, double rhs,
                         std::string rowName = "") { throw std::runtime_error("Indicator constraints not supported. "); }
                 
+    /// Bounds disj for SCIP
+    virtual void addBoundsDisj(int n, double *fUB, double *bnd, int* vars,
+                               int nF, double *fUBF, double *bndF, int* varsF,
+                        std::string rowName = "") { throw std::runtime_error("Bounds disjunctions not supported. "); }
+
+    /// Cumulative, currently SCIP only
+    virtual void addCumulative(int nnz, int *rmatind, double* d, double* r, double b, std::string rowName="")
+    { throw std::runtime_error("Cumulative constraints not supported. "); }
     /// 0: model-defined level, 1: free, 2: uniform search
     virtual int getFreeSearch() { return 1; }
     /// Return 0 if ignoring searches
@@ -289,14 +299,14 @@ class MIP_wrapper {
     virtual void provideSolutionCallback(SolCallbackFn cbfn, void* info) {
       assert(cbfn);
       cbui.pOutput = &output;
-      cbui.ppp = info;
+      cbui.psi = info;
       cbui.solcbfn = cbfn;
     }
     /// solution callback handler, the wrapper might not have these callbacks implemented
     virtual void provideCutCallback(CutCallbackFn cbfn, void* info) {
       assert(cbfn);
       cbui.pCutOutput = 0;  // &outpCuts;   thread-safety: caller has to provide this
-      cbui.ppp = info;
+      cbui.psi = info;
       cbui.cutcbfn = cbfn;
     }
 
@@ -315,6 +325,9 @@ class MIP_wrapper {
      virtual int getNNodes() = 0;
      virtual int getNOpen() = 0;
 
-  }; 
+    /// Default MZN library for MIP
+    static std::string getMznLib();
+
+  };
 
 #endif  // __MIP_WRAPPER__

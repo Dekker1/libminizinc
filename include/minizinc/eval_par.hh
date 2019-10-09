@@ -111,7 +111,7 @@ namespace MiniZinc {
       bool where = true;
       if (e->where(gen) != NULL) {
         GCLock lock;
-        where = eval_bool(env, e->where(gen));
+        where = e->where(gen)->type().isvar() ? true : eval_bool(env, e->where(gen));
       }
       if (where) {
         if (gen == e->n_generators()-1) {
@@ -152,7 +152,7 @@ namespace MiniZinc {
     CallStackItem csi(env, e->decl(gen,id)->id(), i);
     if (in()==NULL) {
       // this is an assignment generator
-      Expression* asn = eval_par(env, e->where(gen));
+      Expression* asn = e->where(gen)->type().ispar() ? eval_par(env, e->where(gen)) : eval.flatten(env,e->where(gen));
       e->decl(gen,id)->e(asn);
       e->rehash();
     } else {
@@ -164,7 +164,7 @@ namespace MiniZinc {
       bool where = true;
       if (e->in(gen) != NULL && e->where(gen) != NULL) {
         GCLock lock;
-        where = eval_bool(env, e->where(gen));
+        where = e->where(gen)->type().isvar() ? true : eval_bool(env, e->where(gen));
       }
       if (where) {
         if (gen == e->n_generators()-1) {

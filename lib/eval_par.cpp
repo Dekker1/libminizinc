@@ -75,6 +75,9 @@ namespace MiniZinc {
       return IntLit::a(eval_int(env, e));
     }
     static Expression* exp(IntLit* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalIntVal {
   public:
@@ -91,6 +94,9 @@ namespace MiniZinc {
           throw ResultUndefinedError(env, Location().introduce(), "function result violates function type-inst");
         }
       }
+    }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
     }
   };
   class EvalFloatVal {
@@ -109,6 +115,9 @@ namespace MiniZinc {
         }
       }
     }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalFloatLit {
   public:
@@ -118,6 +127,9 @@ namespace MiniZinc {
       return FloatLit::a(eval_float(env, e));
     }
     static Expression* exp(Expression* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalString {
   public:
@@ -128,6 +140,9 @@ namespace MiniZinc {
     }
     static Expression* exp(const std::string& e) { return new StringLit(Location(),e); }
     static void checkRetVal(EnvI& env, Val v, FunctionI* fi) { }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalStringLit {
   public:
@@ -137,6 +152,9 @@ namespace MiniZinc {
       return new StringLit(Location(),eval_string(env, e));
     }
     static Expression* exp(Expression* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalBoolLit {
   public:
@@ -146,6 +164,9 @@ namespace MiniZinc {
       return constants().boollit(eval_bool(env, e));
     }
     static Expression* exp(Expression* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalBoolVal {
   public:
@@ -155,6 +176,9 @@ namespace MiniZinc {
     }
     static Expression* exp(bool e) { return constants().boollit(e); }
     static void checkRetVal(EnvI& env, Val v, FunctionI* fi) { }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalArrayLit {
   public:
@@ -164,6 +188,9 @@ namespace MiniZinc {
       return eval_array_lit(env, e);
     }
     static Expression* exp(Expression* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalArrayLitCopy {
   public:
@@ -177,7 +204,8 @@ namespace MiniZinc {
       for (unsigned int i=0; i<fi->ti()->ranges().size(); i++) {
         if (fi->ti()->ranges()[i]->domain() && !fi->ti()->ranges()[i]->domain()->isa<TIId>()) {
           IntSetVal* isv = eval_intset(env, fi->ti()->ranges()[i]->domain());
-          if (v->min(i) != isv->min() || v->max(i) != isv->max()) {
+          bool bothEmpty = isv->min() > isv->max() && v->min(i) > v->max(i);
+          if (!bothEmpty && (v->min(i) != isv->min() || v->max(i) != isv->max())) {
             std::ostringstream oss;
             oss << "array index set " << (i+1) << " of function result violates function type-inst";
             throw ResultUndefinedError(env, fi->e()->loc(), oss.str());
@@ -236,6 +264,9 @@ namespace MiniZinc {
         }
       }
     }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalIntSet {
   public:
@@ -253,6 +284,9 @@ namespace MiniZinc {
           throw ResultUndefinedError(env, Location().introduce(), "function result violates function type-inst");
         }
       }
+    }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
     }
   };
   class EvalFloatSet {
@@ -274,6 +308,9 @@ namespace MiniZinc {
         }
       }
     }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalBoolSet {
   public:
@@ -283,6 +320,9 @@ namespace MiniZinc {
     }
     static Expression* exp(IntSetVal* e) { return new SetLit(Location(),e); }
     static void checkRetVal(EnvI& env, Val v, FunctionI* fi) { }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalSetLit {
   public:
@@ -292,6 +332,9 @@ namespace MiniZinc {
       return new SetLit(e->loc(),eval_intset(env, e));
     }
     static Expression* exp(Expression* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalFloatSetLit {
   public:
@@ -301,6 +344,9 @@ namespace MiniZinc {
       return new SetLit(e->loc(),eval_floatset(env, e));
     }
     static Expression* exp(Expression* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalBoolSetLit {
   public:
@@ -310,6 +356,9 @@ namespace MiniZinc {
       return new SetLit(e->loc(),eval_boolset(env, e));
     }
     static Expression* exp(Expression* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalCopy {
   public:
@@ -319,6 +368,9 @@ namespace MiniZinc {
       return copy(env,e,true);
     }
     static Expression* exp(Expression* e) { return e; }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
   class EvalPar {
   public:
@@ -329,6 +381,9 @@ namespace MiniZinc {
     }
     static Expression* exp(Expression* e) { return e; }
     static void checkRetVal(EnvI& env, Val v, FunctionI* fi) { }
+    Expression* flatten(EnvI&, Expression*) {
+      throw InternalError("evaluating var assignment generator inside par expression not supported");
+    }
   };
 
   void checkDom(EnvI& env, Id* arg, IntSetVal* dom, Expression* e) {
@@ -370,6 +425,21 @@ namespace MiniZinc {
     }
     for (unsigned int i=ce->decl()->params().size(); i--;) {
       VarDecl* vd = ce->decl()->params()[i];
+      if (vd->type().dim() > 0) {
+        // Check array index sets
+        ArrayLit* al = params[i]->cast<ArrayLit>();
+        for (unsigned int j=0; j<vd->ti()->ranges().size(); j++) {
+          TypeInst* range_ti = vd->ti()->ranges()[j];
+          if (range_ti->domain() && !range_ti->domain()->isa<TIId>()) {
+            IntSetVal* isv = eval_intset(env, range_ti->domain());
+            if (isv->min() != al->min(j) || isv->max() != al->max(j)) {
+              std::ostringstream oss;
+              oss << "array index set " << (j+1) << " of argument " << (i+1) << " does not match declared index set";
+              throw EvalError(env, ce->loc(), oss.str());
+            }
+          }
+        }
+      }
       previousParameters[i] = vd->e();
       vd->flat(vd);
       vd->e(params[i]);
@@ -1859,26 +1929,28 @@ namespace MiniZinc {
           ret->type(t);
           return ret;
         }
-        if (e->type().isintset()) {
-          return EvalSetLit::e(env,e);
-        }
-        if (e->type().isfloatset()) {
-          return EvalFloatSetLit::e(env,e);
-        }
-        if (e->type().isboolset()) {
-          return EvalBoolSetLit::e(env,e);
-        }
-        if (e->type()==Type::parint()) {
-          return EvalIntLit::e(env,e);
-        }
-        if (e->type()==Type::parbool()) {
-          return EvalBoolLit::e(env,e);
-        }
-        if (e->type()==Type::parfloat()) {
-          return EvalFloatLit::e(env,e);
-        }
-        if (e->type()==Type::parstring()) {
-          return EvalStringLit::e(env,e);
+        if (e->type().ispar()) {
+          if (e->type().isintset()) {
+            return EvalSetLit::e(env,e);
+          }
+          if (e->type().isfloatset()) {
+            return EvalFloatSetLit::e(env,e);
+          }
+          if (e->type().isboolset()) {
+            return EvalBoolSetLit::e(env,e);
+          }
+          if (e->type()==Type::parint()) {
+            return EvalIntLit::e(env,e);
+          }
+          if (e->type()==Type::parbool()) {
+            return EvalBoolLit::e(env,e);
+          }
+          if (e->type()==Type::parfloat()) {
+            return EvalFloatLit::e(env,e);
+          }
+          if (e->type()==Type::parstring()) {
+            return EvalStringLit::e(env,e);
+          }
         }
         switch (e->eid()) {
           case Expression::E_ITE:

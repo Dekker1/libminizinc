@@ -7,7 +7,7 @@ add_executable(mzncc
   lib/codegen/analysis.cpp
   include/minizinc/codegen.hh
   include/minizinc/codegen_support.hh)
-target_link_libraries(mzncc minizinc_solver)
+target_link_libraries(mzncc mzn)
 
 install(
   TARGETS mzncc

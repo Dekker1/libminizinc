@@ -232,9 +232,105 @@ namespace MiniZinc {
     args.push_back(il);
   }
   
+  /// Special form of disjunction for SCIP
+  bool addBoundsDisj(EnvI& env, Expression* arg, Call* c_orig) {
+    auto pArrayLit = arg->dyn_cast<ArrayLit>();
+    if (nullptr == pArrayLit)
+      return false;
+    std::vector<Expression*>
+        isUBI, bndI, varI,         // integer bounds and vars
+        isUBF, bndF, varF;         // float bounds and vars
+    for (int i=pArrayLit->size(); i--; ) {
+      auto pId=pArrayLit->operator [](i)->dyn_cast<Id>();
+      if (nullptr==pId)
+        return false;
+      auto pDecl=follow_id_to_decl(pId)->dyn_cast<VarDecl>();
+      /// Checking the rhs
+      auto pRhs=pDecl->e();
+      if (nullptr==pRhs)
+        return false;              // not checking this boolean
+      auto pCall=pRhs->dyn_cast<Call>();
+      if (nullptr==pCall)
+        return false;
+      if (constants().ids.int_.le!=pCall->id() && constants().ids.float_.le!=pCall->id())
+        return false;
+      /// See if one is a constant and one a variable
+      Expression *pConst=nullptr, *pVar=nullptr;
+      bool fFloat=false;
+      bool isUB=false;
+      for (int j=pCall->n_args(); j--; ) {
+        if (auto pF=pCall->arg(j)->dyn_cast<FloatLit>()) {
+          pConst=pF;
+          fFloat=true;
+          isUB = (1==j);
+        } else
+          if (auto pF=pCall->arg(j)->dyn_cast<IntLit>()) {
+            pConst=pF;
+            fFloat=false;
+            isUB = (1==j);
+          } else
+            if (auto pId=pCall->arg(j)->dyn_cast<Id>()) {
+              if (nullptr!=pVar)
+                return false;                   // 2 variables, exit
+              pVar = pId;
+            }
+      }
+      /// All good, add them
+      if (fFloat) {
+        isUBF.push_back( constants().boollit(isUB) );
+        bndF.push_back(pConst);
+        varF.push_back(pVar);
+      } else {
+        isUBI.push_back( constants().boollit(isUB) );
+        bndI.push_back(pConst);
+        varI.push_back(pVar);
+      }
+    }
+    /// Create new call
+    GCLock lock;
+    auto loc = c_orig->loc().introduce();
+    std::vector<Expression*> args =
+    {
+      new ArrayLit(loc, isUBI),
+      new ArrayLit(loc, bndI),
+      new ArrayLit(loc, varI),
+      new ArrayLit(loc, isUBF),
+      new ArrayLit(loc, bndF),
+      new ArrayLit(loc, varF)
+    };
+
+    Call* c = new Call(c_orig->loc().introduce(),
+                       env.model->getFnDecls().bounds_disj.second->id(),
+                       args);
+    c->type(Type::varbool());
+    c->decl(env.model->getFnDecls().bounds_disj.second);
+    env.flat_addItem(new ConstraintI(c_orig->loc().introduce(), c));
+    return true;
+  }
+
+  class IgnorePartial {
+  public:
+    EnvI& env;
+    bool ignorePartial;
+    IgnorePartial(EnvI& env0, Call* c) : env(env0), ignorePartial(env.ignorePartial) {
+      if (c->id().endsWith("_reif") || c->id().endsWith("_imp")) {
+        env.ignorePartial = true;
+      }
+    }
+    ~IgnorePartial(void) {
+      env.ignorePartial = ignorePartial;
+    }
+  };
+  
   EE flatten_call(EnvI& env,Ctx ctx, Expression* e, VarDecl* r, VarDecl* b) {
     EE ret;
     Call* c = e->cast<Call>();
+    IgnorePartial ignorePartial(env,c);
+    if (c->id().endsWith("_reif")) {
+      env.n_reif_ct++;
+    } else if (c->id().endsWith("_imp")) {
+      env.n_imp_ct++;
+    }
     FunctionI* decl = env.model->matchFn(env,c,false);
     if (decl == NULL) {
       throw InternalError("undeclared function or predicate "
@@ -259,41 +355,39 @@ namespace MiniZinc {
     ASTString cid = c->id();
     CallStackItem _csi(env,e);
     
-    if (decl->e()==NULL) {
-      if (cid == constants().ids.forall) {
-        nctx.b = +nctx.b;
-        if (ctx.neg) {
-          ctx.neg = false;
-          nctx.neg = true;
-          cid = constants().ids.exists;
-        }
-      } else if (cid == constants().ids.exists) {
-        nctx.b = +nctx.b;
-        if (ctx.neg) {
-          ctx.neg = false;
-          nctx.neg = true;
-          cid = constants().ids.forall;
-        }
-      } else if (cid == constants().ids.bool2int) {
-        if (ctx.neg) {
-          ctx.neg = false;
-          nctx.neg = true;
-          nctx.b = -ctx.i;
-        } else {
-          nctx.b = ctx.i;
-        }
-      } else if (cid == constants().ids.assert || cid == constants().ids.trace) {
-        if (cid == constants().ids.assert && c->n_args()==2) {
-          (void) decl->_builtins.b(env,c);
-          ret = flat_exp(env,ctx,constants().lit_true,r,b);
-        } else {
-          KeepAlive callres = decl->_builtins.e(env,c);
-          ret = flat_exp(env,ctx,callres(),r,b);
-          // This is all we need to do for assert, so break out of the E_CALL
-        }
-        return ret;
+    if (cid == constants().ids.bool2int && c->type().dim()==0) {
+      if (ctx.neg) {
+        ctx.neg = false;
+        nctx.neg = true;
+        nctx.b = -ctx.i;
+      } else {
+        nctx.b = ctx.i;
       }
-    } else if (ctx.b==C_ROOT && decl->e()->isa<BoolLit>() && eval_bool(env,decl->e())) {
+    } else if (cid == constants().ids.forall) {
+      nctx.b = +nctx.b;
+      if (ctx.neg) {
+        ctx.neg = false;
+        nctx.neg = true;
+        cid = constants().ids.exists;
+      }
+    } else if (cid == constants().ids.exists) {
+      nctx.b = +nctx.b;
+      if (ctx.neg) {
+        ctx.neg = false;
+        nctx.neg = true;
+        cid = constants().ids.forall;
+      }
+    } else if (decl->e()==NULL && (cid == constants().ids.assert || cid == constants().ids.trace)) {
+      if (cid == constants().ids.assert && c->n_args()==2) {
+        (void) decl->_builtins.b(env,c);
+        ret = flat_exp(env,ctx,constants().lit_true,r,b);
+      } else {
+        KeepAlive callres = decl->_builtins.e(env,c);
+        ret = flat_exp(env,ctx,callres(),r,b);
+        // This is all we need to do for assert, so break out of the E_CALL
+      }
+      return ret;
+    } else if (decl->e() && ctx.b==C_ROOT && decl->e()->isa<BoolLit>() && eval_bool(env,decl->e())) {
       bool allBool = true;
       for (unsigned int i=0; i<c->n_args(); i++) {
         if (c->arg(i)->type().bt()!=Type::BT_BOOL) {
@@ -394,9 +488,43 @@ namespace MiniZinc {
         }
         
       } else {
-        bool mixContext = decl->e()!=NULL ||
-        (cid != constants().ids.forall && cid != constants().ids.exists && cid != constants().ids.bool2int &&
-         cid != constants().ids.sum && cid != "assert");
+        bool mixContext =
+        (cid != constants().ids.forall && cid != constants().ids.exists &&
+         (cid != constants().ids.bool2int || c->type().dim()>0) &&
+         cid != constants().ids.sum && cid != "assert" &&
+         cid != constants().var_redef->id() &&
+         cid != "mzn_reverse_map_var");
+        if (cid == "mzn_reverse_map_var") {
+          env.in_reverse_map_var = true;
+        }
+        if (cid == constants().ids.clause && c->arg(0)->isa<ArrayLit>() && c->arg(1)->isa<ArrayLit>()) {
+          GCLock lock;
+          // try to make negative arguments positive
+          std::vector<Expression*> newPositives;
+          std::vector<Expression*> newNegatives;
+          ArrayLit* al_neg = c->arg(1)->cast<ArrayLit>();
+          for (unsigned int i=0; i<al_neg->size(); i++) {
+            BinOp* bo = (*al_neg)[i]->dyn_cast<BinOp>();
+            Call* co = (*al_neg)[i]->dyn_cast<Call>();
+            if (bo || (co && (co->id()==constants().ids.forall || co->id()==constants().ids.exists || co->id()==constants().ids.clause))) {
+              UnOp* notBoe0 = new UnOp(Location().introduce(), UOT_NOT, (*al_neg)[i]);
+              notBoe0->type(Type::varbool());
+              newPositives.push_back(notBoe0);
+            } else {
+              newNegatives.push_back((*al_neg)[i]);
+            }
+          }
+          if (!newPositives.empty()) {
+            ArrayLit* al_pos = c->arg(0)->cast<ArrayLit>();
+            for (unsigned int i=0; i<al_pos->size(); i++) {
+              newPositives.push_back((*al_pos)[i]);
+            }
+            c->arg(0, new ArrayLit(Location().introduce(), newPositives));
+            c->arg(1, new ArrayLit(Location().introduce(), newNegatives));
+            c->arg(0)->type(Type::varbool(1));
+            c->arg(1)->type(Type::varbool(1));
+          }
+        }
         for (unsigned int i=c->n_args(); i--;) {
           Ctx argctx = nctx;
           if (mixContext) {
@@ -426,54 +554,98 @@ namespace MiniZinc {
       
       std::vector<KeepAlive> args;
       if (decl->e()==NULL && (cid == constants().ids.exists || cid == constants().ids.clause)) {
-        
         std::vector<KeepAlive> pos_alv;
         std::vector<KeepAlive> neg_alv;
-        for (unsigned int i=0; i<args_ee.size(); i++) {
-          std::vector<KeepAlive>& local_pos = i==0 ? pos_alv : neg_alv;
-          std::vector<KeepAlive>& local_neg = i==1 ? pos_alv : neg_alv;
-          ArrayLit* al = follow_id(args_ee[i].r())->cast<ArrayLit>();
-          std::vector<KeepAlive> alv;
-          for (unsigned int i=0; i<al->size(); i++) {
+        
+        std::vector<Expression*> pos_stack;
+        std::vector<Expression*> neg_stack;
+        
+        ArrayLit* al_pos = follow_id(args_ee[0].r())->cast<ArrayLit>();
+        for (unsigned int i=0; i<al_pos->size(); i++) {
+          pos_stack.push_back((*al_pos)[i]);
+        }
+        if (cid == constants().ids.clause) {
+          ArrayLit* al_neg = follow_id(args_ee[1].r())->cast<ArrayLit>();
+          for (unsigned int i=0; i<al_neg->size(); i++) {
+            neg_stack.push_back((*al_neg)[i]);
+          }
+        }
+        
+        while (!pos_stack.empty() || !neg_stack.empty()) {
+          
+          while (!pos_stack.empty()) {
+            Expression* cur = pos_stack.back();
+            pos_stack.pop_back();
             GCLock lock;
-            if (Call* sc = Expression::dyn_cast<Call>(same_call(env,(*al)[i],cid))) {
-              if (sc->id()==constants().ids.clause) {
-                alv.push_back(sc);
-              } else {
-                GCLock lock;
-                ArrayLit* sc_c = eval_array_lit(env,sc->arg(0));
-                for (unsigned int j=0; j<sc_c->size(); j++) {
-                  alv.push_back((*sc_c)[j]);
-                }
+            if (Call* sc = Expression::dyn_cast<Call>(same_call(env,cur,constants().ids.exists))) {
+              GCLock lock;
+              ArrayLit* sc_c = eval_array_lit(env,sc->arg(0));
+              for (unsigned int j=0; j<sc_c->size(); j++) {
+                pos_stack.push_back((*sc_c)[j]);
+              }
+            } else if (Call* sc = Expression::dyn_cast<Call>(same_call(env,cur,constants().ids.clause))) {
+              GCLock lock;
+              ArrayLit* sc_c = eval_array_lit(env,sc->arg(0));
+              for (unsigned int j=0; j<sc_c->size(); j++) {
+                pos_stack.push_back((*sc_c)[j]);
+              }
+              sc_c = eval_array_lit(env,sc->arg(1));
+              for (unsigned int j=0; j<sc_c->size(); j++) {
+                neg_stack.push_back((*sc_c)[j]);
               }
             } else {
-              alv.push_back((*al)[i]);
+              Call* eq_call = Expression::dyn_cast<Call>(same_call(env,cur,constants().ids.bool_eq));
+              if (eq_call && Expression::equal(eq_call->arg(1),constants().lit_false)) {
+                neg_stack.push_back(eq_call->arg(0));
+              } else if (eq_call && Expression::equal(eq_call->arg(0),constants().lit_false)) {
+                neg_stack.push_back(eq_call->arg(1));
+              } else if (eq_call && Expression::equal(eq_call->arg(1),constants().lit_true)) {
+                pos_stack.push_back(eq_call->arg(0));
+              } else if (eq_call && Expression::equal(eq_call->arg(0),constants().lit_true)) {
+                pos_stack.push_back(eq_call->arg(1));
+              } else if (Id* ident = cur->dyn_cast<Id>()) {
+                if (ident->decl()->ti()->domain()!=constants().lit_false) {
+                  pos_alv.push_back(ident);
+                }
+              } else {
+                pos_alv.push_back(cur);
+              }
             }
           }
           
-          for (unsigned int j=0; j<alv.size(); j++) {
+          while (!neg_stack.empty()) {
             GCLock lock;
-            Call* neg_call = Expression::dyn_cast<Call>(same_call(env,alv[j](),constants().ids.bool_eq));
-            if (neg_call &&
-                Expression::equal(neg_call->arg(1),constants().lit_false)) {
-              local_neg.push_back(neg_call->arg(0));
+            Expression* cur = neg_stack.back();
+            neg_stack.pop_back();
+            if (Call* sc = Expression::dyn_cast<Call>(same_call(env,cur,constants().ids.forall))) {
+              GCLock lock;
+              ArrayLit* sc_c = eval_array_lit(env,sc->arg(0));
+              for (unsigned int j=0; j<sc_c->size(); j++) {
+                neg_stack.push_back((*sc_c)[j]);
+              }
             } else {
-              Call* clause = Expression::dyn_cast<Call>(same_call(env,alv[j](),constants().ids.clause));
-              if (clause) {
-                ArrayLit* clause_pos = eval_array_lit(env,clause->arg(0));
-                for (unsigned int k=0; k<clause_pos->size(); k++) {
-                  local_pos.push_back((*clause_pos)[k]);
-                }
-                ArrayLit* clause_neg = eval_array_lit(env,clause->arg(1));
-                for (unsigned int k=0; k<clause_neg->size(); k++) {
-                  local_neg.push_back((*clause_neg)[k]);
+              Call* eq_call = Expression::dyn_cast<Call>(same_call(env,cur,constants().ids.bool_eq));
+              if (eq_call && Expression::equal(eq_call->arg(1),constants().lit_false)) {
+                pos_stack.push_back(eq_call->arg(0));
+              } else if (eq_call && Expression::equal(eq_call->arg(0),constants().lit_false)) {
+                pos_stack.push_back(eq_call->arg(1));
+              } else if (eq_call && Expression::equal(eq_call->arg(1),constants().lit_true)) {
+                neg_stack.push_back(eq_call->arg(0));
+              } else if (eq_call && Expression::equal(eq_call->arg(0),constants().lit_true)) {
+                neg_stack.push_back(eq_call->arg(1));
+              } else if (Id* ident = cur->dyn_cast<Id>()) {
+                if (ident->decl()->ti()->domain()!=constants().lit_true) {
+                  neg_alv.push_back(ident);
                 }
               } else {
-                local_pos.push_back(alv[j]);
+                neg_alv.push_back(cur);
               }
             }
+
           }
+          
         }
+        
         bool subsumed = remove_dups(pos_alv,false);
         subsumed = subsumed || remove_dups(neg_alv,true);
         subsumed = subsumed || contains_dups(pos_alv, neg_alv);
@@ -507,7 +679,30 @@ namespace MiniZinc {
           args.push_back(pos_al);
           args.push_back(neg_al);
         }
-        
+        if (C_ROOT==ctx.b && cid == constants().ids.exists) {
+          /// Check the special bounds disjunction for SCIP
+          /// Only in root context
+          if (!env.model->getFnDecls().bounds_disj.first) {
+            env.model->getFnDecls().bounds_disj.first = true;
+            std::vector<Type> bj_t =
+            { Type::parbool(1), Type::parint(1), Type::varint(1),
+              Type::parbool(1), Type::parfloat(1), Type::varfloat(1) };
+            GCLock lock;
+            env.model->getFnDecls().bounds_disj.second =
+                env.model->matchFn(env, ASTString("bounds_disj"), bj_t, false);
+          }
+          /// When the SCIP predicate is declared only
+          bool fBoundsDisj_Maybe =
+              ( nullptr != env.model->getFnDecls().bounds_disj.second );
+          if (fBoundsDisj_Maybe) {
+            if (addBoundsDisj(env, args[0](), c)) {
+              ret.b = bind(env,Ctx(),b,constants().lit_true);
+              ret.r = bind(env,ctx,r,constants().lit_true);
+              return ret;
+            }
+          }
+        }
+
       } else if (decl->e()==NULL && cid == constants().ids.forall) {
         ArrayLit* al = follow_id(args_ee[0].r())->cast<ArrayLit>();
         std::vector<KeepAlive> alv;
@@ -573,6 +768,23 @@ namespace MiniZinc {
         ret.r = bind(env,ctx,r,cit->second.r());
       } else {
         for (unsigned int i=0; i<decl->params().size(); i++) {
+          if (decl->params()[i]->type().dim() > 0) {
+            // Check array index sets
+            ArrayLit* al = follow_id(args[i]())->cast<ArrayLit>();
+            VarDecl* pi = decl->params()[i];
+            for (unsigned int j=0; j<pi->ti()->ranges().size(); j++) {
+              TypeInst* range_ti = pi->ti()->ranges()[j];
+              if (range_ti->domain() && !range_ti->domain()->isa<TIId>()) {
+                GCLock lock;
+                IntSetVal* isv = eval_intset(env, range_ti->domain());
+                if (isv->min() != al->min(j) || isv->max() != al->max(j)) {
+                  std::ostringstream oss;
+                  oss << "array index set " << (j+1) << " of argument " << (i+1) << " does not match declared index set";
+                  throw FlatteningError(env, e->loc(), oss.str());
+                }
+              }
+            }
+          }
           if (Expression* dom = decl->params()[i]->ti()->domain()) {
             if (!dom->isa<TIId>()) {
               // May have to constrain actual argument
@@ -713,7 +925,9 @@ namespace MiniZinc {
             ret.b = bind(env,Ctx(),b,constants().lit_true);
             args_ee.push_back(EE(NULL,reif_b->id()));
             ret.r = conj(env,NULL,ctx,args_ee);
-            env.cse_map_insert(cr(),ret);
+            if (!ctx.neg && !cr()->type().isann()) {
+              env.cse_map_insert(cr(),ret);
+            }
             return ret;
           }
         }
@@ -851,6 +1065,9 @@ namespace MiniZinc {
           }
         }
       }
+    }
+    if (cid == "mzn_reverse_map_var") {
+      env.in_reverse_map_var = false;
     }
     return ret;
   }

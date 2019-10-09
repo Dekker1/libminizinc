@@ -33,6 +33,7 @@ using namespace std;
 #include <coin/ClpConfig.h>
 #include <coin/CbcEventHandler.hpp>
 #include <coin/CglPreProcess.hpp>
+#include <coin/CglCutGenerator.hpp>
 #include <coin/CoinSignal.hpp>
 
 #define WANT_SOLUTION
@@ -91,7 +92,7 @@ void MIP_osicbc_wrapper::Options::printHelp(ostream& os) {
 
   << "  --absGap <n>\n    absolute gap |primal-dual| to stop" << std::endl
   << "  --relGap <n>\n    relative gap |primal-dual|/<solver-dep> to stop. Default 1e-8, set <0 to use backend's default" << std::endl
-  << "  --intTol <n>\n    integrality tolerance for a variable. Default 1e-6" << std::endl
+  << "  --intTol <n>\n    integrality tolerance for a variable. Default 1e-8" << std::endl
 //   << "--objDiff <n>       objective function discretization. Default 1.0" << std::endl
 
   << std::endl;
@@ -185,6 +186,14 @@ void MIP_osicbc_wrapper::addRow
   rowub.push_back(rub);
 }
 
+
+bool MIP_osicbc_wrapper::addWarmStart( const std::vector<VarId>& vars, const std::vector<double> vals ) {
+  assert( vars.size()==vals.size() );
+  static_assert( sizeof(VarId)==sizeof(int), "VarId should be (u)int currently" );
+  for (int i=0; i<vars.size(); ++i)
+    warmstart[vars[i]] = vals[i];
+  return true;
+}
 
 /// SolutionCallback ------------------------------------------------------------------------
 /// OSICBC ensures thread-safety?? TODO
@@ -475,7 +484,7 @@ MyEventHandler3::event(CbcEvent whichEvent)
         
         /// Call the user function:
         if (ui.pCbui->solcbfn) {
-          (*(ui.pCbui->solcbfn))(*(ui.pCbui->pOutput), ui.pCbui->ppp);
+          (*(ui.pCbui->solcbfn))(*(ui.pCbui->pOutput), ui.pCbui->psi);
           ui.pCbui->printed = true;
         }
         return noAction; // carry on
@@ -716,6 +725,10 @@ void MIP_osicbc_wrapper::solve() {  // Move into ancestor?
       cerr << " Model creation..." << endl;
     
 // #define __USE_CbcSolver__  -- not linked rev2274
+    /// FOR WARMSTART
+    for (const auto& vv: warmstart) {
+      osi.setColName(vv.first, colNames[vv.first]);
+    }
 #ifdef __USE_CbcSolver__
     CbcSolver control(osi);
     // initialize
@@ -733,6 +746,16 @@ void MIP_osicbc_wrapper::solve() {  // Move into ancestor?
     if ( options->intTol>=0.0 )
       model.setIntegerTolerance( options->intTol );
 //     model.setCutoffIncrement( objDiff );
+
+    /// WARMSTART
+    {
+      std::vector< std::pair< std::string, double > > mipstart;
+      for (const auto& vv: warmstart) {
+        mipstart.push_back( std::make_pair(colNames[vv.first], vv.second) );
+      }
+      warmstart.clear();
+      model.setMIPStart(mipstart);
+    }
     
     CoinMessageHandler msgStderr(stderr);
 
@@ -789,6 +812,51 @@ void MIP_osicbc_wrapper::solve() {  // Move into ancestor?
 //      ui.pPP = 0;
      MyEventHandler3 eventHandler(&model, ui);
      model.passInEventHandler(&eventHandler);
+   }
+
+   /// Cuts needed
+   if ( cbui.cutcbfn ) {
+     /// This class is passed to CBC to organize cut callbacks
+     /// We need original solutions here (combinatorial cuts)
+     class CutCallback : public CglCutGenerator {
+       MIP_wrapper::CBUserInfo& cbui;
+     public:
+       CutCallback(MIP_wrapper::CBUserInfo& ui) : cbui(ui) { }
+       CglCutGenerator* clone() const override { return new CutCallback(cbui); }
+       /// Make sure this overrides but we might need to compile this with old CBC as well
+       bool needsOriginalModel() const /*override*/ { return true; }
+       void generateCuts(const OsiSolverInterface &si, OsiCuts &cs,
+                         const CglTreeInfo info = CglTreeInfo()) override {
+         cbui.pOutput->nCols = si.getNumCols();
+         MZN_ASSERT_HARD_MSG(cbui.pOutput->nCols == ((MIP_wrapper*)(cbui.wrapper))->colNames.size(),
+                    "CBC cut callback: current model is different? Ncols=" << cbui.pOutput->nCols
+                             << ", originally " << ((MIP_wrapper*)(cbui.wrapper))->colNames.size()
+                             << ". If you have an old version of CBC, to use combinatorial cuts"
+                                " run with --cbcArgs '-preprocess off'" );
+         cbui.pOutput->x = si.getColSolution(); // change the pointer?
+         MIP_wrapper::CutInput cuts;
+         cbui.cutcbfn( *cbui.pOutput, cuts, cbui.psi, info.options&128 ); // options&128: integer candidate
+         for (const auto& cut: cuts) {                  // Convert cut sense
+           OsiRowCut rc;
+           switch (cut.sense) {
+           case LQ:
+             rc.setUb(cut.rhs);
+             break;
+           case GQ:
+             rc.setLb(cut.rhs);
+             break;
+           default:
+             assert(EQ==cut.sense);
+             rc.setLb(cut.rhs);
+             rc.setUb(cut.rhs);
+           }
+           rc.setRow(cut.rmatind.size(), cut.rmatind.data(), cut.rmatval.data());
+           cs.insertIfNotDuplicate(rc);
+         }
+       }
+     };
+     CutCallback ccb(cbui);
+     model.addCutGenerator(&ccb, 10, "MZN_cuts", true, true);         // also at solution
    }
 
    if ( 1<options->nThreads ) {
@@ -872,7 +940,7 @@ void MIP_osicbc_wrapper::solve() {  // Move into ancestor?
         output.x = x.data();
   //       output.x = osi.getColSolution();
       if (cbui.solcbfn && (!options->flag_all_solutions || !cbui.printed)) {
-        cbui.solcbfn(output, cbui.ppp);
+        cbui.solcbfn(output, cbui.psi);
       }
     }
     output.bestBound = model.getBestPossibleObjValue();

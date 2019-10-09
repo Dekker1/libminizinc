@@ -4,9 +4,6 @@
 % Gleb Belov <gleb.belov@monash.edu>
 %
 
-include "lex_less.mzn";
-include "lex_lesseq.mzn";
-
 predicate mzn_reverse_map_var(var set of int: x) = let {
   array[int] of var bool: b = set2bools(x)
 } in true;
@@ -51,15 +48,13 @@ predicate set_eq(var set of int: x, var set of int: y) ::promise_total =
   elseif not has_ub_set(x) then set_eq(y,x)
   else
   let {
-    set of int: uby = if has_ub_set(y) then ub(y) else
-      let {
-        constraint y subset x,
-      } in ub(x)
-    endif;
+    constraint y subset x,                        %% Constrain domains first
+    constraint x subset y,
+  } in let {
     array[int] of var bool: bx = set2bools(x);
-    array[int] of var bool: by = set2bools(y,uby);
+    array[int] of var bool: by = set2bools(y);
   } in forall (i in index_set(bx) union index_set(by)) (
-    if not (i in index_set(bx)) then not by[i]
+    if not (i in index_set(bx)) then not by[i]    %% Should be impossible
     elseif not (i in index_set(by)) then not bx[i]
     else bx[i]=by[i] endif
   )
@@ -124,20 +119,37 @@ predicate set_ne_imp(var set of int: x, var set of int: y, var bool: b) =
 % Reifs/imps are done automatically from these templates
 predicate set_le(var set of int: x, var set of int: y) ::promise_total =
   let {
-    set of int: ubxy = ub(x) union ub(y),
-    array[int] of var bool: bx = set2bools(x, ubxy);
-    array[int] of var bool: by = set2bools(y, ubxy);
-  } in
-    lex_lesseq( by, bx );
+    set of int: U = ub(x) union ub(y);
+    int: l = min(U);
+    int: u = max(U);
+    array[U] of var bool: xb = [i in x | i in U];
+    var l-1..u: xmax = max(x union {l-1});
+    array[U] of var bool: yb = [i in y | i in U];
+    var l-1..u: ymax = max(y union {l-1});
+    array[U] of var bool: b; 
+    constraint forall(i in l..u-1) (
+        b[i] = let {var 1..4: cmp = 2*xb[i] + yb[i] + 1} in
+                   [b[i+1], xmax < i, ymax > i, b[i+1]][cmp]
+    );
+    constraint b[u] = (xb[u] -> yb[u]);
+  } in b[l];
 
 predicate set_lt(var set of int: x, var set of int: y) ::promise_total =
   let {
-    set of int: ubxy = ub(x) union ub(y),
-    array[int] of var bool: bx = set2bools(x, ubxy);
-    array[int] of var bool: by = set2bools(y, ubxy);
-  } in
-    lex_less( by, bx );
-
+    set of int: U = ub(x) union ub(y);
+    int: l = min(U);
+    int: u = max(U);
+    array[U] of var bool: xb = [i in x | i in U];
+    var l-1..u: xmax = max(x union {l-1});
+    array[U] of var bool: yb = [i in y | i in U];
+    var l-1..u: ymax = max(y union {l-1});
+    array[U] of var bool: b; 
+    constraint forall(i in l..u-1) (
+        b[i] = let {var 1..4: cmp = 2*xb[i] + yb[i] + 1} in
+                   [b[i+1], xmax < i, ymax > i, b[i+1]][cmp]
+    );
+    constraint b[u] = (not xb[u] /\ yb[u]);
+  } in b[l];
 
 predicate set_subset(var set of int: x, var set of int: y) ::promise_total =
   let {
@@ -248,7 +260,9 @@ predicate set_in_reif(int: x, var set of int: y, var bool: b) ::promise_total =
     not b
   endif;
 predicate set_in_reif(var int: x, var set of int: y, var bool: b) ::promise_total =
-  b <-> ( x in ub(y) /\ set2bools(y)[x] );
+  b <-> set2bools(y)[x];
+predicate set_in_imp(var int: x, var set of int: y, var bool: b) =
+  b -> set2bools(y)[x];
 
 function array[int] of var bool: setarray2bools(array[int] of var set of int: x) =
   if length(x)=0 then [] else
@@ -321,8 +335,9 @@ predicate array_set_element(var int: x, array[int] of set of int: y, var set of 
     endif
   );
 
-annotation set_search(array[int] of var set of int: x, ann: a1, ann: a2, ann: a3) =
-  seq_search( [ bool_search(set2bools(x[i]),a1,a2,a3) | i in index_set(x) ] );
+annotation set_search(array[$X] of var set of int: x, ann: a1, ann: a2, ann: a3) =
+  let { array[int] of var set of int: xx = array1d(x) } in
+  seq_search( [ bool_search(set2bools(xx[i]),a1,a2,a3) | i in index_set(xx) ] );
 
 annotation warm_start( array[int] of var set of int: x, array[int] of set of int: v ) =
    warm_start_array( [

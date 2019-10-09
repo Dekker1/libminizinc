@@ -1,7 +1,7 @@
 #### MiniZinc assembler / interpreter Binary Target
 
 add_executable(mznasm mznasm.cpp)
-target_link_libraries(mznasm minizinc_solver)
+target_link_libraries(mznasm mzn)
 
 install(
   TARGETS mznasm

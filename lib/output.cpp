@@ -153,6 +153,22 @@ namespace MiniZinc {
   }
   
   void makePar(EnvI& env, Expression* e) {
+    class OutputJSON : public EVisitor {
+    public:
+      EnvI& env;
+      OutputJSON(EnvI& env0) : env(env0) {}
+      void vCall(Call& c) {
+        if (c.id()=="outputJSON") {
+          bool outputObjective = (c.n_args()==1 && eval_bool(env,c.arg(0)));
+          c.id(ASTString("array1d"));
+          Expression* json = copy(env, env.cmap, createJSONOutput(env, outputObjective, false));
+          std::vector<Expression*> new_args({json});
+          new_args[0]->type(Type::parstring(1));
+          c.args(new_args);
+        }
+      }
+    } _outputJSON(env);
+    topDown(_outputJSON, e);
     class Par : public EVisitor {
     public:
       /// Visit variable declaration
@@ -184,14 +200,7 @@ namespace MiniZinc {
       EnvI& env;
       Decls(EnvI& env0) : env(env0) {}
       void vCall(Call& c) {
-        if (c.id()=="outputJSON") {
-          c.id(ASTString("array1d"));
-          Expression* json = copy(env, env.cmap, createJSONOutput(env, false));
-          std::vector<Expression*> new_args({json});
-          new_args[0]->type(Type::parstring(1));
-          c.args(new_args);
-        }
-        if (c.id()=="format" || c.id()=="show" || c.id()=="showDzn") {
+        if (c.id()=="format" || c.id()=="show" || c.id()=="showDzn" || c.id()=="showJSON") {
           int enumId = c.arg(c.n_args()-1)->type().enumId();
           if (enumId != 0 && c.arg(c.n_args()-1)->type().dim() != 0) {
             const std::vector<unsigned int>& enumIds = env.getArrayEnum(enumId);
@@ -200,7 +209,7 @@ namespace MiniZinc {
           if (enumId > 0) {
             Id* ti_id = env.getEnum(enumId)->e()->id();
             GCLock lock;
-            std::vector<Expression*> args(2);
+            std::vector<Expression*> args(3);
             args[0] = c.arg(c.n_args()-1);
             if (args[0]->type().dim() > 1) {
               std::vector<Expression*> a1dargs(1);
@@ -212,11 +221,12 @@ namespace MiniZinc {
               args[0] = array1d;
             }
             args[1] = constants().boollit(c.id()=="showDzn");
+            args[2] = constants().boollit(c.id()=="showJSON");
             std::string enumName = createEnumToStringName(ti_id, "_toString_");
             c.id(ASTString(enumName));
             c.args(args);
           }
-          if (c.id()=="showDzn") {
+          if (c.id()=="showDzn" || (c.id()=="showJSON" && enumId > 0)) {
             c.id(constants().ids.show);
           }
         }
@@ -477,18 +487,19 @@ namespace MiniZinc {
     }
   }
   
-  void createDznOutputItem(EnvI& e, bool outputObjective) {
+  void createDznOutputItem(EnvI& e, bool outputObjective, bool includeOutputItem) {
     std::vector<Expression*> outputVars;
     
     class DZNOVisitor : public ItemVisitor {
     protected:
       EnvI& e;
       bool outputObjective;
+      bool includeOutputItem;
       std::vector<Expression*>& outputVars;
       bool had_add_to_output;
     public:
-      DZNOVisitor(EnvI& e0, bool outputObjective0, std::vector<Expression*>& outputVars0)
-      : e(e0), outputObjective(outputObjective0), outputVars(outputVars0), had_add_to_output(false) {}
+      DZNOVisitor(EnvI& e0, bool outputObjective0, bool includeOutputItem0, std::vector<Expression*>& outputVars0)
+        : e(e0), outputObjective(outputObjective0), outputVars(outputVars0), includeOutputItem(includeOutputItem0), had_add_to_output(false) {}
       void vVarDeclI(VarDeclI* vdi) {
         VarDecl* vd = vdi->e();
         bool process_var = false;
@@ -528,8 +539,11 @@ namespace MiniZinc {
           s << vd->id()->str().str() << " = ";
           if (vd->type().dim() > 0) {
             ArrayLit* al = NULL;
-            if (vd->e())
+            if (vd->flat() && vd->flat()->e()) {
+              al = eval_array_lit(e, vd->flat()->e());
+            } else if (vd->e()) {
               al = eval_array_lit(e, vd->e());
+            }
             s << "array" << vd->type().dim() << "d(";
             for (int i=0; i<vd->type().dim(); i++) {
               unsigned int enumId = (vd->type().enumId() != 0 ? e.getArrayEnum(vd->type().enumId())[i] : 0);
@@ -561,9 +575,25 @@ namespace MiniZinc {
         }
       }
       void vOutputI(OutputI* oi) {
+        if (includeOutputItem) {
+          outputVars.push_back(new StringLit(Location().introduce(), "_output = "));
+          Call* concat = new Call(Location().introduce(), ASTString("concat"), {oi->e()});
+          concat->type(Type::parstring());
+          FunctionI* fi = e.model->matchFn(e, concat, false);
+          assert(fi);
+          concat->decl(fi);
+          Call* show = new Call(Location().introduce(), ASTString("showDzn"), {concat});
+          show->type(Type::parstring());
+          fi = e.model->matchFn(e, show, false);
+          assert(fi);
+          show->decl(fi);
+          outputVars.push_back(show);
+          outputVars.push_back(new StringLit(Location().introduce(), ";\n"));
+        }
+
         oi->remove();
       }
-    } dznov(e, outputObjective, outputVars);
+    } dznov(e, outputObjective, includeOutputItem, outputVars);
 
     iterItems(dznov, e.model);
     
@@ -571,7 +601,7 @@ namespace MiniZinc {
     e.model->addItem(newOutputItem);
   }
 
-  ArrayLit* createJSONOutput(EnvI& e, bool outputObjective) {
+  ArrayLit* createJSONOutput(EnvI& e, bool outputObjective, bool includeOutputItem) {
     std::vector<Expression*> outputVars;
     outputVars.push_back(new StringLit(Location().introduce(), "{\n"));
 
@@ -579,12 +609,13 @@ namespace MiniZinc {
     protected:
       EnvI& e;
       bool outputObjective;
+      bool includeOutputItem;
       std::vector<Expression*>& outputVars;
       bool had_add_to_output;
       bool first_var;
     public:
-      JSONOVisitor(EnvI& e0, bool outputObjective0, std::vector<Expression*>& outputVars0)
-      : e(e0), outputObjective(outputObjective0), outputVars(outputVars0), had_add_to_output(false), first_var(true) {}
+      JSONOVisitor(EnvI& e0, bool outputObjective0, bool includeOutputItem0, std::vector<Expression*>& outputVars0)
+        : e(e0), outputObjective(outputObjective0), outputVars(outputVars0), includeOutputItem(includeOutputItem0), had_add_to_output(false), first_var(true) {}
       void vVarDeclI(VarDeclI* vdi) {
         VarDecl* vd = vdi->e();
         bool process_var = false;
@@ -627,35 +658,58 @@ namespace MiniZinc {
         }
       }
       void vOutputI(OutputI* oi) {
+        if (includeOutputItem) {
+          std::ostringstream s;
+          if (first_var) {
+            first_var = false;
+          } else {
+            s << ",\n";
+          }
+          s << "  \"_output\"" << " : ";
+          StringLit* sl = new StringLit(Location().introduce(),s.str());
+          outputVars.push_back(sl);
+          Call* concat = new Call(Location().introduce(), ASTString("concat"), {oi->e()});
+          concat->type(Type::parstring());
+          FunctionI* fi = e.model->matchFn(e, concat, false);
+          assert(fi);
+          concat->decl(fi);
+          Call* show = new Call(Location().introduce(), ASTString("showJSON"), {concat});
+          show->type(Type::parstring());
+          fi = e.model->matchFn(e, show, false);
+          assert(fi);
+          show->decl(fi);
+          outputVars.push_back(show);
+        }
+
         oi->remove();
       }
-    } jsonov(e, outputObjective, outputVars);
+    } jsonov(e, outputObjective, includeOutputItem, outputVars);
     
     iterItems(jsonov, e.model);
 
     outputVars.push_back(new StringLit(Location().introduce(), "\n}\n"));
     return new ArrayLit(Location().introduce(),outputVars);
   }
-  void createJSONOutputItem(EnvI& e, bool outputObjective) {
-    OutputI* newOutputItem = new OutputI(Location().introduce(), createJSONOutput(e, outputObjective));
+  void createJSONOutputItem(EnvI& e, bool outputObjective, bool includeOutputItem) {
+    OutputI* newOutputItem = new OutputI(Location().introduce(), createJSONOutput(e, outputObjective, includeOutputItem));
     e.model->addItem(newOutputItem);
   }
 
   void createOutput(EnvI& e, std::vector<VarDecl*>& deletedFlatVarDecls,
-                    FlatteningOptions::OutputMode outputMode, bool outputObjective) {
+                    FlatteningOptions::OutputMode outputMode, bool outputObjective, bool includeOutputItem) {
     // Create new output model
     OutputI* outputItem = NULL;
     GCLock lock;
     
     switch (outputMode) {
       case FlatteningOptions::OUTPUT_DZN:
-        createDznOutputItem(e,outputObjective);
+        createDznOutputItem(e,outputObjective, includeOutputItem);
         break;
       case FlatteningOptions::OUTPUT_JSON:
-        createJSONOutputItem(e,outputObjective);
+        createJSONOutputItem(e, outputObjective, includeOutputItem);
       default:
         if (e.model->outputItem()==NULL) {
-          createDznOutputItem(e,outputObjective);
+          createDznOutputItem(e, outputObjective, false);
         }
         break;
     }
@@ -685,25 +739,36 @@ namespace MiniZinc {
           tv[i].ti(Type::TI_PAR);
         }
         FunctionI* decl = env.output->matchFn(env, c.id(), tv, false);
+        FunctionI* origdecl = env.model->matchFn(env, c.id(), tv, false);
+        bool canReuseDecl = (decl != nullptr);
+        if (canReuseDecl && origdecl) {
+          // Check if this is the exact same overloaded declaration as in the model
+          for (unsigned int i=0; i<decl->params().size(); i++) {
+            if (decl->params()[i]->type() != origdecl->params()[i]->type()) {
+              // no, the types don't match, so we have to copy the original decl
+              canReuseDecl = false;
+              break;
+            }
+          }
+        }
         Type t;
-        if (decl==NULL) {
-          FunctionI* origdecl = env.model->matchFn(env, c.id(), tv, false);
+        if (!canReuseDecl) {
           if (origdecl == NULL || !origdecl->rtype(env, tv, false).ispar()) {
             throw FlatteningError(env,c.loc(),"function "+c.id().str()+" is used in output, par version needed");
           }
           if (!origdecl->from_stdlib()) {
             decl = copy(env,env.cmap,origdecl)->cast<FunctionI>();
-            CollectOccurrencesE ce(env.output_vo,decl);
-            topDown(ce, decl->e());
-            topDown(ce, decl->ti());
-            for (unsigned int i = decl->params().size(); i--;)
-              topDown(ce, decl->params()[i]);
             env.output->registerFn(env, decl);
             env.output->addItem(decl);
             if (decl->e()) {
               makePar(env, decl->e());
               topDown(*this, decl->e());
             }
+            CollectOccurrencesE ce(env.output_vo,decl);
+            topDown(ce, decl->e());
+            topDown(ce, decl->ti());
+            for (unsigned int i = decl->params().size(); i--;)
+              topDown(ce, decl->params()[i]);
           } else {
             decl = origdecl;
           }

@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.4.0)
 #  -- Project information and versioning.
 
 project(libminizinc
-        VERSION 2.2.3
+        VERSION 2.3.2
         LANGUAGES CXX C)
 
 if(NOT BUILD_REF)
@@ -15,19 +15,19 @@ endif()
 #  -- Project build options
 
 # Driver compilation selection
-option(USE_CPLEX "Enable the CPLEX solving target" TRUE)
+option(USE_CPLEX "Enable the CPLEX solving target" FALSE)
+option(USE_GEAS "Enable the Geas solving target" TRUE)
 option(USE_GECODE "Enable the Gecode solving target" TRUE)
-option(USE_GUROBI "Enable the Gurobi solving target" TRUE)
-option(USE_OSICBC "Enable the Osi CBC solving target" TRUE)
-option(USE_SCIP "Enable the SCIP solving target" TRUE)
-option(USE_XPRESS "Enable the Xpress solving target" TRUE)
+option(USE_GUROBI "Enable the Gurobi solving target" FALSE)
+option(USE_OSICBC "Enable the Osi CBC solving target" FALSE)
+option(USE_SCIP "Enable the SCIP solving target" FALSE)
+option(USE_XPRESS "Enable the Xpress solving target" FALSE)
 
 # Static vs. Dynamic linking
 option(CPLEX_PLUGIN "Build CPLEX binding as a plugin" ON)
 option(GUROBI_PLUGIN "Build Gurobi binding as a plugin" ON)
-option(SHARED_GECODE "Signal that the gecode library is shared" FALSE)
 
-# Enforce non_proprietary build
+# Enforce non proprietary build
 option(USE_PROPRIETARY "Enable static linking of proprietary solvers" OFF)
 if(NOT USE_PROPRIETARY)
   set(CPLEX_PLUGIN ON)
@@ -35,16 +35,26 @@ if(NOT USE_PROPRIETARY)
   set(USE_SCIP OFF)
 endif()
 
+# Export compile commands (useful when working with visual studio code)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # -------------------------------------------------------------------------------------------------------------------
 #  -- CMake initialisation
 
+# Fix library suffixes for Web Assembly platform
+include(cmake/support/emscripten_setup.cmake)
+
 # Try to find possible dependencies
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
+if(POLICY CMP0074)
+  cmake_policy(SET CMP0074 NEW)
+endif(POLICY CMP0074)
 find_package(CPlex)
+find_package(Geas)
 find_package(Gecode 6.0 COMPONENTS Driver Float Int Kernel Minimodel Search Set Support)
 find_package(Gurobi)
 find_package(OsiCBC)
-find_package(Scip)
+find_package(SCIP CONFIG)
 find_package(Xpress)
 
 # Set build type when none is selected
@@ -84,23 +94,17 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_BINARY_DIR}/include)
 
 # Libraries
-include(cmake/targets/libminizinc.cmake)
-
-# include(cmake/targets/libminizinc_cplex.cmake)
-include(cmake/targets/libminizinc_gecode.cmake)
-# include(cmake/targets/libminizinc_gurobi.cmake)
-# include(cmake/targets/libminizinc_osicbc.cmake)
-# include(cmake/targets/libminizinc_xpress.cmake)
-
-include(cmake/targets/libminizinc_fzn.cmake)
-
-include(cmake/targets/libminizinc_solver.cmake)
+include(cmake/targets/libmzn.cmake)
 
 # Executables
 include(cmake/targets/minizinc.cmake)
 include(cmake/targets/mzn2doc.cmake)
 include(cmake/targets/mznasm.cmake)
 include(cmake/targets/mzncc.cmake)
+
+# -------------------------------------------------------------------------------------------------------------------
+#  -- Platform Specific configuration
+include(cmake/support/config_emscripten.cmake)
 
 # -------------------------------------------------------------------------------------------------------------------
 #  -- CMake configuration generation

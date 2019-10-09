@@ -80,7 +80,7 @@ namespace {
 #endif
 
 const vector<string>& CPLEXDLLs(void) {
-  static const vector<string> sCPLEXDLLs = { "cplex1280", "cplex1270" };
+  static const vector<string> sCPLEXDLLs = { "cplex1290", "cplex1280", "cplex1270" };
   return sCPLEXDLLs;
 }
 
@@ -271,7 +271,7 @@ vector<string> MIP_cplex_wrapper::getTags() {
 }
 
 vector<string> MIP_cplex_wrapper::getStdFlags() {
-  return {"-a", "-p", "-n"};
+  return {"-a", "-n", "-p", "-s"};
 }
 
 void MIP_cplex_wrapper::Options::printHelp(ostream& os) {
@@ -297,7 +297,7 @@ void MIP_cplex_wrapper::Options::printHelp(ostream& os) {
 
   << "  --absGap <n>\n    absolute gap |primal-dual| to stop" << std::endl
   << "  --relGap <n>\n    relative gap |primal-dual|/<solver-dep> to stop. Default 1e-8, set <0 to use backend's default" << std::endl
-  << "  --intTol <n>\n    integrality tolerance for a variable. Default 1e-6" << std::endl
+  << "  --intTol <n>\n    integrality tolerance for a variable. Default 1e-8" << std::endl
   << "\n  --cplex-dll <file> or <basename>\n    CPLEX DLL, or base name, such as cplex1280, when using plugin. Default range tried: "
   << CPLEXDLLs().front() << " .. " << CPLEXDLLs().back() << std::endl
 //   << "  --objDiff <n>       objective function discretization. Default 1.0" << std::endl
@@ -589,7 +589,7 @@ solcallback (CPXCENVptr env, void *cbdata, int wherefrom, void *cbhandle)
 
       /// Call the user function:
       if (info->solcbfn)
-          (*info->solcbfn)(*info->pOutput, info->ppp);
+          (*info->solcbfn)(*info->pOutput, info->psi);
      info->printed = true;
    }
    
@@ -749,7 +749,7 @@ myusercutcallback (CPXCENVptr env,
           goto TERMINATE;
       }
       MIP_wrapper::CutInput cutInput;
-      info->cutcbfn( outpRlx, cutInput, info->ppp, fMIPSol );
+      info->cutcbfn( outpRlx, cutInput, info->psi, fMIPSol );
       static int nCuts=0;
       nCuts += cutInput.size();
       // if ( cutInput.size() )
@@ -1031,8 +1031,8 @@ void MIP_cplex_wrapper::solve() {  // Move into ancestor?
       output.x = &x[0];
       status = dll_CPXgetx (env, lp, &x[0], 0, cur_numcols-1);
       wrap_assert(!status, "Failed to get variable values.");
-      if (cbui.solcbfn && (!options->flag_all_solutions || !cbui.printed)) {
-        cbui.solcbfn(output, cbui.ppp);
+      if (cbui.solcbfn /*&& (!options->flag_all_solutions || !cbui.printed)*/) {
+        cbui.solcbfn(output, cbui.psi);
       }
    }
    output.bestBound = 1e308;
