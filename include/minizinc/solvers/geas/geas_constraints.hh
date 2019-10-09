@@ -20,6 +20,8 @@ namespace MiniZinc {
 
 #define PosterImpl(X) void X(SolverInstanceBase& s, const Definition* ce)
 
+    PosterImpl(p_mk_intvar);
+
     /* Integer Comparison Constraints */
     PosterImpl(p_int_eq);
     PosterImpl(p_int_ne);

@@ -26,6 +26,7 @@ namespace MiniZinc{
 
   void GeasSolverInstance::registerConstraints() {
     GCLock lock;
+    registerConstraint("mk_intvar", GeasConstraints::p_mk_intvar);
 
     /* Integer Comparison Constraints */
     registerConstraint("int_eq", GeasConstraints::p_int_eq);
@@ -444,7 +445,7 @@ namespace MiniZinc{
       while ((_opt.all_solutions || nr_solutions < _opt.nr_solutions) && remaining_time() >= 0.0) {
         res = _solver.solve({remaining_time(), _opt.conflicts - _solver.data->stats.conflicts});
         nr_solutions++;
-        printSolution();
+//        printSolution();
         if (res != geas::solver::SAT) {
           break;
         } else {
