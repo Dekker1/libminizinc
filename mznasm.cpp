@@ -52,7 +52,7 @@ int main(int argc, const char** argv) {
     MznSolver slv(std::cout,std::cerr);
     std::vector<std::string> args = {"--solver", "chuffed"};
     if (verbose) {
-      args.push_back("--verbose-compilation");
+      args.emplace_back("--verbose-compilation");
     }
     bool fSuccess = (slv.run(args, filename) != SolverInstance::ERROR);
     while (fSuccess) {

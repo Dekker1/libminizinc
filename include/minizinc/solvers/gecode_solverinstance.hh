@@ -34,6 +34,7 @@
 #include <minizinc/solver.hh>
 #include <minizinc/solvers/gecode/fzn_space.hh>
 #include <minizinc/bytecode.hh>
+#include <minizinc/incremental_interfaces.hh>
 
 #if GECODE_VERSION_NUMBER < 600000
 #error Gecode versions before 6.0 are not supported
@@ -230,7 +231,7 @@ namespace MiniZinc {
     double decay = 0.5;
   };
 
-  class GecodeSolverInstance : public SolverInstanceImpl<GecodeSolver> {   
+  class GecodeSolverInstance : public SolverInstanceImpl<GecodeSolver>,  public TrailableSolverInstance {
   private:
     bool _print_stats;
     bool _only_range_domains;
@@ -242,6 +243,7 @@ namespace MiniZinc {
     int _n_found_solutions;
     bool _allow_unbounded_vars;
     Model* _flat;
+    std::vector<FznSpace*> stack;
   public:
     /// the Gecode space that will be/has been solved
     FznSpace* _current_space; 
@@ -268,6 +270,20 @@ namespace MiniZinc {
 
     void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
     Val getSolutionValue(Definition* def) override;
+
+    // Able to return to the solver into a position where no search decisions
+    // have been made. SolverInstance must allow addDefinition calls after
+    // restart call.
+    void restart() override {};
+
+    // Returns the number of stored states
+    size_t states() override { return stack.size(); }
+
+    // Able to store the current solver state to the Trail.
+    void pushState() override;
+
+    // Able to restore the last solver state that was saved to the Trail.
+    void popState() override;
 
     // Presolve the currently loaded model, updating variables with the same
     // names in the given Model* m.

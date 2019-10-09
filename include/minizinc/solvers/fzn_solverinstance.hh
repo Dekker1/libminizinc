@@ -45,7 +45,7 @@ namespace MiniZinc {
     std::vector<MZNFZNSolverFlag> fzn_solver_flags;
   };
 
-  class FZNSolverInstance : public TrailableSolverInstance {
+  class FZNSolverInstance : public SolverInstanceBase, public TrailableSolverInstance {
     private:
       std::string _fzn_solver;
       std::unordered_map<int, VarDecl*> vdmap;

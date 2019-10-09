@@ -772,7 +772,7 @@ void MznSolver::pushToSolver() {
         if (back->defs()) {
           Definition::addToSolver(interpreter, back->defs(), interpreter->_procs, si);
         }
-        rsi->addDefinition(interpreter->_procs, back);
+        si->addDefinition(interpreter->_procs, back);
         back = back->prev();
       }
 

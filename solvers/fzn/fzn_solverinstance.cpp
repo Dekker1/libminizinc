@@ -188,7 +188,7 @@ namespace MiniZinc {
 
 
   FZNSolverInstance::FZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* options)
-    : TrailableSolverInstance(log, options), _model(new Model()), env(_model) {
+    : SolverInstanceBase(log, options), _model(new Model()), env(_model) {
     auto ofs = new std::ofstream("/dev/null");
     pS2Out = new Solns2Out(*ofs, log, "");
   }

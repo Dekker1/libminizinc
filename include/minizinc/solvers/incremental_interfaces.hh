@@ -13,6 +13,7 @@
 
 #include <string>
 #include <minizinc/bytecode.hh>
+#include <minizinc/solver_instance.hh>
 
 #ifdef ERROR    // Microsoft.
 #undef ERROR
@@ -20,11 +21,8 @@
 
 namespace MiniZinc {
 
-  class RestartableSolverInstance : public SolverInstanceBase {
+  class RestartableSolverInstance {
   public:
-    RestartableSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt)
-      : SolverInstanceBase(log, opt){};
-
     // Able to return to the solver into a position where no search decisions
     // have been made. SolverInstance must allow addDefinition calls after
     // restart call.
@@ -33,9 +31,6 @@ namespace MiniZinc {
 
   class TrailableSolverInstance : public RestartableSolverInstance {
   public:
-    TrailableSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt)
-      : RestartableSolverInstance(log, opt){};
-
     // Returns the number of stored states
     virtual size_t states() = 0;
 
