@@ -34,7 +34,7 @@
 #include <minizinc/solver.hh>
 #include <minizinc/solvers/gecode/fzn_space.hh>
 #include <minizinc/bytecode.hh>
-#include <minizinc/incremental_interfaces.hh>
+#include <minizinc/solvers/incremental_interfaces.hh>
 
 #if GECODE_VERSION_NUMBER < 600000
 #error Gecode versions before 6.0 are not supported

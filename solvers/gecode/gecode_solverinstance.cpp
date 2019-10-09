@@ -2391,7 +2391,7 @@ namespace MiniZinc {
     std::cerr << "Warning, ignored search annotation: " << s << std::endl;
     return INT_ASSIGN_MIN();
   }
-  
+
   void GecodeSolverInstance::pushState() {
     FznSpace* clone = static_cast<FznSpace*>(_current_space->clone());
     stack.push_back(clone);
