@@ -133,7 +133,7 @@ void CodeGen::register_builtins(void) {
   register_builtin("bool_clause", 2);
   
   register_builtin("int_eq", 2);
-  // register_builtin("int_lt", 2);
+  register_builtin("int_lt", 2);
   register_builtin("int_le", 2);
   register_builtin("set_in", 2);
 
