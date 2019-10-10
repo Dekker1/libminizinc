@@ -30,17 +30,8 @@ namespace MiniZinc{
 
     /* Integer Comparison Constraints */
     registerConstraint("int_eq", GeasConstraints::p_int_eq);
-    registerConstraint("int_ne", GeasConstraints::p_int_ne);
     registerConstraint("int_le", GeasConstraints::p_int_le);
     registerConstraint("int_lt", GeasConstraints::p_int_lt);
-    registerConstraint("int_eq_imp", GeasConstraints::p_int_eq_imp);
-    registerConstraint("int_ne_imp", GeasConstraints::p_int_ne_imp);
-    registerConstraint("int_le_imp", GeasConstraints::p_int_le_imp);
-    registerConstraint("int_lt_imp", GeasConstraints::p_int_lt_imp);
-    registerConstraint("int_eq_reif", GeasConstraints::p_int_eq_reif);
-    registerConstraint("int_ne_reif", GeasConstraints::p_int_ne_reif);
-    registerConstraint("int_le_reif", GeasConstraints::p_int_le_reif);
-    registerConstraint("int_lt_reif", GeasConstraints::p_int_lt_reif);
 
     /* Integer Arithmetic Constraints */
     registerConstraint("int_abs", GeasConstraints::p_int_abs);

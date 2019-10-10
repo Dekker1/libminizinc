@@ -42,7 +42,7 @@ namespace MiniZinc {
       assert(def->domain().isVec());
 
       const Val& dom = def->domain();
-      assert(dom->size() == 2);
+      assert(dom.size() == 2);
 
 
       auto var = SOL.new_intvar(static_cast<geas::intvar::val_t>(dom[0]().toInt()), static_cast<geas::intvar::val_t>(dom[1]().toInt()));
@@ -59,142 +59,229 @@ namespace MiniZinc {
 //        assert(res);
 //      }
       SI.insertVar(def, GeasVariable(var));
-//      _variableMap.insert(vd->id(), GeasVariable(var));
     }
 
     void p_int_eq(SolverInstanceBase& s, const Definition* call) {
-      geas::int_eq(SD, INTVAR(0), INTVAR(1));
-    }
-
-    void p_int_ne(SolverInstanceBase& s, const Definition* call) {
-      geas::int_ne(SD, INTVAR(0), INTVAR(1));
+      auto m = static_cast<BytecodeProc::Mode>(call->mode());
+      switch(m) {
+        case BytecodeProc::ROOT:
+          geas::int_eq(SD, INTVAR(0), INTVAR(1));
+          break;
+        case BytecodeProc::ROOT_NEG:
+          geas::int_ne(SD, INTVAR(0), INTVAR(1));
+          break;
+        case BytecodeProc::FUN:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_eq(SD, INTVAR(0), INTVAR(1));
+            } else {
+              geas::int_ne(SD, INTVAR(0), INTVAR(1));
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_eq(SD, INTVAR(0), INTVAR(1), var);
+            geas::int_ne(SD, INTVAR(0), INTVAR(1), ~var);
+          }
+          break;
+        case BytecodeProc::FUN_NEG:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_ne(SD, INTVAR(0), INTVAR(1));
+            } else {
+              geas::int_eq(SD, INTVAR(0), INTVAR(1));
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_ne(SD, INTVAR(0), INTVAR(1), var);
+            geas::int_eq(SD, INTVAR(0), INTVAR(1), ~var);
+          }
+          break;
+        case BytecodeProc::IMP:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_eq(SD, INTVAR(0), INTVAR(1));
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_eq(SD, INTVAR(0), INTVAR(1), var);
+          }
+        case BytecodeProc::IMP_NEG:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_ne(SD, INTVAR(0), INTVAR(1));
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_ne(SD, INTVAR(0), INTVAR(1), var);
+          }
+          break;
+        case BytecodeProc::RAW:
+          assert(false);
+          break;
+      }
     }
 
     void p_int_le(SolverInstanceBase& s, const Definition* call) {
-      geas::int_le(SD, INTVAR(0), INTVAR(1), 0);
+      auto m = static_cast<BytecodeProc::Mode>(call->mode());
+      switch(m) {
+        case BytecodeProc::ROOT:
+          geas::int_le(SD, INTVAR(0), INTVAR(1), 0);
+          break;
+        case BytecodeProc::ROOT_NEG:
+          geas::int_le(SD, INTVAR(1), INTVAR(0), -1);
+          break;
+        case BytecodeProc::FUN:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_le(SD, INTVAR(0), INTVAR(1), 0);
+            } else {
+              geas::int_le(SD, INTVAR(1), INTVAR(0), -1);
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_le(SD, INTVAR(0), INTVAR(1), 0, var);
+            geas::int_le(SD, INTVAR(1), INTVAR(0), -1, ~var);
+          }
+          break;
+        case BytecodeProc::FUN_NEG:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_le(SD, INTVAR(1), INTVAR(0), -1);
+            } else {
+              geas::int_le(SD, INTVAR(0), INTVAR(1), 0);
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_le(SD, INTVAR(1), INTVAR(0), -1, var);
+            geas::int_le(SD, INTVAR(0), INTVAR(1), 0, ~var);
+          }
+          break;
+        case BytecodeProc::IMP:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_le(SD, INTVAR(0), INTVAR(1), 0);
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_le(SD, INTVAR(0), INTVAR(1), 0, var);
+          }
+        case BytecodeProc::IMP_NEG:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_le(SD, INTVAR(1), INTVAR(0), -1);
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_le(SD, INTVAR(1), INTVAR(0), -1, var);
+          }
+          break;
+        case BytecodeProc::RAW:
+          assert(false);
+          break;
+      }
     }
 
     void p_int_lt(SolverInstanceBase& s, const Definition* call) {
-      geas::int_le(SD, INTVAR(0), INTVAR(1), -1);
-    }
-
-    void p_int_eq_imp(SolverInstanceBase& s, const Definition* call) {
-      if (PAR(2)) {
-        if (BOOL(2)) {
-          p_int_eq(s, call);
-        }
-      } else {
-        geas::int_eq(SD, INTVAR(0), INTVAR(1), BOOLVAR(2));
-      }
-    }
-
-    void p_int_ne_imp(SolverInstanceBase& s, const Definition* call) {
-      if (PAR(2)) {
-        if (BOOL(2)) {
-          p_int_ne(s, call);
-        }
-      } else {
-        geas::int_ne(SD, INTVAR(0), INTVAR(1), BOOLVAR(2));
-      }
-    }
-
-    void p_int_le_imp(SolverInstanceBase& s, const Definition* call) {
-      if (PAR(2)) {
-        if (BOOL(2)) {
-          p_int_le(s, call);
-        }
-      } else {
-        geas::int_le(SD, INTVAR(0), INTVAR(1), 0, BOOLVAR(2));
-      }
-    }
-
-    void p_int_lt_imp(SolverInstanceBase& s, const Definition* call) {
-      if (PAR(2)) {
-        if (BOOL(2)) {
-          p_int_lt(s, call);
-        }
-      } else {
-        geas::int_le(SD, INTVAR(0), INTVAR(1), -1, BOOLVAR(2));
-      }
-    }
-
-    void p_int_eq_reif(SolverInstanceBase& s, const Definition* call) {
-      if (PAR(2)) {
-        if (BOOL(2)) {
-          p_int_eq(s, call);
-        } else {
-          p_int_ne(s, call);
-        }
-      } else {
-        geas::int_eq(SD, INTVAR(0), INTVAR(1), BOOLVAR(2));
-        geas::int_ne(SD, INTVAR(0), INTVAR(1), ~BOOLVAR(2));
-      }
-    }
-
-    void p_int_ne_reif(SolverInstanceBase& s, const Definition* call) {
-      if (PAR(2)) {
-        if (BOOL(2)) {
-          p_int_ne(s, call);
-        } else {
-          p_int_eq(s, call);
-        }
-      } else {
-        geas::int_ne(SD, INTVAR(0), INTVAR(1), BOOLVAR(2));
-        geas::int_eq(SD, INTVAR(0), INTVAR(1), ~BOOLVAR(2));
-      }
-    }
-
-    void p_int_le_reif(SolverInstanceBase& s, const Definition* call) {
-      if (PAR(2)) {
-        if (BOOL(2)) {
-          p_int_le(s, call);
-        } else {
-//          auto nc = new Call(Location().introduce(), call->id(), {call->arg(1), call->arg(0)});
-//          p_int_lt(s, nc);
-        }
-      } else {
-        geas::int_le(SD, INTVAR(0), INTVAR(1), 0, BOOLVAR(2));
-        geas::int_le(SD, INTVAR(1), INTVAR(0), -1, ~BOOLVAR(2));
-      }
-    }
-
-    void p_int_lt_reif(SolverInstanceBase& s, const Definition* call) {
-      if (PAR(2)) {
-        if (BOOL(2)) {
-          p_int_lt(s, call);
-        } else {
-//          auto nc = new Call(Location().introduce(), call->id(), {call->arg(1), call->arg(0)});
-//          p_int_le(s, nc);
-        }
-      } else {
-        geas::int_le(SD, INTVAR(0), INTVAR(1), -1, BOOLVAR(2));
-        geas::int_le(SD, INTVAR(1), INTVAR(0), 0, ~BOOLVAR(2));
+      auto m = static_cast<BytecodeProc::Mode>(call->mode());
+      switch(m) {
+        case BytecodeProc::ROOT:
+          geas::int_le(SD, INTVAR(0), INTVAR(1), -1);
+          break;
+        case BytecodeProc::ROOT_NEG:
+          geas::int_le(SD, INTVAR(1), INTVAR(0), 0);
+          break;
+        case BytecodeProc::FUN:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_le(SD, INTVAR(0), INTVAR(1), -1);
+            } else {
+              geas::int_le(SD, INTVAR(1), INTVAR(0), 0);
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_le(SD, INTVAR(0), INTVAR(1), -1, var);
+            geas::int_le(SD, INTVAR(1), INTVAR(0), 0, ~var);
+          }
+          break;
+        case BytecodeProc::FUN_NEG:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_le(SD, INTVAR(1), INTVAR(0), 0);
+            } else {
+              geas::int_le(SD, INTVAR(0), INTVAR(1), -1);
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_le(SD, INTVAR(1), INTVAR(0), 0, var);
+            geas::int_le(SD, INTVAR(0), INTVAR(1), -1, ~var);
+          }
+          break;
+        case BytecodeProc::IMP:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_le(SD, INTVAR(0), INTVAR(1), -1);
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_le(SD, INTVAR(0), INTVAR(1), -1, var);
+          }
+        case BytecodeProc::IMP_NEG:
+          if (call->domain().isInt()) {
+            if (GeasSolverInstance::asBool(call->domain())) {
+              geas::int_le(SD, INTVAR(1), INTVAR(0), 0);
+            }
+          } else {
+            auto var = SOL.new_boolvar();
+            SI.insertVar(call, GeasVariable(var));
+            geas::int_le(SD, INTVAR(1), INTVAR(0), 0, var);
+          }
+          break;
+        case BytecodeProc::RAW:
+          assert(false);
+          break;
       }
     }
 
     void p_int_abs(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       geas::int_abs(SD, INTVAR(1), INTVAR(0));
     }
 
     void p_int_times(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       geas::int_mul(SD, INTVAR(0), INTVAR(1), INTVAR(2));
     }
 
     void p_int_div(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       geas::int_div(SD, INTVAR(2), INTVAR(0), INTVAR(1));
     }
 
     void p_int_max(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> vars = {INTVAR(0), INTVAR(1)};
       geas::int_max(SD, INTVAR(2), vars);
     }
 
     void p_int_min(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> vars = {-INTVAR(0), -INTVAR(1)};
       geas::int_max(SD, -INTVAR(2), vars);
     }
 
     void p_int_lin_eq(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> pos = INTARRAY(0);
       vec<int> neg(pos.size());
       for (int i = 0; i < neg.size(); ++i) {
@@ -207,18 +294,21 @@ namespace MiniZinc {
     }
 
     void p_int_lin_ne(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::intvar> vars = INTVARARRAY(1);
       geas::linear_ne(SD, cons, vars, INT(2));
     }
 
     void p_int_lin_le(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::intvar> vars = INTVARARRAY(1);
       geas::linear_le(SD, cons, vars, INT(2));
     }
 
     void p_int_lin_eq_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> pos = INTARRAY(0);
       vec<int> neg(pos.size());
       for (int i = 0; i < neg.size(); ++i) {
@@ -231,18 +321,21 @@ namespace MiniZinc {
     }
 
     void p_int_lin_ne_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::intvar> vars = INTVARARRAY(1);
       geas::linear_ne(SD, cons, vars, INT(2), BOOLVAR(3));
     }
 
     void p_int_lin_le_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::intvar> vars = INTVARARRAY(1);
       geas::linear_le(SD, cons, vars, INT(2), BOOLVAR(3));
     }
 
     void p_int_lin_eq_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> pos = INTARRAY(0);
       vec<int> neg(pos.size());
       for (int i = 0; i < neg.size(); ++i) {
@@ -256,6 +349,7 @@ namespace MiniZinc {
     }
 
     void p_int_lin_ne_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> pos = INTARRAY(0);
       vec<int> neg(pos.size());
       for (int i = 0; i < neg.size(); ++i) {
@@ -269,6 +363,7 @@ namespace MiniZinc {
     }
 
     void p_int_lin_le_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> pos = INTARRAY(0);
       vec<int> neg(pos.size());
       for (int i = 0; i < neg.size(); ++i) {
@@ -280,6 +375,7 @@ namespace MiniZinc {
     }
 
     void p_bool_eq(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if(PAR(0)) {
         SOL.post(BOOL(0) ? BOOLVAR(1) : ~BOOLVAR(1));
       } else if (PAR(2)) {
@@ -291,6 +387,7 @@ namespace MiniZinc {
     }
 
     void p_bool_ne(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if(PAR(0)) {
         SOL.post(BOOL(0) ? ~BOOLVAR(1) : BOOLVAR(1));
       } else if (PAR(1)) {
@@ -302,6 +399,7 @@ namespace MiniZinc {
     }
 
     void p_bool_le(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if(PAR(0)) {
         if (BOOL(0)) {
           SOL.post(BOOLVAR(1));
@@ -316,11 +414,13 @@ namespace MiniZinc {
     }
 
     void p_bool_lt(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       SOL.post(~BOOLVAR(0));
       SOL.post(BOOLVAR(1));
     }
 
     void p_bool_eq_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (PAR(2)) {
         if (BOOL(2)) {
           p_bool_eq(s, call);
@@ -332,6 +432,7 @@ namespace MiniZinc {
     }
 
     void p_bool_ne_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (PAR(2)) {
         if (BOOL(2)) {
           p_bool_ne(s, call);
@@ -343,6 +444,7 @@ namespace MiniZinc {
     }
 
     void p_bool_le_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (PAR(2)) {
         if (BOOL(2)) {
           p_bool_le(s, call);
@@ -353,6 +455,7 @@ namespace MiniZinc {
     }
 
     void p_bool_lt_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (PAR(2)) {
         if (BOOL(2)) {
           p_bool_lt(s, call);
@@ -364,6 +467,7 @@ namespace MiniZinc {
     }
 
     void p_bool_eq_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (PAR(2)) {
         if (BOOL(2)) {
           p_bool_eq(s, call);
@@ -379,6 +483,7 @@ namespace MiniZinc {
     }
 
     void p_bool_ne_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (PAR(2)) {
         if (BOOL(2)) {
           p_bool_ne(s, call);
@@ -394,6 +499,7 @@ namespace MiniZinc {
     }
 
     void p_bool_le_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (PAR(2)) {
         if (BOOL(2)) {
           p_bool_le(s, call);
@@ -409,6 +515,7 @@ namespace MiniZinc {
     }
 
     void p_bool_lt_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (PAR(2)) {
         if (BOOL(2)) {
           p_int_lt(s, call);
@@ -424,18 +531,21 @@ namespace MiniZinc {
     }
 
     void p_bool_or(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       geas::add_clause(SD, BOOLVAR(2), ~BOOLVAR(0));
       geas::add_clause(SD, BOOLVAR(2), ~BOOLVAR(1));
       geas::add_clause(SD, ~BOOLVAR(2), BOOLVAR(0), BOOLVAR(1));
     }
 
     void p_bool_and(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       geas::add_clause(SD, ~BOOLVAR(2), BOOLVAR(0));
       geas::add_clause(SD, ~BOOLVAR(2), BOOLVAR(1));
       geas::add_clause(SD, BOOLVAR(2), ~BOOLVAR(0), ~BOOLVAR(1));
     }
 
     void p_bool_xor(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       if (call->size() == 2) {
         p_bool_ne(s, call);
       } else {
@@ -444,23 +554,28 @@ namespace MiniZinc {
     }
 
     void p_bool_not(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_ne(s, call);
     }
 
     void p_bool_or_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       geas::add_clause(SD, ~BOOLVAR(2), BOOLVAR(0), BOOLVAR(1));
     }
 
     void p_bool_and_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       geas::add_clause(SD, ~BOOLVAR(2), BOOLVAR(0));
       geas::add_clause(SD, ~BOOLVAR(2), BOOLVAR(1));
     }
 
     void p_bool_xor_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_ne_imp(s, call);
     }
 
     void p_bool_clause(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       auto& gi = static_cast<GeasSolverInstance&>(s);
       auto pos = ARRAY(0);
       auto neg = ARRAY(1);
@@ -475,6 +590,7 @@ namespace MiniZinc {
     }
 
     void p_array_bool_or(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       auto arr = ARRAY(0);
       vec<geas::clause_elt> clause;
       clause.push(~BOOLVAR(1));
@@ -487,6 +603,7 @@ namespace MiniZinc {
     }
 
     void p_array_bool_and(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       auto arr = ARRAY(0);
       vec<geas::clause_elt> clause;
       clause.push(BOOLVAR(1));
@@ -499,6 +616,7 @@ namespace MiniZinc {
     }
 
     void p_bool_clause_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       auto pos = ARRAY(0);
       auto neg = ARRAY(1);
       vec<geas::clause_elt> clause;
@@ -513,6 +631,7 @@ namespace MiniZinc {
     }
 
     void p_array_bool_or_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       auto arr = ARRAY(0);
       vec<geas::clause_elt> clause;
       clause.push(~BOOLVAR(1));
@@ -524,6 +643,7 @@ namespace MiniZinc {
     }
 
     void p_array_bool_and_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       auto arr = ARRAY(0);
       for (int i = 0; i < arr.size(); ++i) {
         geas::add_clause(SD, ~BOOLVAR(1), SI.asBoolVar(arr[i]));
@@ -531,6 +651,7 @@ namespace MiniZinc {
     }
 
     void p_bool_clause_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       auto pos = ARRAY(0);
       auto neg = ARRAY(1);
       vec<geas::clause_elt> clause;
@@ -549,6 +670,7 @@ namespace MiniZinc {
     }
 
     void p_bool_lin_eq(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       // TODO: Rewrite using MiniZinc Library??
@@ -557,18 +679,21 @@ namespace MiniZinc {
     }
 
     void p_bool_lin_ne(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       geas::bool_linear_ne(SD, cons, vars, INT(2));
     }
 
     void p_bool_lin_le(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       geas::bool_linear_le(SD, geas::at_True, SI.zero, cons, vars, -INT(2));
     }
 
     void p_bool_lin_eq_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       // TODO: Rewrite using MiniZinc Library??
@@ -577,18 +702,21 @@ namespace MiniZinc {
     }
 
     void p_bool_lin_ne_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       geas::bool_linear_ne(SD, cons, vars, INT(2), BOOLVAR(3));
     }
 
     void p_bool_lin_le_imp(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       geas::bool_linear_le(SD, BOOLVAR(3), SI.zero, cons, vars, -INT(2));
     }
 
     void p_bool_lin_eq_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       // TODO: Rewrite using MiniZinc Library??
@@ -598,6 +726,7 @@ namespace MiniZinc {
     }
 
     void p_bool_lin_ne_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       // TODO: Rewrite using MiniZinc Library??
@@ -607,6 +736,7 @@ namespace MiniZinc {
     }
 
     void p_bool_lin_le_reif(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<int> cons = INTARRAY(0);
       vec<geas::patom_t> vars = BOOLVARARRAY(1);
       // TODO: Rewrite using MiniZinc Library??
@@ -615,12 +745,14 @@ namespace MiniZinc {
     }
 
     void p_bool2int(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       geas::add_clause(SD, BOOLVAR(0), INTVAR(1) <= 0);
       geas::add_clause(SD, ~BOOLVAR(0), INTVAR(1) >= 1);
     }
 
     void p_array_int_element(SolverInstanceBase& s, const Definition* call) {
-      assert(ARRAY(1)->min(0) == 1 && ARRAY(1)->max(0) == ARRAY(1)->size()+1);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+//      assert(ARRAY(1)->min(0) == 1 && ARRAY(1)->max(0) == ARRAY(1)->size()+1);
       vec<int> vals = INTARRAY(1);
       if (PAR(0)) {
         SOL.post(INTVAR(2) == vals[INT(0)-1]);
@@ -636,7 +768,8 @@ namespace MiniZinc {
     }
 
     void p_array_bool_element(SolverInstanceBase& s, const Definition* call) {
-      assert(ARRAY(1)->min(0) == 1 && ARRAY(1)->max(0) == ARRAY(1)->size()+1);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+//      assert(ARRAY(1)->min(0) == 1 && ARRAY(1)->max(0) == ARRAY(1)->size()+1);
       vec<bool> vals = BOOLARRAY(1);
       if (PAR(0)) {
         SOL.post(vals[INT(0)-1] ? BOOLVAR(2) : ~BOOLVAR(2));
@@ -654,7 +787,8 @@ namespace MiniZinc {
     }
 
     void p_array_var_int_element(SolverInstanceBase& s, const Definition* call) {
-      assert(ARRAY(1)->min(0) == 1 && ARRAY(1)->max(0) == ARRAY(1)->size()+1);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+//      assert(ARRAY(1)->min(0) == 1 && ARRAY(1)->max(0) == ARRAY(1)->size()+1);
       if (PAR(1)) {
         return p_array_int_element(s, call);
       }
@@ -685,7 +819,8 @@ namespace MiniZinc {
     }
 
     void p_array_var_bool_element(SolverInstanceBase& s, const Definition* call) {
-      assert(ARRAY(1)->min(0) == 1 && ARRAY(1)->max(0) == ARRAY(1)->size()+1);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+//      assert(ARRAY(1)->min(0) == 1 && ARRAY(1)->max(0) == ARRAY(1)->size()+1);
       if (PAR(1)) {
         return p_array_bool_element(s, call);
       }
@@ -720,16 +855,19 @@ namespace MiniZinc {
     }
 
     void p_all_different(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> vars = INTVARARRAY(0);
       geas::all_different_int(SD, vars);
     }
 
     void p_all_different_except_0(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> vars = INTVARARRAY(0);
       geas::all_different_except_0(SD, vars);
     }
 
     void p_at_most(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> ivars = INTVARARRAY(1);
       vec<geas::patom_t> bvars;
       for (auto &ivar : ivars) {
@@ -744,6 +882,7 @@ namespace MiniZinc {
     }
 
     void p_at_most1(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> ivars = INTVARARRAY(0);
       vec<geas::patom_t> bvars;
       for (auto &ivar : ivars) {
@@ -753,6 +892,7 @@ namespace MiniZinc {
     }
 
     void p_cumulative(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> st = INTVARARRAY(0);
       if (PAR(1) && PAR(2) && PAR(3)) {
         vec<int> d = INTARRAY(1);
@@ -766,6 +906,7 @@ namespace MiniZinc {
     }
 
     void p_disjunctive(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> st = INTVARARRAY(0);
       if (PAR(1)) {
         vec<int> d = INTARRAY(1);
@@ -777,6 +918,7 @@ namespace MiniZinc {
     }
 
     void p_global_cardinality(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       vec<geas::intvar> x = INTVARARRAY(0);
       vec<int> cover = INTARRAY(1);
       vec<int> count = INTARRAY(2);
@@ -794,6 +936,7 @@ namespace MiniZinc {
     }
 
     void p_table_int(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       auto& gi = static_cast<GeasSolverInstance&>(s);
       vec<geas::intvar> vars = INTVARARRAY(0);
       vec<int> tmp = INTARRAY(1);

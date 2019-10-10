@@ -24,17 +24,8 @@ namespace MiniZinc {
 
     /* Integer Comparison Constraints */
     PosterImpl(p_int_eq);
-    PosterImpl(p_int_ne);
     PosterImpl(p_int_le);
     PosterImpl(p_int_lt);
-    PosterImpl(p_int_eq_imp);
-    PosterImpl(p_int_ne_imp);
-    PosterImpl(p_int_le_imp);
-    PosterImpl(p_int_lt_imp);
-    PosterImpl(p_int_eq_reif);
-    PosterImpl(p_int_ne_reif);
-    PosterImpl(p_int_le_reif);
-    PosterImpl(p_int_lt_reif);
 
     /* Integer Arithmetic Constraints */
     PosterImpl(p_int_abs);
