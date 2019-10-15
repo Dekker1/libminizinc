@@ -14,6 +14,8 @@
 
 #include <minizinc/flattener.hh>
 #include <minizinc/solver.hh>
+#include <minizinc/solvers/incremental_interfaces.hh>
+
 #include <geas/solver/solver.h>
 
 namespace MiniZinc {
@@ -67,7 +69,7 @@ namespace MiniZinc {
     typedef MiniZinc::Statistics Statistics;
   };
 
-  class GeasSolverInstance : public SolverInstanceImpl<GeasTypes> {
+  class GeasSolverInstance : public SolverInstanceImpl<GeasTypes>,  public TrailableSolverInstance {
   public:
     GeasSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
     ~GeasSolverInstance() override = default;
@@ -99,9 +101,25 @@ namespace MiniZinc {
 
     // TODO: create only when necessary or use Geas internal
     geas::intvar zero;
+
+    // Return to the solver into a position where no search decisions have been made. SolverInstance
+    // must allow addDefinition calls after restart call.
+    void restart() override { _solver.restart(); };
+
+    // Returns the number of stored states
+    size_t states() override { return stack.size(); }
+
+    // Able to store the current solver state to the Trail.
+    void pushState() override;
+
+    // Able to restore the last solver state that was saved to the Trail.
+    void popState() override;
+
+    geas::patom_t* currentState();
   protected:
     geas::solver _solver;
-    Model* _flat;
+
+    std::vector<geas::patom_t> stack;
 
     SolveI::SolveType _obj_type = SolveI::ST_SAT;
     std::unique_ptr<GeasTypes::Variable> _obj_var;

@@ -671,6 +671,26 @@ namespace MiniZinc{
     }
   }
 
+  void GeasSolverInstance::pushState() {
+    geas::patom_t state_var = _solver.new_boolvar();
+    solver().assume(state_var);
+    stack.push_back(state_var);
+  }
+
+  void GeasSolverInstance::popState() {
+    _solver.retract();
+    // TODO: Does this retract all assumptions???
+    geas::patom_t state_var = stack.back(); stack.pop_back();
+    solver().post(~state_var);
+  }
+
+  geas::patom_t* GeasSolverInstance::currentState() {
+    if (stack.empty()) {
+      return nullptr;
+    }
+    return &stack.back();
+  }
+
   Geas_SolverFactory::Geas_SolverFactory() {
     SolverConfig sc("org.minizinc.geas", getVersion(nullptr));
     sc.name("Geas");
