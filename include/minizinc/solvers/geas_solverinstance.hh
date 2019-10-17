@@ -115,7 +115,7 @@ namespace MiniZinc {
     // Able to restore the last solver state that was saved to the Trail.
     void popState() override;
 
-    geas::patom_t* currentState();
+    geas::patom_t currentState();
   protected:
     geas::solver _solver;
 
