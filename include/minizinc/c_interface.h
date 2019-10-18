@@ -19,8 +19,9 @@ struct _MZNInstance;
 typedef struct _MZNInstance* MZNInstance;
 
 MZNInstance minizinc_instance_init(const char* mza_file, const char* solver);
+void minizinc_instance_destroy(MZNInstance);
 
-void minizinc_add_call(MZNInstance, int call);
+void minizinc_add_call(MZNInstance, const char* call, ...);
 
 void minizinc_push_state(MZNInstance);
 void minizinc_pop_state(MZNInstance);

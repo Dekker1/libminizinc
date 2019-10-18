@@ -151,7 +151,26 @@ void SolverFactory::destroySI(SolverInstanceBase * pSI) {
 }
 
 MznSolver::MznSolver(const std::string& file, const std::string& solver)
-  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()), file(file), solver_str(solver) {}
+  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()), file(file), solver_str(solver) {
+  std::vector<std::string> args = {executable_name, "--solver", solver_str};
+  if (flag_verbose) {
+    args.emplace_back("--verbose-compilation");
+  }
+  switch (processOptions(args)) {
+    case OPTION_FINISH:
+      return;
+    case OPTION_ERROR:
+      printUsage();
+      os << "More info with \"" << executable_name << " --help\"\n";
+      return;
+    case OPTION_OK:
+      break;
+  }
+
+  flatten(file, file);
+  Definition* head = interpreter->_agg[0].def_stack;
+  def_ptr = head;
+}
 
 MznSolver::~MznSolver()
 {
@@ -642,6 +661,9 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     }
     std::cerr << "\n";
   }
+  for (size_t i = 0; i < bs.size(); i++) {
+    resolve_call.insert({bs[i].name, {i, bs[i].nargs}});
+  }
   // The main procedure is the last one in the file
   BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT]);
   interpreter =  new Interpreter(bs, frame);
@@ -739,22 +761,6 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
 std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   using namespace std::chrono;
   steady_clock::time_point startTime = steady_clock::now();
-  std::vector<std::string> args = {executable_name, "--solver", solver_str};
-  if (flag_verbose) {
-    args.emplace_back("--verbose-compilation");
-  }
-  switch (processOptions(args)) {
-    case OPTION_FINISH:
-      return {SolverInstance::NONE, ""};
-    case OPTION_ERROR:
-      printUsage();
-      os << "More info with \"" << executable_name << " --help\"\n";
-      return {SolverInstance::ERROR, ""};
-    case OPTION_OK:
-      break;
-  }
-
-  flatten(file, file);
 
   if (!ifMzn2Fzn() && flag_overall_time_limit != 0) {
     steady_clock::time_point afterFlattening = steady_clock::now();
@@ -776,65 +782,48 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
 
   if (SolverInstance::UNKNOWN == getFltStatus())
   {
-    if ( !ifMzn2Fzn() ) {          // only then
+    if (!si) {          // only then
       // GCLock lock;                  // better locally, to enable cleanup after ProcessFlt()
       addSolverInterface();
-      Definition* head = interpreter->_agg[0].def_stack;
-      Definition* d = head->next(); //ignore dummy head
-      while (d != head) {
-        if (interpreter->_procs[d->pred()].name == "output_this") {
-          output = d;
-          d = d->next();
-          continue;
-        }
-        if (d->defs()) {
-          Definition::addToSolver(interpreter, d->defs(), interpreter->_procs, si);
-        }
-        si->addDefinition(interpreter->_procs, d);
-        d = d->next();
-      }
-      return solve();
     }
-    return {SolverInstance::NONE, ""};
+    addDefinitions();
+    return solve();
   } else {
     return {getFltStatus(), printSolution(getFltStatus())};
   }                                   //  Add evalOutput() here?   TODO
 }
 
-void MznSolver::pushToSolver() {
-    assert(interpreter->trail.len() > 0);
-
-    if(auto rsi = dynamic_cast<RestartableSolverInstance*>(si)) {
-      rsi->restart();
-      if(auto tsi = dynamic_cast<TrailableSolverInstance*>(si)) {
-        assert(interpreter->trail.len() == tsi->states() + 1);
-        tsi->pushState();
-      }
-      Definition* back = interpreter->_agg[0].def_stack->prev();
-      Definition* guard = interpreter->trail.end_trail.back();
-      while (back != guard) {
-        if (back->defs()) {
-          Definition::addToSolver(interpreter, back->defs(), interpreter->_procs, si);
-        }
-        si->addDefinition(interpreter->_procs, back);
-        back = back->prev();
-      }
-
-      size_t ht_size, ot_size, at_size, dt_size;
-      std::tie(ht_size, ot_size, at_size, dt_size) = interpreter->trail.trail_size.back();
-      // Find changed domains
-      for (int i = interpreter->trail.domain_trail.size(); i > dt_size; --i) {
-        Definition* def = std::get<0>(interpreter->trail.domain_trail.back());
-
-        Val dom = def->domain();
-
-        // TODO: Domain updates
-      }
-    } else {
-      delete si;
-      // si = sf->createSI()
-      Definition::addToSolver(interpreter, interpreter->_agg.back().def_stack, interpreter->_procs, si);
+void MznSolver::addDefinitions() {
+  Definition* head = interpreter->_agg[0].def_stack;
+  if (def_ptr->next() == head) {
+    return;
+  }
+  do {
+    def_ptr = def_ptr->next();
+    if (interpreter->_procs[def_ptr->pred()].name == "output_this") {
+      output = def_ptr;
+      continue;
     }
+    if (def_ptr->defs()) {
+      Definition::addToSolver(interpreter, def_ptr->defs(), interpreter->_procs, si);
+    }
+    si->addDefinition(interpreter->_procs, def_ptr);
+  } while(def_ptr->next() != head);
+  // TODO: Domain Changes
+}
+
+void MznSolver::pushToSolver() {
+  assert(interpreter->trail.len() > 0);
+
+  if(auto tsi = dynamic_cast<TrailableSolverInstance*>(si)) {
+    assert(interpreter->trail.len() == tsi->states() + 1);
+    tsi->restart();
+    addDefinitions();
+    tsi->pushState();
+  } else {
+    assert(false);
+  }
+
 }
 
 void MznSolver::popFromSolver() {
@@ -842,7 +831,11 @@ void MznSolver::popFromSolver() {
     assert(interpreter->trail.len() == tsi->states() - 1);
     tsi->restart();
     tsi->popState();
+
+    Definition* head = interpreter->_agg[0].def_stack;
+    def_ptr = head->prev();
   } else {
+    assert(false);
     delete si;
     si = nullptr;
     // TODO: do we need to reconstruct the model here or can we trust there is a push before solving

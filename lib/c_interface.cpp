@@ -29,9 +29,25 @@ MZNInstance minizinc_instance_init(const char* mza_file, const char* solver){
   return reinterpret_cast<MZNInstance>(inst);
 }
 
-void minizinc_add_call(MZNInstance _inst, int call) {
+void minizinc_instance_destroy(MZNInstance _inst) {
   auto inst = reinterpret_cast<Instance*>(_inst);
-  inst->slv.interpreter->call(call, BytecodeProc::ROOT, {});
+  delete inst;
+}
+
+void minizinc_add_call(MZNInstance _inst, const char* call, ...) {
+  auto inst = reinterpret_cast<Instance*>(_inst);
+  auto it = inst->slv.resolve_call.find(call);
+  assert(it != inst->slv.resolve_call.end());
+
+  std::vector<Val> args;
+  va_list my_args;
+  va_start(my_args, call);
+  for (int i = 0; i < it->second.second; ++i) {
+    int num = va_arg(my_args, int);
+    args.push_back(Val(num));
+  }
+
+  inst->slv.interpreter->call(it->second.first, BytecodeProc::ROOT, args);
 }
 
 void minizinc_push_state(MZNInstance _inst) {

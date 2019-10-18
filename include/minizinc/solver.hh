@@ -129,10 +129,12 @@ namespace MiniZinc {
     std::ostream& os;
     std::ostream& log;
     SolverInstance::Status interpreter_status = SolverInstance::UNKNOWN;
-
+    Definition* def_ptr = nullptr;
   public:
     Interpreter* interpreter = nullptr;
     Solns2Out s2out;
+    // name -> <code, nargs>
+    std::unordered_map<std::string, std::pair<int, int>> resolve_call;
     
     /// global options
     bool flag_verbose=false;
@@ -159,6 +161,7 @@ namespace MiniZinc {
     std::pair<SolverInstance::Status, std::string> solve();
 
   private:
+    void addDefinitions();
     void printHelp(const std::string& selectedSolver=std::string());
     /// Flatten model
     void flatten(const std::string& filename = std::string(), const std::string& modelName = std::string("stdin"));
