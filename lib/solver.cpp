@@ -150,8 +150,8 @@ void SolverFactory::destroySI(SolverInstanceBase * pSI) {
   sistorage.erase(it);
 }
 
-MznSolver::MznSolver(std::ostream& os0, std::ostream& log0)
-  : solver_configs(log0), executable_name("<executable>"), os(os0), log(log0), s2out(os0,log0,solver_configs.mznlibDir()) {}
+MznSolver::MznSolver(const std::string& file, const std::string& solver)
+  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()), file(file), solver_str(solver) {}
 
 MznSolver::~MznSolver()
 {
@@ -398,10 +398,10 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
     solver = "org.minizinc.mzn-fzn";
   }
   
-  if (flag_verbose) {
-    argv.push_back("--verbose-solving");
-    argc++;
-  }
+//  if (flag_verbose) {
+//    argv.push_back("--verbose-solving");
+//    argc++;
+//  }
   if (flag_statistics) {
     argv.push_back("--solver-statistics");
     argc++;
@@ -663,15 +663,15 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     log << "  Flattening done, " << tm01.stoptime() << std::endl;
 }
 
-SolverInstance::Status MznSolver::solve()
+std::pair<SolverInstance::Status, std::string> MznSolver::solve()
 {
   SolverInstance::Status status = getSI()->solve();
-  printSolution(status);
+  std::string sol = printSolution(status);
   if (si_opt->printStatistics)
       getSI()->printStatistics();
   if (flag_statistics)
     getSI()->getSolns2Out()->printStatistics(log);
-  return status;
+  return {status, sol};
 }
 
 void MznSolver::printStatistics()
@@ -680,77 +680,81 @@ void MznSolver::printStatistics()
     getSI()->printStatistics();
 }
 
-void MznSolver::printSolution(SolverInstance::Status s)
+std::string MznSolver::printSolution(SolverInstance::Status s)
 {
+  std::stringstream ss;
   switch(s) {
   case SolverInstance::SAT:
   case SolverInstance::OPT:
     {
       if (output) {
         Val vec = output->arg(0);
-        std::cout << "[";
+        ss << "[";
         for (int i = 0; i < vec.size(); ++i) {
           if (i > 0) {
-            std::cout << ", ";
+            ss << ", ";
           }
           if (vec[i].isDef()) {
-            std::cout << si->getSolutionValue(vec[i].toDef()).toString();
+            ss << si->getSolutionValue(vec[i].toDef()).toString();
           } else {
-            std::cout << vec[i].toString();
+            ss << vec[i].toString();
           }
         }
-        std::cout << "]" << endl;
+        ss << "]" << endl;
       } else {
         Definition* head = interpreter->_agg[0].def_stack;
         Definition* d = head->next(); //ignore dummy head
+        bool first = true;
+        ss << "{" << std::endl;
         while (d != head) {
           int timestamp = d->timestamp();
           if (timestamp >= 0) {
-            std::cout << timestamp << " = ";
-            std::cout << si->getSolutionValue(d).toString();
-            std::cout << std::endl;
+            if (!first) {
+              ss << "," << std::endl;
+            }
+            ss << "    \"" << timestamp << "\"" << ": ";
+            ss << si->getSolutionValue(d).toString();
+            first = false;
           }
           d = d->next();
         }
-      }
-      std::cout << "----------" << std::endl;
-      if ( s == SolverInstance::OPT) {
-        std::cout << "==========" << std::endl;
+        ss << std::endl << "}";
       }
     }
     break;
   case SolverInstance::UNSAT:
-    std::cout << "=====UNSATISFIABLE=====" << std::endl;
+    ss << "=====UNSATISFIABLE=====" << std::endl;
     break;
   case SolverInstance::UNKNOWN:
-    std::cout << "=====UNKNOWN=====" << std::endl;
+    ss << "=====UNKNOWN=====" << std::endl;
     break;
   case SolverInstance::ERROR:
   default:
-    std::cout << "=====ERROR=====" << std::endl;
+    ss << "=====ERROR=====" << std::endl;
     break;
   }
+  return ss.str();
 }
 
-SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, const std::string& filename,
-                                      const std::string& exeName, const std::string& modelName) {
+std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   using namespace std::chrono;
   steady_clock::time_point startTime = steady_clock::now();
-  std::vector<std::string> args = {exeName};
-  for (auto a : args0)
-    args.push_back(a);
+  std::vector<std::string> args = {executable_name, "--solver", solver_str};
+  if (flag_verbose) {
+    args.emplace_back("--verbose-compilation");
+  }
   switch (processOptions(args)) {
     case OPTION_FINISH:
-      return SolverInstance::NONE;
+      return {SolverInstance::NONE, ""};
     case OPTION_ERROR:
       printUsage();
-      os << "More info with \"" << exeName << " --help\"\n";
-      return SolverInstance::ERROR;
+      os << "More info with \"" << executable_name << " --help\"\n";
+      return {SolverInstance::ERROR, ""};
     case OPTION_OK:
       break;
   }
 
-  flatten(filename, modelName);
+  flatten(file, file);
 
   if (!ifMzn2Fzn() && flag_overall_time_limit != 0) {
     steady_clock::time_point afterFlattening = steady_clock::now();
@@ -758,7 +762,7 @@ SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, con
     milliseconds time_limit(flag_overall_time_limit);
     if (passed > time_limit) {
       s2out.evalStatus( getFltStatus() );
-      return SolverInstance::UNKNOWN;
+      return {SolverInstance::UNKNOWN, ""};
     }
     int time_left = (time_limit-passed).count();
     std::vector<std::string> timeoutArgs(2);
@@ -791,10 +795,9 @@ SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, con
       }
       return solve();
     }
-    return SolverInstance::NONE;
+    return {SolverInstance::NONE, ""};
   } else {
-    printSolution(getFltStatus());
-    return getFltStatus();
+    return {getFltStatus(), printSolution(getFltStatus())};
   }                                   //  Add evalOutput() here?   TODO
 }
 

@@ -116,7 +116,6 @@ namespace MiniZinc {
     enum OptionStatus { OPTION_OK, OPTION_ERROR, OPTION_FINISH };
     /// Solver configurations
     SolverConfigs solver_configs;
-    Interpreter* interpreter = nullptr;
     Definition* output = nullptr;
     std::vector<BytecodeProc> bs;
     SolverInstanceBase* si=0;
@@ -125,11 +124,14 @@ namespace MiniZinc {
     bool is_mzn2fzn=0;
 
     std::string executable_name;
+    std::string file;
+    std::string solver_str;
     std::ostream& os;
     std::ostream& log;
     SolverInstance::Status interpreter_status = SolverInstance::UNKNOWN;
 
   public:
+    Interpreter* interpreter = nullptr;
     Solns2Out s2out;
     
     /// global options
@@ -141,22 +143,20 @@ namespace MiniZinc {
     int flag_overall_time_limit=0;
 
   public:
-    MznSolver(std::ostream& os = std::cout, std::ostream& log = std::cerr);
+    MznSolver(const std::string& file, const std::string& solver);
     ~MznSolver();
     
-    SolverInstance::Status run(const std::vector<std::string>& args, const std::string& filename = std::string(),
-                               const std::string& exeName = std::string("minizinc"),
-                               const std::string& modelName = std::string("stdin"));
+    std::pair<SolverInstance::Status, std::string> run();
     OptionStatus processOptions(std::vector<std::string>& argv);
     SolverFactory* getSF() { assert(sf); return sf; }
     SolverInstanceBase::Options* getSI_OPT() { assert(si_opt); return si_opt; }
     bool get_flag_verbose() { return flag_verbose; /*getFlt()->get_flag_verbose();*/ }
     void printUsage();
-    void printSolution(SolverInstance::Status);
+    std::string printSolution(SolverInstance::Status);
 
     void pushToSolver();
     void popFromSolver();
-    SolverInstance::Status solve();
+    std::pair<SolverInstance::Status, std::string> solve();
 
   private:
     void printHelp(const std::string& selectedSolver=std::string());

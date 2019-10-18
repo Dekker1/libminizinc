@@ -49,13 +49,13 @@ int main(int argc, const char** argv) {
   }
 
   try {
-    MznSolver slv(std::cout,std::cerr);
-    std::vector<std::string> args = {"--solver", "chuffed"};
+    MznSolver slv(filename, "geas");
     if (verbose) {
-      args.emplace_back("--verbose-compilation");
+      slv.flag_verbose = true;
     }
-    bool fSuccess = (slv.run(args, filename) != SolverInstance::ERROR);
-    while (fSuccess) {
+    auto result = slv.run();
+    while (result.first != SolverInstance::ERROR) {
+      std::cout << result.second;
       //Do incremental things
       // interpreter.trail.save_state(&interpreter);
       // interpreter.call(24, BytecodeProc::ROOT, {});
@@ -65,7 +65,7 @@ int main(int argc, const char** argv) {
       // slv.popFromSolver(interpreter);
       // slv.solve();
 
-      fSuccess = false;
+      break;
     }
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";

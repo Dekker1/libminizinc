@@ -95,6 +95,7 @@ include_directories(${PROJECT_BINARY_DIR}/include)
 
 # Libraries
 include(cmake/targets/libmzn.cmake)
+include(cmake/targets/libmza.cmake)
 
 # Executables
 include(cmake/targets/minizinc.cmake)

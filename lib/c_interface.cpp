@@ -1,0 +1,81 @@
+/* -*- mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*- */
+
+/*
+ *  Main authors:
+ *     Jip J. Dekker <jip.dekker@monash.edu>
+ */
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include <minizinc/c_interface.h>
+#include <minizinc/solver.hh>
+
+#include <iostream>
+
+using namespace MiniZinc;
+
+class Instance{
+public:
+  Instance(std::string file, std::string solver) : slv(file, solver) {};
+
+  MznSolver slv;
+  std::string result;
+};
+
+MZNInstance minizinc_instance_init(const char* mza_file, const char* solver){
+  auto inst = new Instance(mza_file, solver);
+  return reinterpret_cast<MZNInstance>(inst);
+}
+
+void minizinc_add_call(MZNInstance _inst, int call) {
+  auto inst = reinterpret_cast<Instance*>(_inst);
+  inst->slv.interpreter->call(call, BytecodeProc::ROOT, {});
+}
+
+void minizinc_push_state(MZNInstance _inst) {
+  auto inst = reinterpret_cast<Instance*>(_inst);
+  inst->slv.interpreter->trail.save_state(inst->slv.interpreter);
+  inst->slv.pushToSolver();
+}
+void minizinc_pop_state(MZNInstance _inst) {
+  auto inst = reinterpret_cast<Instance*>(_inst);
+  inst->slv.interpreter->trail.untrail(inst->slv.interpreter);
+  inst->slv.popFromSolver();
+}
+
+std::string status_to_string(SolverInstance::Status s) {
+  switch (s) {
+    case SolverInstance::OPT:
+      return "OPT";
+    case SolverInstance::SAT:
+      return "SAT";
+    case SolverInstance::UNSAT:
+      return "UNSAT";
+    case SolverInstance::UNBND:
+      return "UNBND";
+    case SolverInstance::UNSATorUNBND:
+      return "UNSATorUNBND";
+    case SolverInstance::UNKNOWN:
+      return "UNKOWN";
+    case SolverInstance::ERROR:
+      return "ERROR";
+    case SolverInstance::NONE:
+      return "NONE";
+  }
+}
+
+const char* minizinc_solve(MZNInstance _inst) {
+  auto inst = reinterpret_cast<Instance*>(_inst);
+  auto result = inst->slv.run();
+
+  std::stringstream ss;
+  ss << "{";
+  ss <<"\"status\": \"" << status_to_string(result.first) << "\",";
+  ss <<"\"solution\": " << result.second;
+  ss << "}";
+
+  inst->result = ss.str();
+  return inst->result.c_str();
+}
