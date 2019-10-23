@@ -1,13 +1,17 @@
 import contextlib
 import json
+import sys
 from ctypes.util import find_library
 
 import cffi
 
 DEBUG = False
+
+
 def debugprint(*args):
     if DEBUG:
-        print(*args)
+        print(*args, file=sys.stderr, flush=True)
+
 
 ffi = cffi.FFI()
 ffi.cdef(
@@ -29,9 +33,12 @@ ffi.cdef(
 # Set LD_LIBRARY_PATH (DYLD_LIBRARY_PATH on macOS) to the folder containing the mza library.
 lib = ffi.dlopen("mza")
 
+
 class Instance:
     def __init__(self, mza_file, solver):
-        debugprint(f"MZNInstance inst = minizinc_instance_init(\"{mza_file}\", \"{solver}\");")
+        debugprint(
+            f'MZNInstance inst = minizinc_instance_init("{mza_file}", "{solver}");'
+        )
         self._ptr = lib.minizinc_instance_init(mza_file.encode(), solver.encode())
 
     def __del__(self):
@@ -50,7 +57,9 @@ class Instance:
             lib.minizinc_pop_state(self._ptr)
 
     def add_call(self, call: str, *args):
-        debugprint(f"minizinc_add_call(inst, \"{call}\"{''.join([', '+ str(i) for i in args])});")
+        debugprint(
+            f"minizinc_add_call(inst, \"{call}\"{''.join([', '+ str(i) for i in args])});"
+        )
         lib.minizinc_add_call(
             self._ptr, call.encode(), *[ffi.cast("int", i) for i in args]
         )
