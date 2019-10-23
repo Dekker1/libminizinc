@@ -2397,8 +2397,8 @@ namespace MiniZinc {
   }
 
   void GecodeSolverInstance::pushState() {
-    FznSpace* clone = static_cast<FznSpace*>(_current_space->clone());
-    stack.push_back(clone);
+    stack.push_back(_current_space);
+    _current_space = static_cast<FznSpace*>(_current_space->clone());
   }
 
   void GecodeSolverInstance::popState() {
