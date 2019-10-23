@@ -2094,7 +2094,6 @@ namespace MiniZinc {
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
     trail_size.emplace_back(hedge_trail.size(), obj_trail.size(), alias_trail.size(), domain_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
-    end_trail.push_back(interpreter->_agg[0].def_stack->prev());
     for (auto &table : interpreter->cse) {
       table.push(interpreter, !last_operation_pop);
     }
@@ -2108,8 +2107,8 @@ namespace MiniZinc {
     size_t ht_size, ot_size, at_size, dt_size;
     std::tie(ht_size, ot_size, at_size, dt_size) = trail_size.back(); trail_size.pop_back();
     int timestamp = timestamp_trail.back(); timestamp_trail.pop_back();
-    Definition* guard = end_trail.back(); end_trail.pop_back();
-    Definition* back = interpreter->_agg[0].def_stack->prev(); // Ignore empty object;
+    Definition* stack = interpreter->_agg[0].def_stack; // Stack head (empty object)
+    Definition* back = stack->prev(); // Current last element on the stack;
     assert(back->pred() != 0);
     // Reconstruct destroyed items
     while(obj_trail.size() > ot_size) {
@@ -2158,11 +2157,13 @@ namespace MiniZinc {
       table.pop(interpreter);
     }
     // Remove all newly created definitions
-    while (back->next() != back) {
-      Definition* rem = back;
-      back = back->prev();
-      rem->destroy(interpreter);
-      free(rem);
+    if (stack->prev() != back) {  // If last element on the stack changed
+      do {
+        Definition* rem = back;
+        back = back->prev();
+        rem->destroy(interpreter);
+        free(rem);
+      } while (back->next() != back);
     }
     // TODO: Should we remove newly created propagators??
     // Reset the timestamp count to its previous value

@@ -837,8 +837,6 @@ namespace MiniZinc {
     // <Hedge trail size, Obj trail size, Alias trail size, Domain trail size>
     std::vector<std::tuple<size_t, size_t, size_t, size_t>> trail_size;
     std::vector<int> timestamp_trail;
-    // Trail for the last item in the hedge
-    std::vector<Definition*> end_trail;
     bool last_operation_pop = false;
   public:
     Trail() = default;
