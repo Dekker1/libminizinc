@@ -145,7 +145,7 @@ namespace MiniZinc {
     int flag_overall_time_limit=0;
 
   public:
-    MznSolver(const std::string& file, const std::string& solver);
+    MznSolver(const std::string& file, const std::string& solver, bool verbose = false);
     ~MznSolver();
     
     std::pair<SolverInstance::Status, std::string> run();

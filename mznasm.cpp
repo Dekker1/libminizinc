@@ -49,10 +49,7 @@ int main(int argc, const char** argv) {
   }
 
   try {
-    MznSolver slv(filename, "geas");
-    if (verbose) {
-      slv.flag_verbose = true;
-    }
+    MznSolver slv(filename, "gecode", verbose);
     auto result = slv.run();
     while (result.first != SolverInstance::ERROR) {
       std::cout << result.second;

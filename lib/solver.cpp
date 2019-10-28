@@ -150,8 +150,8 @@ void SolverFactory::destroySI(SolverInstanceBase * pSI) {
   sistorage.erase(it);
 }
 
-MznSolver::MznSolver(const std::string& file, const std::string& solver)
-  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()), file(file), solver_str(solver) {
+MznSolver::MznSolver(const std::string& file, const std::string& solver, bool verbose)
+  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()), file(file), solver_str(solver), flag_verbose(verbose) {
   std::vector<std::string> args = {executable_name, "--solver", solver_str};
   if (flag_verbose) {
     args.emplace_back("--verbose-compilation");
