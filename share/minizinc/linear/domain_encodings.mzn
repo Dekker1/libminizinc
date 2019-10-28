@@ -18,10 +18,10 @@ predicate equality_encoding(var int: x, array[int] of var int: x_eq_d) =
     else true endif
     ;
 
-function set of int: comb_index_set(set of int: a, set of int: b) = 1..card(a)*card(b);
+function set of int: comb_index_set(set of int: a, set of int: b) = 1..length(a)*length(b);
 
 function int: get_index(set of int: a, set of int: b, int: ai, int: bi)
-  = ((ai - min(a)) * card(a)) + bi - min(b) + 1;
+  = ((ai - min(a)) * length(a)) + bi - min(b) + 1;
 
     % Two variables:  x = d /\ y = e  <->  x_eq_d[d] /\ y_eq_e[e] /\ xy_eq_de[d, e]
 predicate equality_encoding(var int: x, var int: y,
