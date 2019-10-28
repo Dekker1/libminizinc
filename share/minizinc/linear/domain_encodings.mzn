@@ -18,21 +18,25 @@ predicate equality_encoding(var int: x, array[int] of var int: x_eq_d) =
     else true endif
     ;
 
+function set of int: comb_index_set(set of int: a, set of int: b) = 1..card(a)*card(b);
+
+function int: get_index(set of int: a, set of int: b, int: ai, int: bi)
+  = ((ai - min(a)) * card(a)) + bi - min(b) + 1;
+
     % Two variables:  x = d /\ y = e  <->  x_eq_d[d] /\ y_eq_e[e] /\ xy_eq_de[d, e]
 predicate equality_encoding(var int: x, var int: y,
       array[int] of var int: x_eq_d,
       array[int] of var int: y_eq_e,
-      array[int, int] of var int: xy_eq_de
+      array[int] of var int: xy_eq_de
       ) =
     x in index_set(x_eq_d) /\
     y in index_set(y_eq_e) /\
-    index_set(x_eq_d) == index_set_1of2(xy_eq_de) /\
-    index_set(y_eq_e) == index_set_2of2(xy_eq_de) /\
-    sum(d in dom(x), e in dom(y))( xy_eq_de[d, e] ) = 1
+    comb_index_set(index_set(x_eq_d), index_set(y_eq_e)) == index_set(xy_eq_de) /\
+    sum(d in dom(x), e in dom(y))( xy_eq_de[get_index(index_set(x_eq_d), index_set(y_eq_e), d, e)] ) = 1
     /\
-    forall(d in dom(x)) (sum(e in dom(y))( xy_eq_de[d, e] ) = x_eq_d[d])
+    forall(d in dom(x)) (sum(e in dom(y))( get_index(index_set(x_eq_d), index_set(y_eq_e), d, e) ) = x_eq_d[d])
     /\
-    forall(e in dom(y)) (sum(d in dom(x))( xy_eq_de[d, e] ) = y_eq_e[e])
+    forall(e in dom(y)) (sum(d in dom(x))( get_index(index_set(x_eq_d), index_set(y_eq_e), d, e) ) = y_eq_e[e])
     ;
 
     % Array of variables:  x[i] = d  <->  x_eq_d[i,d]
@@ -75,37 +79,33 @@ function var int: eq_new_var(var int: x, int: i, var int: y, int: j) ::promise_t
   } in xi
   else 0 endif;
 
-function array[int, int] of var int: eq_encode(var int: x, var int: y) ::promise_total =
+function array[int] of var int: eq_encode(var int: x, var int: y) ::promise_total =
   let {
     array[int] of var int: pX = eq_encode(x),
     array[int] of var int: pY = eq_encode(y),
-    array[int, int] of var int: pp = array2d(index_set(pX), index_set(pY),
-      [eq_new_var(x,i,y,j) | i in index_set(pX), j in index_set(pY)]);
+    array[int] of var int: pp = [eq_new_var(x,i,y,j) | i in index_set(pX), j in index_set(pY)];
     constraint equality_encoding(x, y, pX, pY, pp);
   } in pp;
 
-function array[int, int] of int: eq_encode(int: x, int: y) ::promise_total =
+function array[int] of int: eq_encode(int: x, int: y) ::promise_total =
 %  let {
 %    constraint       if card(dom(x))*card(dom(y))>200 then
 %      my_trace("  eq_encode: dom(\(x)) = " ++ show(dom(x)) ++ ", dom(\(y)) = " ++ show(dom(y)) ++ "\n")
 %      else true endif;
 %  } in
-    array2d(lb(x)..ub(x), lb(y)..ub(y),
-      [if i==x /\ j==y then 1 else 0 endif | i in lb(x)..ub(x), j in lb(y)..ub(y)]);
+  [if i==x /\ j==y then 1 else 0 endif | i in lb(x)..ub(x), j in lb(y)..ub(y)];
 
-function array[int,int] of var int: eq_encode(array[int] of var int: x) ::promise_total =
+function array[int] of var int: eq_encode(array[int] of var int: x) ::promise_total =
   let {
-    array[index_set(x),lb_array(x)..ub_array(x)] of var int: y =
-      array2d(index_set(x),lb_array(x)..ub_array(x),
+    array[comb_index_set(index_set(x),lb_array(x)..ub_array(x))] of var int: y =
       [ let {
           array[int] of var int: xi = eq_encode(x[i])
         } in if j in index_set(xi) then xi[j] else 0 endif
         | i in index_set(x), j in lb_array(x)..ub_array(x)]
-      )
   } in y;
 
-function array[int,int] of int: eq_encode(array[int] of int: x) ::promise_total =
-  array2d(index_set(x),lb_array(x)..ub_array(x),[ if j=x[i] then 1 else 0 endif | i in index_set(x), j in lb_array(x)..ub_array(x)]);
+function array[int] of int: eq_encode(array[int] of int: x) ::promise_total =
+  array1d(comb_index_set(index_set(x),lb_array(x)..ub_array(x)),[ if j=x[i] then 1 else 0 endif | i in index_set(x), j in lb_array(x)..ub_array(x)]);
 
 %-----------------------------------------------------------------------------%
 %-----------------------------------------------------------------------------%

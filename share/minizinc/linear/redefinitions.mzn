@@ -234,14 +234,15 @@ predicate int_times_unary(var int: x, set of int: domx__, var int: y, var int: z
   let {
     set of int: r = {lb(x)*lb(y), lb(x)*ub(y), ub(x)*lb(y), ub(x)*ub(y)},
     %% set of int: domx = if card(domx__)>0 then domx__ else dom(x) endif,
-    array[int, int] of var int: pp=eq_encode(x, y)
+    array[int] of var int: pp=eq_encode(x, y)
   } in
+    assert(index_set(pp) == comb_index_set(lb(x)..ub(x), lb(y)..ub(y)), "Index sets do not match up") /\
     z>=min(r) /\ z<=max(r) /\
-    z==sum(i in index_set_1of2(pp), j in index_set_2of2(pp))
-         (i * j * pp[i, j]) /\
-    forall(i in index_set_1of2(pp), j in index_set_2of2(pp)
+    z==sum(i in lb(x)..ub(x), j in lb(y)..ub(y))
+         (i * j * pp[get_index(lb(x)..ub(x), lb(y)..ub(y), i, j)]) /\
+    forall(i in lb(x)..ub(x), j in lb(y)..ub(y)
       where not ((i*j) in dom(z))
-    )(pp[i, j]==0)
+    )(pp[get_index(lb(x)..ub(x), lb(y)..ub(y), i, j)]==0)
   ;
 
 
