@@ -5,7 +5,7 @@ include "redefs_lin_halfreifs.mzn";
 
 predicate bool_eq_imp(var bool: x, var bool: y, var bool: z) =
   if is_fixed(z) then
-    if fix(z) then p = q else true endif
+    if fix(z) then x = y else true endif
   else
     x + z <= y + 1 /\ y + z <= x + 1
   endif;
@@ -50,7 +50,7 @@ predicate array_bool_and_imp(array[int] of var bool: a, var bool: b) =
   elseif forall( i in index_set( a ) )( is_fixed(a[i]) /\ fix(a[i]) ) then
     true
   else
-    forall(i in index_set(c)) ( a[i] >= b )
+    forall(i in index_set(a)) ( a[i] >= b )
   endif;
 
 %% No var int d, sorry TODO: why not???

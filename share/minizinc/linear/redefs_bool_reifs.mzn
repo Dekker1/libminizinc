@@ -17,10 +17,10 @@ predicate bool_not(var bool: p, var bool: q) =
   bool_xor(p, q);
 
 predicate bool_and(var bool: p, var bool: q, var bool: r) =
-  array_bool_and( [p, q], r )
+  array_bool_and([p, q], r);
 
 predicate bool_or(var bool: p, var bool: q, var bool: r) =
-  array_bool_or( [p, q], r )
+  array_bool_or([p, q], r);
 
 predicate bool_xor(var bool: p, var bool: q) =
   p + q = 1;
@@ -29,7 +29,7 @@ predicate bool_xor(var bool: x, var bool: y, var bool: z) =
   x <= y + z /\
   y <= x + z /\
   z <= x + y /\
-  x + y + z <= 2
+  x + y + z <= 2;
 
 predicate bool_eq_reif(var bool: p, var bool: q, var bool: r) =
 %%    trace(" bool_eq_reif: \(p), \(q), \(r) \n") /\
@@ -52,11 +52,11 @@ predicate bool_ne_reif(var bool: p, var bool: q, var bool: r) =
   bool_xor(p, q, r);
 
 predicate bool_le(var bool: p, var bool: q) =
-    p <= q;
+  p <= q;
 
 predicate bool_le_reif(var bool: x, var bool: y, var bool: z) =
   1 - x + y >= z /\
-  1 - x <= z /\ y <= z % strong
+  1 - x <= z /\ y <= z; % strong
   %% /\ 1 - x + y <= z * 2      not needed
 
 predicate bool_lt(var bool: p, var bool: q) =

@@ -1,5 +1,5 @@
 predicate bool_clause_reif(array[int] of var bool: p, array[int] of var bool: n, var bool: c) =
-  c = sum(p) - sum(n) + length(n) >= 1;
+  c = (sum(p) - sum(n) + length(n) >= 1);
 
 predicate array_float_minimum(var float: m, array[int] of var float: x) =
   if false then
