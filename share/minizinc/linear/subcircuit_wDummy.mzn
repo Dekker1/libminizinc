@@ -55,7 +55,7 @@ predicate subcircuit_wDummy(array[int] of var int: x) =
       %%% MTZ model. Note that INTEGER order vars seem better!:
     forall( i in S__, j in dom(x[i]) where i!=j /\ j!=u )(
         order[i] - order[j] + (n-1)*eq_encode(x[i])[j]
-  %      + (n-3)*bool2int(x[j]==i)     %% the Desrochers & Laporte '91 term
+  %      + (n-3) * (x[j]==i)     %% the Desrochers & Laporte '91 term
   %  --- strangely enough it is much worse on vrp-s2-v2-c7_vrp-v2-c7_det_ADAPT_1_INVERSE.mzn!
         <= n-2 ) /\
 

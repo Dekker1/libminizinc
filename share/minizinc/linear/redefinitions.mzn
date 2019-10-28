@@ -7,24 +7,6 @@
 %   cf. Belov, Stuckey, Tack, Wallace. Improved Linearization of Constraint Programming Models. CP 2016.
 */
 
-%----------------------------- BOOL2INT --------------------------------%
-function var bool: reverse_map(var int: x) = (x==1);
-function bool: reverse_map(int: x) = (x==1);
-
-predicate mzn_reverse_map_var(var bool: b) = let {
-  var int: x = bool2int(b)
-} in true;
-
-function var int: bool2int(var bool: x) :: promise_total =
- let { var 0..1: b2i;
-       constraint (x = reverse_map(b2i)) ::is_reverse_map ;
-      } in 
-      b2i;
-
-predicate bool_eq(var bool: x, var bool: y) =
-%%  trace(" bool_eq: \(x), \(y) \n") /\
-  bool2int(x)==bool2int(y);
-
 %---------------------------- BASIC (HALF)REIFS -----------------------------%
 
 include "options.mzn";
@@ -318,11 +300,11 @@ predicate int_pow_float( var int: x, var int: y, var float: r ) =
 % Array 'element' constraints
 
 predicate array_bool_element(var int: x, array[int] of bool: a, var bool: z) =
-    array_int_element(x, arrayXd(a, [bool2int(a[i]) | i in index_set(a)]), bool2int(z));
+    array_int_element(x, a, z);
 
 predicate array_var_bool_element(var int: x, array[int] of var bool: a,
                                  var bool: z) =
-    array_var_int_element(x, arrayXd(a, [bool2int(a[i]) | i in index_set(a)]), bool2int(z));
+    array_var_int_element(x, a, z);
 
 predicate array_int_element(var int: x, array[int] of int: a, var int: z) =
     let {
@@ -520,9 +502,9 @@ predicate set_in_reif(var int: x, set of int: s__, var bool: b) =
               let {
                 array[int] of var int: p = eq_encode(x);
               } in
-                sum(i in s intersect dom(x))(p[i]) == bool2int(b)
+                sum(i in s intersect dom(x))(p[i]) == b
             else
-              bool2int(b) == fVarInBigSetOfInt(x, s)
+              b == fVarInBigSetOfInt(x, s)
             endif
         endif
     )
@@ -558,9 +540,9 @@ predicate set_in_imp(var int: x, set of int: s__, var bool: b) =
               let {
                 array[int] of var int: p = eq_encode(x);
               } in
-                sum(i in s intersect dom(x))(p[i]) >= bool2int(b)
+                sum(i in s intersect dom(x))(p[i]) >= b
             else
-              bool2int(b) <= fVarInBigSetOfInt(x, s)
+              b <= fVarInBigSetOfInt(x, s)
             endif
         endif
     )
@@ -572,18 +554,18 @@ function var 0..1: fVarInBigSetOfInt(var int: x, set of int: s)
     array[int] of int: sR = [ e | e in s where not (e + 1 in s) ];
     constraint assert(length(sR)==length(sL), "N of lb and ub of sub-intervals of a set should be equal");
   } in
-    sum(i in index_set(sL)) (bool2int(x>=sL[i] /\ x<=sR[i]));      %% use indicators
+    sum(i in index_set(sL)) (x>=sL[i] /\ x<=sR[i]);      %% use indicators
         
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% OTHER SET STUFF COMING FROM nosets.mzn %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %-----------------------------------------------------------------------------%
 %-----------------------------------------------------------------------------%
 
 annotation bool_search(array[$X] of var bool: x, ann:a1, ann:a2, ann:a3) =
-  let { array[int] of var bool: xx = array1d(x) } in 
-  int_search([bool2int(xx[i]) | i in index_set(xx)],a1,a2,a3);
+  let { array[int] of var bool: xx = array1d(x) } in
+  int_search([xx[i] | i in index_set(xx)],a1,a2,a3);
 
 annotation warm_start( array[int] of var bool: x, array[int] of bool: v ) =
-   warm_start( [ bool2int(x[i]) | i in index_set(x) ], [ bool2int(v[i]) | i in index_set(v) ] );
+ warm_start( [ x[i] | i in index_set(x) ], [ v[i] | i in index_set(v) ] );
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DOMAIN POSTPROCESSING BUILT-INS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

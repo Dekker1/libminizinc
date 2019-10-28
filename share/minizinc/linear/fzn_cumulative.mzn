@@ -70,9 +70,9 @@ in
   forall( t in times ) ( 
     b >= sum( i in tasks ) ( 
       if is_fixed(d[i]) then
-        bool2int( s[i] in t-fix(d[i])+1..t )
+        s[i] in t-fix(d[i])+1..t
       else 
-        bool2int( s[i] <= t /\ t < s[i] + d[i] )
+        s[i] <= t /\ t < s[i] + d[i]
       endif
       * r[i] 
     ) 
@@ -93,5 +93,5 @@ in
         /\ lb(s[i])<=ub(s[j]) /\ lb(s[j])<ub(s[i]+d[i])   %% -- seems slower on mspsp ???
                  ) (
       r[i] *                                              %% r[i] *  !
-          bool2int( s[i] <= s[j] /\ s[j] < s[i]+d[i] )) )
+          ( s[i] <= s[j] /\ s[j] < s[i]+d[i] )) )
   ;
