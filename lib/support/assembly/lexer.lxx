@@ -27,7 +27,7 @@ using namespace MiniZinc;
 
 [ \t\n]     { /* ignore white space */ }
 %[^\xa]*    { /* ignore comments */ }
-[0-9]+      { mza_yylval.iValue = std::atoi(mza_yytext); return MZA_INT; }
+"-"?[0-9]+      { mza_yylval.iValue = std::atoi(mza_yytext); return MZA_INT; }
 [Rr][0-9]+  { mza_yylval.iValue = std::atoi(mza_yytext+1); return MZA_REG; }
 ":"         { return MZA_COLON; }
 [dD]        { return MZA_DELAY; }
