@@ -253,38 +253,38 @@ predicate int_lin_ne_reif(array[int] of int: c, array[int] of var int: x,
 
 %-----------------------------------------------------------------------------%
 
-%% var float, const
-predicate float_le_reif(var float: x, float: y, var bool: b) =
-%%  trace( "float_le_reif(\(x), \(y), \(b))\n" ) /\
-  if is_fixed(b) then
-    if true==fix(b) then x<=y else x>y endif
-  elseif false then
-    float_lin_le_reif__IND( [1.0, -1.0], [x, y], 0.0, b)
-  elseif ub(x) <= y then
-    b == true
-  elseif lb(x) > y then
-    b == false
-  elseif fPostprocessDomains then
-    float_le_reif__POST(x, y, b, float_lt_EPS)
-  else
-    float_le_reif__NOPOST(x, y, b)
-  endif;
+% %% var float, const
+% predicate float_le_reif(var float: x, float: y, var bool: b) =
+% %%  trace( "float_le_reif(\(x), \(y), \(b))\n" ) /\
+%   if is_fixed(b) then
+%     if true==fix(b) then x<=y else x>y endif
+%   elseif false then
+%     float_lin_le_reif__IND( [1.0, -1.0], [x, y], 0.0, b)
+%   elseif ub(x) <= y then
+%     b == true
+%   elseif lb(x) > y then
+%     b == false
+%   elseif fPostprocessDomains then
+%     float_le_reif__POST(x, y, b, float_lt_EPS)
+%   else
+%     float_le_reif__NOPOST(x, y, b)
+%   endif;
 
-%% const, var float
-predicate float_le_reif(float: x, var float: y, var bool: b) =
-  if is_fixed(b) then
-    if true==fix(b) then x<=y else x>y endif
-  elseif false then
-    float_lin_le_reif__IND( [1.0, -1.0], [x, y], 0.0, b)
-  elseif ub(x) <= lb(y) then
-    b == true
-  elseif lb(x) > ub(y) then
-    b == false
-  elseif fPostprocessDomains then
-    float_ge_reif__POST(y, x, b, float_lt_EPS)
-  else
-    float_le_reif(-y, -x, b)
-  endif;
+% %% const, var float
+% predicate float_le_reif(float: x, var float: y, var bool: b) =
+%   if is_fixed(b) then
+%     if true==fix(b) then x<=y else x>y endif
+%   elseif false then
+%     float_lin_le_reif__IND( [1.0, -1.0], [x, y], 0.0, b)
+%   elseif ub(x) <= lb(y) then
+%     b == true
+%   elseif lb(x) > ub(y) then
+%     b == false
+%   elseif fPostprocessDomains then
+%     float_ge_reif__POST(y, x, b, float_lt_EPS)
+%   else
+%     float_le_reif(-y, -x, b)
+%   endif;
 
 %% var float, var float
 predicate float_le_reif(var float: x, var float: y, var bool: b) =
@@ -306,24 +306,24 @@ predicate float_le_reif__NOPOST(var float: x, var float: y, var bool: b) =
     ;
 
 %% TODO
-predicate float_lt_reif(var float: x, var float: y, var bool: b) =
-  %% Actually = float_le_reif(x, y-eps, b).
-  if is_fixed(b) then
-    if true==fix(b) then x<y else x>=y endif
-  elseif fPostprocessDomains /\ fPostproDom_DIFF then
-    aux_float_lt_zero_iff_1__POST(x - y, b, float_lt_EPS)
-  else
-    aux_float_lt_if_1(x, y, (b)) /\
-    aux_float_ge_if_0(x, y, (b))
-  endif;
+% predicate float_lt_reif(var float: x, var float: y, var bool: b) =
+%   %% Actually = float_le_reif(x, y-eps, b).
+%   if is_fixed(b) then
+%     if true==fix(b) then x<y else x>=y endif
+%   elseif fPostprocessDomains /\ fPostproDom_DIFF then
+%     aux_float_lt_zero_iff_1__POST(x - y, b, float_lt_EPS)
+%   else
+%     aux_float_lt_if_1(x, y, (b)) /\
+%     aux_float_ge_if_0(x, y, (b))
+%   endif;
 
 %% var, const
-predicate float_ne(var float: x, float: y) =
-  if fPostprocessDomains then
-    float_ne__POST(x, y, float_lt_EPS)
-  else
-    float_ne__SIMPLE(x, y)
-  endif;
+% predicate float_ne(var float: x, float: y) =
+%   if fPostprocessDomains then
+%     float_ne__POST(x, y, float_lt_EPS)
+%   else
+%     float_ne__SIMPLE(x, y)
+%   endif;
 
 predicate float_ne__SIMPLE(var float: x, var float: y) =
   if true then
@@ -346,18 +346,18 @@ predicate float_ne(var float: x, var float: y) =
 %% TODO Why is disequality with EPS but equality not??
     
 %% var, var? TODO
-predicate float_eq_reif(var float: x, var float: y, var bool: b) =
-  if is_fixed(b) then
-    if true==fix(b) then x==y else x!=y endif
-  elseif ub(x)<lb(y) \/ lb(x)>ub(y) then
-    b == false
-  elseif is_fixed(x) /\ is_fixed(y) then
-    b == (fix(x) == fix(y))
-  elseif fPostprocessDomains /\ fPostproDom_DIFF then
-    float_eq_reif__POST(x-y, 0, b, float_lt_EPS)
-  else
-    aux_float_eq_iff_1(x, y, b)
-  endif;
+% predicate float_eq_reif(var float: x, var float: y, var bool: b) =
+%   if is_fixed(b) then
+%     if true==fix(b) then x==y else x!=y endif
+%   elseif ub(x)<lb(y) \/ lb(x)>ub(y) then
+%     b == false
+%   elseif is_fixed(x) /\ is_fixed(y) then
+%     b == (fix(x) == fix(y))
+%   elseif fPostprocessDomains /\ fPostproDom_DIFF then
+%     float_eq_reif__POST(x-y, 0, b, float_lt_EPS)
+%   else
+%     aux_float_eq_iff_1(x, y, b)
+%   endif;
 
 predicate float_ne_reif(var float: x, var float: y, var bool: b) =
   float_eq_reif(x, y, not b);

@@ -121,26 +121,27 @@ predicate aux_float_le_zero_if_0(var float: x, var int: p) =
   endif;
 
 predicate aux_float_lt_zero_if_0(var float: x, var int: p) =
-  assert( has_bounds(x), "Variable \(x) needs finite bounds for a big-M constraint" ) /\
-  if is_fixed(p) then
-    if 0==fix(p) then x<0.0 else true endif
-  elseif lb(x)>=0.0 then
-    p==1
-  elseif fPostprocessDomains /\ fPostproDom_AUX then
-    aux_float_lt_zero_if_1__POST(x, 1-p, 1-p, float_lt_EPS)
-  elseif fMZN__UseIndicators then
-    aux_float_le_zero_if_0__IND(x+float_lt_EPS, p)       %% Here just absolute EPS,  TODO
-  else
-%%    let { float: rho = float_lt_EPS_coef__ * max(abs(ub(x)), abs(lb(x))) }  % same order of magnitude as ub(x)
-    let { float: rho = float_lt_EPS }          % absolute eps
-    in
-    %%% This one causes 2x- derivation of EPS:
-    %% x < (ub(x) + rho) * p
-    %%% Better?
-       x <= (ub(x) + rho) * p - rho
-    %%% This just uses absolute eps:
-    %% x < (ub(x) + float_lt_EPS) * p
-  endif;
+  assert(false, "Floats don't work yet");
+%   assert( has_bounds(x), "Variable \(x) needs finite bounds for a big-M constraint" ) /\
+%   if is_fixed(p) then
+%     if 0==fix(p) then x<0.0 else true endif
+%   elseif lb(x)>=0.0 then
+%     p==1
+%   elseif fPostprocessDomains /\ fPostproDom_AUX then
+%     aux_float_lt_zero_if_1__POST(x, 1-p, 1-p, float_lt_EPS)
+%   elseif fMZN__UseIndicators then
+%     aux_float_le_zero_if_0__IND(x+float_lt_EPS, p)       %% Here just absolute EPS,  TODO
+%   else
+% %%    let { float: rho = float_lt_EPS_coef__ * max(abs(ub(x)), abs(lb(x))) }  % same order of magnitude as ub(x)
+%     let { float: rho = float_lt_EPS }          % absolute eps
+%     in
+%     %%% This one causes 2x- derivation of EPS:
+%     %% x < (ub(x) + rho) * p
+%     %%% Better?
+%        x <= (ub(x) + rho) * p - rho
+%     %%% This just uses absolute eps:
+%     %% x < (ub(x) + float_lt_EPS) * p
+%   endif;
 
 
 % Derived cases
