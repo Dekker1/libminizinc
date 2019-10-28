@@ -1151,7 +1151,9 @@ int CG::force(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
   // Check if the condition is already forced.
   CG_Cond::_T* p(cond.get());
   bool sign(cond.sign());
-  assert(p);
+  if(!p) {
+    return bind_cst(!sign, cg, frag);
+  }
   if(p->reg[sign].has_reg())
     return p->reg[sign].reg;
   if(p->reg[1 - sign].has_reg()) {
