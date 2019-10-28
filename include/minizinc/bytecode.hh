@@ -640,7 +640,8 @@ namespace MiniZinc {
     /// Earliest time stamp for definitions in the current aggregation
     int def_ident_start;
     /// Type of function represented by this context
-    enum Symbol { VCTX_AND, VCTX_OR, VCTX_VEC, VCTX_OTHER } symbol;
+    enum Symbol { VCTX_AND, VCTX_OR, VCTX_VEC, VCTX_OTHER, MAX_SYMBOL=VCTX_OTHER } symbol;
+    static const std::string symbol_to_string[MAX_SYMBOL+1];
     /// Nesting depth for this symbol (how many of these are open)
     int n_symbols;
     /// Constructor

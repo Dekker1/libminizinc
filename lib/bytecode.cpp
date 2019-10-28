@@ -471,6 +471,7 @@ namespace MiniZinc {
   }
   
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
+  const std::string AggregationCtx::symbol_to_string[] = { "AND", "OR", "VEC", "OTHER" };
 
   const std::string Interpreter::status_to_string[] = {"Roger", "Aborted", "Inconsistent", "Error"};
 
@@ -1649,7 +1650,7 @@ namespace MiniZinc {
         case BytecodeStream::OPEN_AGGREGATION:
         {
           int r = frame->bs->chr(frame->pc);
-          DBG_INTERPRETER("OPEN_AGGREGATION " << r  << "\n");
+          DBG_INTERPRETER("OPEN_AGGREGATION " << AggregationCtx::symbol_to_string[r]  << ", depth "<< _agg.size() + 1 <<"\n");
           assert(r >= 0 && r <= AggregationCtx::VCTX_OTHER);
           if (r==AggregationCtx::VCTX_OTHER || r==AggregationCtx::VCTX_VEC || _agg.empty() || _agg.back().symbol != r) {
             // Push a new aggregation context
@@ -1782,7 +1783,7 @@ namespace MiniZinc {
           break;
         case BytecodeStream::CLOSE_AGGREGATION:
         {
-          DBG_INTERPRETER("CLOSE_AGGREGATION\n");
+          DBG_INTERPRETER("CLOSE_AGGREGATION (" << AggregationCtx::symbol_to_string[_agg.back().symbol]  << ", depth "<< _agg.size() << ")\n");
           assert(!_agg.empty());
           // Decrement depth counter for current aggregation context
           _agg.back().n_symbols--;
