@@ -69,6 +69,7 @@ int main(int argc, const char** argv) {
       std::vector<TypeError> typeErrors;
       typecheck(env, m, typeErrors, true /* ignoreUndefinedParameters */ , false /* allowMultiAssignment */, false /* isFlatZinc */);
       // debugprint(m);
+      m = env.envi().model;
 
       CodeGen cg;
       CG::run(cg, m);
