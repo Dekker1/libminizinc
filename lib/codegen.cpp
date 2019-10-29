@@ -152,6 +152,7 @@ void CodeGen::register_builtins(void) {
 }
 
 void OPEN_AGG(CodeGen& cg, CG_Builder& frag, AggregationCtx::Symbol ctx) {
+  cg.env_push();
   cg.reg_trail.push_back(cg.current_reg_count);
   PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, ctx);
 }
@@ -163,6 +164,7 @@ void CLOSE_AGG(CodeGen& cg, CG_Builder& frag) {
   for(int ii = cg.current_reg_count; ii < old_reg_count; ++ii)
     PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(ii));
   PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
+  cg.env_pop();
 }
 
 void OPEN_AND(CodeGen& cg, CG_Builder& frag) { OPEN_AGG(cg, frag, AggregationCtx::VCTX_AND); }
