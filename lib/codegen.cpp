@@ -1601,9 +1601,12 @@ private:
     }
     }
     
-    // Now compile the result. 
-    OPEN_OTHER(cg, frag);
+    // Now compile the result.
     CG::Binding b_res = CG::bind(e, cg, frag);
+    if(b_res.second.p) {
+      CG::force(b_res.second, cg, frag);
+    }
+    OPEN_OTHER(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b_res.first));
     CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::RET);
