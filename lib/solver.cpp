@@ -680,6 +680,20 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     interpreter->dumpState(std::cerr);
     std::cerr << "----------------" << std::endl;
   }
+  switch (interpreter->status()) {
+    case Interpreter::ROGER:
+      interpreter_status = SolverInstance::UNKNOWN;
+      break;
+    case Interpreter::ERROR:
+    case Interpreter::ABORTED:
+      interpreter_status = SolverInstance::ERROR;
+      std::cout << printSolution(getFltStatus()) << std::endl;
+      break;
+    case Interpreter::INCONSISTENT:
+      interpreter_status = SolverInstance::UNSAT;
+      std::cout << printSolution(getFltStatus()) << std::endl;
+      break;
+  }
   /// The following message tells mzn-test.py that flattening succeeded.
   if (flag_compiler_verbose)
     log << "  Flattening done, " << tm01.stoptime() << std::endl;
