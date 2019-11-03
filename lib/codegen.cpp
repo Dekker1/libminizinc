@@ -2221,6 +2221,50 @@ CG::Binding bind_array1d(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
 }
 
+CG::Binding bind_array_union(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  std::cerr << "%%%% Evaluating array_union" << std::endl;
+  assert(call->n_args() == 1);
+  Expression* e = call->arg(0);
+  // Components of the sum may be partial.
+  // TODO: Specialise for literals and comprehensions.
+  CG::Binding b_elts(CG::bind(e, cg, frag));
+  int r_A(b_elts.first);
+
+  assert (e->type().ispar()); // TODO: var case
+  int r_union(GET_REG(cg));
+  int r_sz(GET_REG(cg));
+  int r_one(bind_cst(1, cg, frag));
+  int r_elt(GET_REG(cg));
+
+  int l_hd(GET_LABEL(cg));
+  int l_eq0(GET_LABEL(cg));
+  int l_end(GET_LABEL(cg));
+
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_A), CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_sz), CG::l(l_eq0));
+
+  // Sum n arguments
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_union));
+
+  PUSH_LABEL(frag, l_hd);
+  PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_elt), CG::l(l_end));
+
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::UNION, CG::r(r_union), CG::r(r_elt), CG::r(r_union));
+
+  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
+
+  // Union zero arguments (abort)
+  PUSH_LABEL(frag, l_eq0);
+  PUSH_INSTR(frag, BytecodeStream::ABORT);
+  // End of union
+  PUSH_LABEL(frag, l_end);
+
+  return {r_union, b_elts.second};
+}
+
 CG::Binding bind_length(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   CG::Binding b(CG::bind(call->arg(0), cg, frag));
@@ -2467,6 +2511,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair(c.ids.forall, builtin_t { eval_forall, bind_error_g } ));
   tbl.insert(std::make_pair(c.ids.assert, builtin_t { eval_assert_b, bind_assert_g } ));
   tbl.insert(std::make_pair("array1d", builtin_t { eval_error_b, bind_array1d } ));
+  tbl.insert(std::make_pair("array_union", builtin_t { eval_error_b, bind_array_union } ));
   tbl.insert(std::make_pair("index_set", builtin_t { eval_error_b, bind_indexset } ));
   tbl.insert(std::make_pair("length", builtin_t { eval_error_b, bind_length } ));
   tbl.insert(std::make_pair("lb", builtin_t { eval_error_b, bind_lb } ));
