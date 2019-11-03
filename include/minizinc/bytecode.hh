@@ -615,7 +615,7 @@ namespace MiniZinc {
       if(val.isRCO()) {
         auto timestamp = val.timestamp();
         // TODO: assert timestamp <= unboxed int
-        assert(timestamp > 0);
+        assert(timestamp >= 0);
         _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(timestamp) << 1 | static_cast<ptrdiff_t>(1));
       } else {
         assert((reinterpret_cast<ptrdiff_t>(val._v) & static_cast<ptrdiff_t>(1)) == 0);
