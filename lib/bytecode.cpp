@@ -24,8 +24,9 @@
 #include <streambuf>
 #include <minizinc/eval_par.hh>
 
-//#define DBG_INTERPRETER(msg) std::cerr << msg
-#define DBG_INTERPRETER(msg) do {} while(0)
+#define DBG_INTERPRETER(msg) std::cerr << msg
+//#define DBG_INTERPRETER(msg) do {} while(0)
+#define DBG_TRIM_OUTPUT
 
 namespace MiniZinc {
 
@@ -490,11 +491,15 @@ namespace MiniZinc {
       }
     } else {
       oss << "X" << toVec()->timestamp() << "[";
+#ifndef DBG_TRIM_OUTPUT
       for (unsigned int i=0; i<size(); i++) {
         oss << (*this)[i].toString();
         if (i<size()-1)
           oss << ",";
       }
+#else
+      oss << "<-->";
+#endif
       oss << "]";
     }
     return oss.str();
@@ -805,6 +810,11 @@ namespace MiniZinc {
         case BytecodeStream::DOM:
         {
           oss << "DOM R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
+        case BytecodeStream::MAKE_SET:
+        {
+          oss << "MAKE_SET R" << reg(pc) << " R" << reg(pc) << "\n";
         }
           break;
         case BytecodeStream::INTERSECTION:
@@ -1320,6 +1330,40 @@ namespace MiniZinc {
           } else {
             throw Error("Error: dom on invalid type");
           }
+        }
+          break;
+        case BytecodeStream::MAKE_SET:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("MAKE_SET R" << r1  << "(" << frame->reg[r1].toString() << ")");
+          Val v1 = Val::follow_alias(frame->reg[r1], this);
+          assert(frame->reg[r1].isVec());
+          Vec* a1 = v1.toVec();
+
+          std::vector<Val> result;
+          if(a1->size() > 0) {
+            std::vector<IntVal> vals(a1->size());
+            for (unsigned int i=0; i<a1->size(); i++)
+              vals[i] = (*a1)[i]();
+
+            std::sort(vals.begin(), vals.end());
+            IntVal l(vals[0]);
+            IntVal u(vals[0]);
+            for(int i = 1; i < vals.size(); ++i) {
+              if(u+1 < vals[i]) {
+                result.push_back(l);
+                result.push_back(u);
+                l = vals[i];
+              }
+              u = vals[i];
+            }
+            result.push_back(l);
+            result.push_back(u);
+          }
+          Val result_val(Vec::a(this, newIdent(), result));
+          frame->reg.assign(this, r2, result_val);
+          DBG_INTERPRETER(" R" << r2 <<  "(" << result_val.toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::INTERSECTION:

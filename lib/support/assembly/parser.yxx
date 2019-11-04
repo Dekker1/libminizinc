@@ -49,6 +49,7 @@ void yyerror(MZAContext& ctx, const char* s);
   std::list<int>* liValue;
 }
 %parse-param {MZAContext& ctx}
+%define parse.error verbose
 
 %token<iValue> MZA_INT
 %token<iValue> MZA_REG
@@ -94,6 +95,7 @@ void yyerror(MZAContext& ctx, const char* s);
 %token<bValue> MZA_UB
 %token<bValue> MZA_DOM
 
+%token<bValue> MZA_MAKE_SET
 %token<bValue> MZA_INTERSECTION
 %token<bValue> MZA_UNION
 
@@ -316,6 +318,7 @@ instrRR:
   | MZA_ISPAR
   | MZA_ISEMPTY
   | MZA_LENGTH
+  | MZA_MAKE_SET
   | MZA_UB
   | MZA_LB
   | MZA_DOM

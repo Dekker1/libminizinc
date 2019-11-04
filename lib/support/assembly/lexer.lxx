@@ -68,6 +68,7 @@ using namespace MiniZinc;
 "UB"        { mza_yylval.bValue = BytecodeStream::UB; return MZA_UB; }
 "DOM"       { mza_yylval.bValue = BytecodeStream::DOM; return MZA_DOM; }
 
+"MAKE_SET" { mza_yylval.bValue = BytecodeStream::MAKE_SET; return MZA_MAKE_SET; }
 "INTERSECTION" { mza_yylval.bValue = BytecodeStream::INTERSECTION; return MZA_INTERSECTION; }
 "UNION"     { mza_yylval.bValue = BytecodeStream::UNION; return MZA_UNION; }
 

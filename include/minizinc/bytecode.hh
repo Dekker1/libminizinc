@@ -73,6 +73,7 @@ namespace MiniZinc {
       UB, // R1 -> R2: put upper bound of value in R1 into R2
       DOM, // R1 -> R2: put domain of value in R1 into R2
       
+      MAKE_SET, // R1 -> R2: turn a vector (of values) into a set
       INTERSECTION, // R1, R2 -> R3: put intersection of sets in R1 and R2 into R3
       UNION, // R1, R2 -> R3: put union of sets in R1 and R2 into R3
       
