@@ -71,6 +71,7 @@ const char* instr_names[] = {
       "UB",
       "DOM",
 
+      "MAKE_SET",
       "INTERSECTION",
       "UNION",
 
@@ -1858,7 +1859,7 @@ int CG::locate_immi(int x, CodeGen& cg, CG_Builder& frag) {
 void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Builder& frag) {
    // Build up the object to build the generator.
   std::vector<EmitPost*> nesting;
-
+  
   int g = c->n_generators();
   int n_gen = c->n_generators();
   for(int g = 0; g < n_gen; ++g) {
@@ -1911,6 +1912,7 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
   }
 
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_e));
+
   // Now close the iterators _in reverse order_, and restore the environment.
   for(int ii = nesting.size()-1; ii >= 0; --ii) {
     nesting[ii]->emit_post(frag);
@@ -2258,7 +2260,16 @@ CG::Binding bind_array_union(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag
 
   // Union zero arguments (abort)
   PUSH_LABEL(frag, l_eq0);
+  /*
   PUSH_INSTR(frag, BytecodeStream::ABORT);
+  */
+  // Make an empty vector.
+  OPEN_OTHER(cg, frag);
+  OPEN_VEC(cg, frag);
+  CLOSE_AGG(cg, frag);
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_union));
+  
   // End of union
   PUSH_LABEL(frag, l_end);
 
@@ -2447,6 +2458,45 @@ CG::Binding bind_max(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return bind_call(call, ctx, cg, frag);
 }
 
+CG::Binding bind_arg_max(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1); 
+  CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
+  int r(GET_REG(cg));
+  int r_v(GET_REG(cg));
+  int r_i(GET_REG(cg));
+  int r_sz(GET_REG(cg)); 
+  int r_test(GET_REG(cg));
+  int r_elt(GET_REG(cg));
+
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_A.first), CG::r(r_sz));
+  int l_fst(GET_LABEL(cg));
+  int l_hd(GET_LABEL(cg));
+  int l_tl(GET_LABEL(cg));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_test), CG::l(l_fst));
+  PUSH_INSTR(frag, BytecodeStream::ABORT);
+  PUSH_LABEL(frag, l_fst);
+
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_v));
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
+  
+  PUSH_LABEL(frag, l_hd);
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_tl));
+  
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_elt));
+  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_v), CG::r(r_elt), CG::r(r_test));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_hd));
+  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_elt), CG::r(r_v));
+  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_i), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
+  PUSH_LABEL(frag, l_tl);
+  return CG::Binding(r, CG_Cond::ttt());
+  return bind_call(call, ctx, cg, frag);
+}
+
 CG::Binding bind_min(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(call->type().ispar()) {
     if(call->n_args() == 2) {
@@ -2502,6 +2552,38 @@ CG::Binding bind_min(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return bind_call(call, ctx, cg, frag);
 }
 
+CG::Binding bind_card(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->type().ispar());
+  assert(call->n_args() == 1);
+
+  CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
+  int r(GET_REG(cg));
+  int r_i(GET_REG(cg));
+  int r_sz(GET_REG(cg)); 
+  int r_e(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
+
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_A.first), CG::r(r_sz));
+  int l_hd(GET_LABEL(cg));
+  int l_tl(GET_LABEL(cg));
+  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_i), CG::r(r_sz), CG::r(r_e));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_e), CG::l(l_tl));
+
+  PUSH_LABEL(frag, l_hd);
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_e));
+  PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r), CG::r(r_e), CG::r(r)); 
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_e));
+  PUSH_INSTR(frag, BytecodeStream::ADDI, CG::r(r), CG::r(r_e), CG::r(r));
+
+  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_i), CG::r(r_sz), CG::r(r_e));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_e), CG::l(l_hd));
+  PUSH_LABEL(frag, l_tl);
+  return CG::Binding(r, CG_Cond::ttt());
+}
+
 
 builtin_table init_builtins(void) {
   builtin_table tbl;
@@ -2522,7 +2604,9 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("set2array", builtin_t { eval_error_b, bind_set2array } ));
   tbl.insert(std::make_pair("dom_bounds_array", builtin_t { eval_error_b, bind_dom_bounds_array } ));
   tbl.insert(std::make_pair("max", builtin_t { eval_error_b, bind_max } ));
+  tbl.insert(std::make_pair("arg_max", builtin_t { eval_error_b, bind_arg_max } ));
   tbl.insert(std::make_pair("min", builtin_t { eval_error_b, bind_min } ));
+  tbl.insert(std::make_pair("card", builtin_t { eval_error_b, bind_card } ));
   tbl.insert(std::make_pair(c.ids.bool2int, builtin_t { eval_error_b, bind_bool2int } ));
   return tbl;
 }
@@ -2544,6 +2628,7 @@ CG::Binding CG::bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  bool is_vec(false);
   OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   if(IntSetVal* s = l->isv()) {
@@ -2557,21 +2642,28 @@ CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
     }
   } else {
+    is_vec = true;
     int sz = l->v().size();
     int r_t(GET_REG(cg));
     for(int ii = 0; ii < sz; ii++) {
       // Assumes the set is sorted.
+      /*
       IntLit* k(l->v()[ii]->template cast<IntLit>());
       assert(k);
       PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(k->v().toInt()), CG::r(r_t));
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
+      */
+      CG::Binding b(CG::bind(l->v()[ii], cg, frag)); // Ignores any partiality.
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b.first));
     }
   }
   CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  if(is_vec)
+    PUSH_INSTR(frag, BytecodeStream::MAKE_SET, CG::r(r), CG::r(r));
   return CG::Binding(r, CG_Cond::ttt());
 }
 
@@ -3073,6 +3165,8 @@ CG::Binding CG::bind(Comprehension* comp, Mode ctx, CodeGen& cg, CG_Builder& fra
   cg.env_pop();
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  if(comp->type().is_set())
+    PUSH_INSTR(frag, BytecodeStream::MAKE_SET, CG::r(r), CG::r(r));
   return CG::Binding(r, CG_Cond::ttt());
 }
 
