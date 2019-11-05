@@ -138,6 +138,9 @@ void CodeGen::register_builtins(void) {
   register_builtin("int_le", 2);
   register_builtin("set_in", 2);
 
+  register_builtin("int_lin_le", 3);
+  register_builtin("int_lin_eq", 3);
+
   register_builtin("int_sum", 1);
   register_builtin("int_minus", 2);
   register_builtin("int_times", 2);
@@ -193,6 +196,8 @@ CG_ProcID CodeGen::find_builtin(std::string s) {
   return (*it).second;
 }
 
+int bind_cst(int x, CodeGen& cg, CG_Builder& frag);
+
 void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs, int r_rhs) {
   switch(op) {
     // Actual builtins
@@ -200,11 +205,31 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_eq"), CG::r(r_lhs), CG::r(r_rhs));
       return;
     case BOT_LQ:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_le"), CG::r(r_lhs), CG::r(r_rhs));
+    {
+      int c = GET_REG(cg);
+      int x = GET_REG(cg);
+      int k = GET_REG(cg);
+      int z = bind_cst(0, cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs), CG::r(c));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lin_le"), CG::r(c), CG::r(x), CG::r(k));
+      // PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_le"), CG::r(r_lhs), CG::r(r_rhs));
       return;
+    }
     case BOT_LE:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lt"), CG::r(r_lhs), CG::r(r_rhs));
+    {
+      int c = GET_REG(cg);
+      int x = GET_REG(cg);
+      int k = GET_REG(cg);
+      int z = bind_cst(1, cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs), CG::r(c));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lin_le"), CG::r(c), CG::r(x), CG::r(k));
+      // PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lt"), CG::r(r_lhs), CG::r(r_rhs));
       return;
+    }
     case BOT_IN:
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("set_in"), CG::r(r_lhs), CG::r(r_rhs));
       return;
@@ -399,9 +424,13 @@ CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs)
     case BOT_EQ:
       return CG_Cond::call(cg.find_builtin("int_eq"), ctx, CG::r(r_lhs), CG::r(r_rhs));
     case BOT_LQ:
+    {
       return CG_Cond::call(cg.find_builtin("int_le"), ctx, CG::r(r_lhs), CG::r(r_rhs));
+    }
     case BOT_LE:
+    {
       return CG_Cond::call(cg.find_builtin("int_lt"), ctx, CG::r(r_lhs), CG::r(r_rhs));
+    }
     case BOT_IN:
       return CG_Cond::call(cg.find_builtin("set_in"), ctx, CG::r(r_lhs), CG::r(r_rhs));
     // Normalisation
@@ -426,6 +455,55 @@ CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs)
     // BOT_DOTDOT
   }
   throw InternalError("Unexpected fall-through in binop_cond.");
+}
+
+CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, int r_lhs, int r_rhs) {
+  switch(op) {
+    // Actual builtins
+    case BOT_EQ: {
+      int c = GET_REG(cg);
+      int x = GET_REG(cg);
+      int k = GET_REG(cg);
+      int z = bind_cst(0, cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs), CG::r(c));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      return CG_Cond::call(cg.find_builtin("int_lin_eq"), ctx, CG::r(c), CG::r(x), CG::r(k));
+    }
+    case BOT_LQ:
+    {
+      int c = GET_REG(cg);
+      int x = GET_REG(cg);
+      int k = GET_REG(cg);
+      int z = bind_cst(0, cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs), CG::r(c));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lin_le"), CG::r(c), CG::r(x), CG::r(k));
+      return CG_Cond::call(cg.find_builtin("int_lin_le"), ctx, CG::r(c), CG::r(x), CG::r(k));
+    }
+    case BOT_LE:
+    {
+      int c = GET_REG(cg);
+      int x = GET_REG(cg);
+      int k = GET_REG(cg);
+      int z = bind_cst(1, cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::CALL, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs), CG::r(c));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lin_le"), CG::r(c), CG::r(x), CG::r(k));
+      return CG_Cond::call(cg.find_builtin("int_lin_le"), ctx, CG::r(c), CG::r(x), CG::r(k));
+    }
+    case BOT_NQ:
+      return ~binop_cond(cg, BOT_EQ, -ctx, r_lhs, r_rhs);
+    case BOT_GR:
+      return binop_cond(cg, BOT_LE, ctx, r_rhs, r_lhs);
+    case BOT_GQ:
+      return binop_cond(cg, BOT_LQ, ctx, r_rhs, r_lhs);
+    default:
+      break;
+  }
+  throw InternalError("Unexpected fall-through in linear_cond.");
 }
 
 CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
@@ -3381,7 +3459,8 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       CG::Binding b_rhs(CG::bind(b->rhs(), cg, frag));
       cond.push_back(b_lhs.second);
       cond.push_back(b_rhs.second);
-      cond.push_back(binop_cond(cg, b->op(), ctx, b_lhs.first, b_rhs.first));
+      // cond.push_back(binop_cond(cg, b->op(), ctx, b_lhs.first, b_rhs.first));
+      cond.push_back(linear_cond(cg, frag, b->op(), ctx, b_lhs.first, b_rhs.first));
       return CG_Cond::forall(ctx, cond);
     }
     break;
