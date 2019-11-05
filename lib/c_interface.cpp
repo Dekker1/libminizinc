@@ -13,6 +13,7 @@
 #include <minizinc/solver.hh>
 
 #include <iostream>
+#include <stdarg.h>
 
 using namespace MiniZinc;
 
