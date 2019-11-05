@@ -129,7 +129,7 @@ void yyerror(MZAContext& ctx, const char* s);
 
 procedures:
   /* empty */
-  | procedure procedures
+  | procedures procedure
 
 procedure:
     ":" MZA_ID ":" mode MZA_INT delay instructions
@@ -185,7 +185,7 @@ delay:
 
 instructions:
     /* empty */
-  | labeled_instr instructions
+  | instructions labeled_instr
 
 labeled_instr:
     instruction
@@ -367,7 +367,7 @@ instr:
 
 registers:
     /* empty */ { $$ = new std::list<int>(); }
-  | MZA_REG registers { $2->push_front($1); $$ = $2; }
+  | registers MZA_REG { $1->push_back($2); $$ = $1; }
 
 %%
 
