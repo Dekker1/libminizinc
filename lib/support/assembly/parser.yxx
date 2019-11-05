@@ -49,7 +49,7 @@ void yyerror(MZAContext& ctx, const char* s);
   std::list<int>* liValue;
 }
 %parse-param {MZAContext& ctx}
-%define parse.error verbose
+%error-verbose
 
 %token<iValue> MZA_INT
 %token<iValue> MZA_REG
