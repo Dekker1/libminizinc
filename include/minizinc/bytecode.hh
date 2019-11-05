@@ -297,7 +297,7 @@ namespace MiniZinc {
     Val& operator =(Val&& v);
     void assign(Interpreter* interpreter, const Val& v);
     void assign(Interpreter* interpreter, Val&& v);
-    std::string toString(void) const;
+    std::string toString(bool trim=false) const;
     Expression* const toFZN(const std::unordered_map<int, VarDecl*>& vdmap = {}) {
       GCLock lock;
       if (this->isInt()) {

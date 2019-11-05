@@ -24,9 +24,9 @@
 #include <streambuf>
 #include <minizinc/eval_par.hh>
 
-#define DBG_INTERPRETER(msg) std::cerr << msg
-//#define DBG_INTERPRETER(msg) do {} while(0)
-#define DBG_TRIM_OUTPUT
+//#define DBG_INTERPRETER(msg) std::cerr << msg
+#define DBG_INTERPRETER(msg) do {} while(0)
+#define DBG_TRIM_OUTPUT true
 
 namespace MiniZinc {
 
@@ -477,7 +477,7 @@ namespace MiniZinc {
   const std::string Interpreter::status_to_string[] = {"Roger", "Aborted", "Inconsistent", "Error"};
 
   std::string
-  Val::toString(void) const {
+  Val::toString(bool trim) const {
     std::ostringstream oss;
     if (isInt()) {
       oss << (*this)();
@@ -491,15 +491,15 @@ namespace MiniZinc {
       }
     } else {
       oss << "X" << toVec()->timestamp() << "[";
-#ifndef DBG_TRIM_OUTPUT
-      for (unsigned int i=0; i<size(); i++) {
-        oss << (*this)[i].toString();
-        if (i<size()-1)
-          oss << ",";
+      if (!trim || size() <= 4) {
+        for (size_t i=0; i<size(); i++) {
+          oss << (*this)[i].toString(trim);
+          if (i<size()-1)
+            oss << ",";
+        }
+      } else {
+        oss << "<->";
       }
-#else
-      oss << "<-->";
-#endif
       oss << "]";
     }
     return oss.str();
@@ -575,7 +575,7 @@ namespace MiniZinc {
         this->_table[i].erase(it);
         return {Val(), false};
       }
-      DBG_INTERPRETER("--- CSE hit! hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[val_m] << " Value: " << val.toString() << "\n");
+      DBG_INTERPRETER("--- CSE hit! hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[val_m] << " Value: " << val.toString(DBG_TRIM_OUTPUT) << "\n");
       auto convert = [&interpreter, val_m, mode](Val v) {
         assert(!v.isVec());
         if (BytecodeProc::is_neg(mode) != BytecodeProc::is_neg(val_m)) {
@@ -622,7 +622,7 @@ namespace MiniZinc {
 
   void CSETable::insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val) {
     assert(mode != BytecodeProc::RAW);
-    DBG_INTERPRETER("--- CSE add: hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString() << "\n");
+    DBG_INTERPRETER("--- CSE add: hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString(DBG_TRIM_OUTPUT) << "\n");
     // If value is reference counted, flag that it's in CSE
     val.addWeakRef(interpreter);
     auto insertion = _table.back().emplace(key, std::make_pair(mode, val));
@@ -1090,7 +1090,7 @@ namespace MiniZinc {
           int i = frame->bs->reg(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
           globals.cp(this, i, frame->reg, r1);
-          DBG_INTERPRETER("LOAD_GLOBAL " << i << " R" << r1 << "(" << frame->reg[r1].toString() << ")" << "\n");
+          DBG_INTERPRETER("LOAD_GLOBAL " << i << " R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << "\n");
         }
           break;
         case BytecodeStream::STORE_GLOBAL:
@@ -1098,7 +1098,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int i = frame->bs->reg(frame->pc);
           frame->reg.cp(this, r1, globals, i);
-          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame->reg[r1].toString() << ")" << " " << i << "\n");
+          DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " " << i << "\n");
         }
           break;
         case BytecodeStream::MOV:
@@ -1232,7 +1232,7 @@ namespace MiniZinc {
             }
             frame->reg.assign(this, r2, ret);
           }
-          DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::ISEMPTY:
@@ -1241,7 +1241,7 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           assert(frame->reg[r1].isVec());
           frame->reg.assign(this, r2, IntVal(frame->reg[r1].size()==0));
-          DBG_INTERPRETER("ISEMPTY R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          DBG_INTERPRETER("ISEMPTY R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LENGTH:
@@ -1250,7 +1250,7 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           assert(frame->reg[r1].isVec());
           frame->reg.assign(this, r2, IntVal(frame->reg[r1].size()));
-          DBG_INTERPRETER("LENGTH R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          DBG_INTERPRETER("LENGTH R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::GET_VEC:
@@ -1261,17 +1261,17 @@ namespace MiniZinc {
           assert(frame->reg[r1].isVec());
           assert(frame->reg[r2].isInt());
           assert(frame->reg[r2]() > 0 && frame->reg[r2]() <= frame->reg[r1].size());
-          DBG_INTERPRETER("GET_VEC R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
+          DBG_INTERPRETER("GET_VEC R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
           Val v = Val::follow_alias(frame->reg[r1][frame->reg[r2]().toInt()-1], this);
           frame->reg.assign(this, r3, v);
-          DBG_INTERPRETER(" R" << r3 <<  "(" << v.toString() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r3 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LB:
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("LB R" << r1  << "(" << frame->reg[r1].toString() << ")");
+          DBG_INTERPRETER("LB R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
             frame->reg.assign(this, r2, v);
@@ -1280,7 +1280,7 @@ namespace MiniZinc {
             if (def->domain().isVec()) {
               Val lb = (*def->domain().toVec())[0];
               frame->reg.assign(this, r2, lb);
-              DBG_INTERPRETER(" R" << r2 <<  "(" << lb.toString() << ")" <<  "\n");
+              DBG_INTERPRETER(" R" << r2 <<  "(" << lb.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
             } else {
               throw Error("Error: lb on unbounded variable");
             }
@@ -1293,7 +1293,7 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("UB R" << r1  << "(" << frame->reg[r1].toString() << ")");
+          DBG_INTERPRETER("UB R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
             frame->reg.assign(this, r2, v);
@@ -1302,7 +1302,7 @@ namespace MiniZinc {
             if (def->domain().isVec()) {
               Val ub = (*def->domain().toVec())[def->domain().toVec()->size()-1];
               frame->reg.assign(this, r2, ub);
-              DBG_INTERPRETER(" R" << r2 <<  "(" << ub.toString() << ")" <<  "\n");
+              DBG_INTERPRETER(" R" << r2 <<  "(" << ub.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
             } else {
               throw Error("Error: ub on unbounded variable");
             }
@@ -1315,7 +1315,7 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("DOM R" << r1  << "(" << frame->reg[r1].toString() << ")");
+          DBG_INTERPRETER("DOM R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
             frame->reg.assign(this, r2, Val(Vec::a(this, newIdent(), {v,v})));
@@ -1323,7 +1323,7 @@ namespace MiniZinc {
             Definition* def = v.toDef();
             if (def->domain().isVec()) {
               frame->reg.assign(this, r2, def->domain());
-              DBG_INTERPRETER(" R" << r2 <<  "(" << def->domain().toString() << ")" <<  "\n");
+              DBG_INTERPRETER(" R" << r2 <<  "(" << def->domain().toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
             } else {
               throw Error("Error: dom on unbounded variable");
             }
@@ -1336,7 +1336,7 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("MAKE_SET R" << r1  << "(" << frame->reg[r1].toString() << ")");
+          DBG_INTERPRETER("MAKE_SET R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           Val v1 = Val::follow_alias(frame->reg[r1], this);
           assert(frame->reg[r1].isVec());
           Vec* a1 = v1.toVec();
@@ -1363,7 +1363,7 @@ namespace MiniZinc {
           }
           Val result_val(Vec::a(this, newIdent(), result));
           frame->reg.assign(this, r2, result_val);
-          DBG_INTERPRETER(" R" << r2 <<  "(" << result_val.toString() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r2 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::INTERSECTION:
@@ -1371,7 +1371,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("INTERSECTION R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
+          DBG_INTERPRETER("INTERSECTION R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ") R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
           Val v1 = Val::follow_alias(frame->reg[r1], this);
           Val v2 = Val::follow_alias(frame->reg[r2], this);
           Val result_val;
@@ -1393,7 +1393,7 @@ namespace MiniZinc {
             result_val = Val(Vec::a(this, newIdent(), result));
           }
           frame->reg.assign(this, r3, result_val);
-          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::UNION:
@@ -1401,7 +1401,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("UNION R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
+          DBG_INTERPRETER("UNION R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ") R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
           Val v1 = Val::follow_alias(frame->reg[r1], this);
           Val v2 = Val::follow_alias(frame->reg[r2], this);
           Val result_val;
@@ -1423,7 +1423,7 @@ namespace MiniZinc {
             result_val = Val(Vec::a(this, newIdent(), result));
           }
           frame->reg.assign(this, r3, result_val);
-          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::INTERSECT_DOMAIN:
@@ -1431,7 +1431,7 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("INTERSECT_DOMAIN R" << r1  << "(" << frame->reg[r1].toString() << ") R" << r2 << "(" << frame->reg[r2].toString() << ")");
+          DBG_INTERPRETER("INTERSECT_DOMAIN R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ") R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
           Val v1 = Val::follow_alias(frame->reg[r1], this);
           Val v2 = Val::follow_alias(frame->reg[r2], this);
 
@@ -1463,7 +1463,7 @@ namespace MiniZinc {
             result_val = v1.toDef()->domain();
           }
           frame->reg.assign(this, r3, result_val);
-          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::RET:
@@ -1660,7 +1660,7 @@ namespace MiniZinc {
         case BytecodeStream::PUSH:
         {
           int r = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("PUSH R" << r << " (" << frame->reg[r].toString() << ")\n");
+          DBG_INTERPRETER("PUSH R" << r << " (" << frame->reg[r].toString(DBG_TRIM_OUTPUT) << ")\n");
           assert(!_agg.empty());
           _agg.back().push(this,frame->reg[r]);
         }
@@ -1671,14 +1671,14 @@ namespace MiniZinc {
           assert(!_agg.empty());
           assert(!_agg.back().empty());
           frame->reg.assign(this, r, _agg.back().back());
-          DBG_INTERPRETER("POP R" << r << " (" << frame->reg[r].toString() << ")\n");
+          DBG_INTERPRETER("POP R" << r << " (" << frame->reg[r].toString(DBG_TRIM_OUTPUT) << ")\n");
           _agg.back().pop(this);
         }
           break;
         case BytecodeStream::POST:
         {
           int r = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("POST R" << r << " (" << frame->reg[r].toString() << ")\n");
+          DBG_INTERPRETER("POST R" << r << " (" << frame->reg[r].toString(DBG_TRIM_OUTPUT) << ")\n");
           Val v1 = Val::follow_alias(frame->reg[r], this);
           if (v1.isInt()) {
             if (v1() == 0) {
