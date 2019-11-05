@@ -26,6 +26,7 @@ namespace MiniZinc {
       FORALL,
       EXISTS,
       INT_SUM,
+      INT_MINUS,
       INT_TIMES,
       LINEXP,
       MAX_ID=LINEXP
@@ -254,6 +255,34 @@ namespace MiniZinc {
         for (unsigned int i=0; i<d->arg(0).size(); i++) {
           if (d->arg(0)[i].isDef()) {
             d->arg(0)[i].toDef()->unsubscribe(d);
+          }
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+    };
+
+    class IntMinus : public PrimitiveMap::Primitive {
+    public:
+      IntMinus(void) : PrimitiveMap::Primitive("int_minus",PrimitiveMap::INT_MINUS,2) {}
+      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        bool propImmediately = false;
+        for (unsigned int i=0; i<2; i++) {
+          if (d->arg(i).isDef()) {
+            d->arg(i).toDef()->subscribe(d, Definition::SES_ANY);
+          } else {
+            propImmediately = true;
+          }
+        }
+        if (propImmediately) {
+          return propagate(i,d);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {
+        for (unsigned int i=0; i<2; i++) {
+          if (d->arg(i).isDef()) {
+            d->arg(i).toDef()->unsubscribe(d);
           }
         }
       }

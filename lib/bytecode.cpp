@@ -1746,6 +1746,10 @@ namespace MiniZinc {
                       defs.emplace_back(coeff,cur->arg(0)[i]);
                     }
                     break;
+                  case PrimitiveMap::INT_MINUS:
+                    defs.emplace_back(coeff, cur->arg(0));
+                    defs.emplace_back(-coeff, cur->arg(1));
+                    break;
                   case PrimitiveMap::INT_TIMES:
                     if (cur->arg(0).isInt()) {
                       if (cur->arg(1).isInt()) {

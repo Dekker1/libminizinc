@@ -21,11 +21,12 @@ namespace MiniZinc {
     Forall forall;
     Exists exists;
     IntSum intsum;
+    IntMinus intminus;
     IntTimes inttimes;
     LinExp linexp;
     
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &linexp
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &intminus, &inttimes, &linexp
     };
   }
   
