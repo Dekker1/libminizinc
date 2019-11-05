@@ -354,7 +354,7 @@ instrRRR:
   | MZA_INTERSECT_DOMAIN
 
 instrRRRR:
-  | MZA_SIMPLIFY_LIN
+    MZA_SIMPLIFY_LIN
 
 instrS:
     MZA_JMP
