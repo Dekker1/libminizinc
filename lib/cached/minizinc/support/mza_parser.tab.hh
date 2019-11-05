@@ -1,8 +1,9 @@
-/* A Bison parser, made by GNU Bison 3.0.4.  */
+/* A Bison parser, made by GNU Bison 3.4.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -30,8 +31,11 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-#ifndef YY_MZA_YY_HOME_JDEKKER_REPOSITORIES_MINIZINC_MINIZINC_BUILD_RELEASE_INCLUDE_MINIZINC_SUPPORT_MZA_PARSER_TAB_HH_INCLUDED
-# define YY_MZA_YY_HOME_JDEKKER_REPOSITORIES_MINIZINC_MINIZINC_BUILD_RELEASE_INCLUDE_MINIZINC_SUPPORT_MZA_PARSER_TAB_HH_INCLUDED
+/* Undocumented macros, especially those whose name start with YY_,
+   are private implementation details.  Do not rely on them.  */
+
+#ifndef YY_MZA_YY_USERS_JDEK0001_BUILD_PKG_MINIZINC_INCLUDE_MINIZINC_SUPPORT_MZA_PARSER_TAB_HH_INCLUDED
+# define YY_MZA_YY_USERS_JDEK0001_BUILD_PKG_MINIZINC_INCLUDE_MINIZINC_SUPPORT_MZA_PARSER_TAB_HH_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -80,30 +84,29 @@ extern int mza_yydebug;
     MZA_LB = 290,
     MZA_UB = 291,
     MZA_DOM = 292,
-    MZA_INTERSECTION = 293,
-    MZA_UNION = 294,
-    MZA_INTERSECT_DOMAIN = 295,
-    MZA_OPEN_AGGREGATION = 296,
-    MZA_CLOSE_AGGREGATION = 297,
-    MZA_SIMPLIFY_LIN = 298,
-    MZA_PUSH = 299,
-    MZA_POP = 300,
-    MZA_POST = 301,
-    MZA_RET = 302,
-    MZA_CALL = 303,
-    MZA_BUILTIN = 304,
-    MZA_TCALL = 305,
-    MZA_TRACE = 306,
-    MZA_ABORT = 307
+    MZA_MAKE_SET = 293,
+    MZA_INTERSECTION = 294,
+    MZA_UNION = 295,
+    MZA_INTERSECT_DOMAIN = 296,
+    MZA_OPEN_AGGREGATION = 297,
+    MZA_CLOSE_AGGREGATION = 298,
+    MZA_SIMPLIFY_LIN = 299,
+    MZA_PUSH = 300,
+    MZA_POP = 301,
+    MZA_POST = 302,
+    MZA_RET = 303,
+    MZA_CALL = 304,
+    MZA_BUILTIN = 305,
+    MZA_TCALL = 306,
+    MZA_TRACE = 307,
+    MZA_ABORT = 308
   };
 #endif
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-
 union YYSTYPE
 {
-
 
   int iValue;
   char* sValue;
@@ -112,7 +115,6 @@ union YYSTYPE
 
 
 };
-
 typedef union YYSTYPE YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1
@@ -123,4 +125,4 @@ extern YYSTYPE mza_yylval;
 
 int mza_yyparse (MZAContext& ctx);
 
-#endif /* !YY_MZA_YY_HOME_JDEKKER_REPOSITORIES_MINIZINC_MINIZINC_BUILD_RELEASE_INCLUDE_MINIZINC_SUPPORT_MZA_PARSER_TAB_HH_INCLUDED  */
+#endif /* !YY_MZA_YY_USERS_JDEK0001_BUILD_PKG_MINIZINC_INCLUDE_MINIZINC_SUPPORT_MZA_PARSER_TAB_HH_INCLUDED  */
