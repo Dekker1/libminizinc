@@ -24,8 +24,8 @@ extern FILE* yyin;
 struct ProcPatch {
   int code;
   BytecodeProc::Mode mode;
-  std::vector<std::pair<int,std::string>> patch;
-  ProcPatch(int code0, BytecodeProc::Mode mode0, std::vector<std::pair<int, std::string>> patch0)
+  std::vector<std::pair<int, std::pair<std::string, int>>> patch;
+  ProcPatch(int code0, BytecodeProc::Mode mode0, std::vector<std::pair<int, std::pair<std::string, int>>> patch0)
   : code(code0), mode(mode0), patch(std::move(patch0)) {}
 };
 
@@ -35,8 +35,8 @@ typedef struct MZAContext {
   std::vector<ProcPatch> to_patch;
   BytecodeStream proc_body;
   std::unordered_map<std::string, int> labels;
-  std::vector<std::pair<int,std::string>> patch_labels;
-  std::vector<std::pair<int,std::string>> patch_procs;
+  std::vector<std::pair<int, std::string>> patch_labels;
+  std::vector<std::pair<int, std::pair<std::string, int>>> patch_procs;
 } MZAContext;
 
 void yyerror(MZAContext& ctx, const char* s);
@@ -260,7 +260,7 @@ instruction:
       $$ = ctx.proc_body.size();
       ctx.proc_body.addInstr($1);
       ctx.proc_body.addCharVal($2);
-      ctx.patch_procs.emplace_back(ctx.proc_body.size(), $3);
+      ctx.patch_procs.emplace_back(ctx.proc_body.size(), std::make_pair($3, $4->size()));
       ctx.proc_body.addSmallInt(0);
       for (auto arg : *$4) {
         ctx.proc_body.addReg(arg);
@@ -272,7 +272,7 @@ instruction:
       $$ = ctx.proc_body.size();
       ctx.proc_body.addInstr($1);
       ctx.proc_body.addCharVal($2);
-      ctx.patch_procs.emplace_back(ctx.proc_body.size(), $3);
+      ctx.patch_procs.emplace_back(ctx.proc_body.size(), std::make_pair($3, -1));
       ctx.proc_body.addSmallInt(0);
     }
   | MZA_OPEN_AGGREGATION MZA_CTX
@@ -400,7 +400,14 @@ std::vector<BytecodeProc> parse_mza(const std::string& assembly_str) {
     int code = p.code;
     BytecodeProc::Mode mode = p.mode;
     for (auto& patch : p.patch) {
-      procs[code].mode[mode].patchAddress(patch.first, proc_map[patch.second]);
+      int& nargs = patch.second.second;
+      std::string& name = patch.second.first;
+
+      if (nargs >= 0 && nargs != procs[proc_map[name]].nargs) {
+          throw Error("Error: number of arguments in call to " + patch.second.first + " at position "
+                      + std::to_string(patch.second.second) + " has an invalid number of arguments.\n");
+      }
+      procs[code].mode[mode].patchAddress(patch.first, proc_map[patch.second.first]);
     }
   }
   return procs;
