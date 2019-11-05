@@ -42,13 +42,13 @@ namespace MiniZinc {
 
       ~NLSolverInstance(void);
 
-      Status next(void) {return SolverInstance::Status::ERROR;}
+      Status next(void) override {return SolverInstance::Status::ERROR;}
 
-      Status solve(void);
+      Status solve(void) override;
 
-      void processFlatZinc(void);
+      void processFlatZinc(void) override;
 
-      void resetSolver(void);
+      void resetSolver(void) override;
 
       // TODO: implement
       void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override { assert(false); };
