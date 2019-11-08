@@ -267,6 +267,17 @@ instruction:
       }
       delete $4;
     }
+  | MZA_BUILTIN MZA_ID registers
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.patch_procs.emplace_back(ctx.proc_body.size(), std::make_pair($2, $3->size()));
+      ctx.proc_body.addSmallInt(0);
+      for (auto arg : *$3) {
+        ctx.proc_body.addReg(arg);
+      }
+      delete $3;
+    }
   | MZA_TCALL MZA_MODE MZA_ID
     {
       $$ = ctx.proc_body.size();

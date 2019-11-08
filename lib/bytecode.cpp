@@ -1571,7 +1571,8 @@ namespace MiniZinc {
           int code = frame->bs->reg(frame->pc);
           assert(code >= 0);
           assert(code < primitiveMap().size());
-          // this is a FlatZinc builtin
+          DBG_INTERPRETER("BUILTIN " << code << "(" << _procs[code].name << ")" << "\n");
+          // this is a Interpreter builtin
           int n = _procs[code].nargs;
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
