@@ -317,7 +317,49 @@ namespace MiniZinc {
           d->arg(0).toDef()->unsubscribe(d);
         }
       }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        Val a = d->arg(0);
+        Val b = d->arg(1);
+        IntVal bounds[2];
+
+        if ((a.isDef() && a.toDef()->domain() == Val(IntVal(0))) || (b.isDef() && a.toDef()->domain() == Val(IntVal(0)))) {
+          return PS_OK;
+        }
+
+        if (a.isInt()) {
+          bounds[0] = a();
+          bounds[1] = a();
+        } else if(a.toDef()->domain().isInt()) {
+          bounds[0] = a.toDef()->domain()();
+          bounds[1] = a.toDef()->domain()();
+        } else {
+          Val dom = a.toDef()->domain();
+          bounds[0] = dom[0]();
+          bounds[1] = dom[dom.size()-1]();
+        }
+
+        if (b.isInt()) {
+          bounds[0] *= b();
+          bounds[1] *= b();
+        } else if(b.toDef()->domain().isInt()) {
+          bounds[0] *= b.toDef()->domain()();
+          bounds[1] *= b.toDef()->domain()();
+        } else {
+          Val dom = b.toDef()->domain();
+          bounds[0] *= dom[0]();
+          bounds[1] *= dom[dom.size()-1]();
+        }
+
+        if (bounds[0] == bounds[1]) {
+          // TODO: Check if value is in the current domain
+          d->domain(&i, Val(bounds[0]), true); // TODO: Is the domain binding when propagating??
+          return PS_ENTAILED;
+        } else {
+          // TODO: Intersect new bounds with the current bounds
+          d->domain(&i, {bounds[0], bounds[1]}, true); // TODO: Is the domain binding when propagating??
+          return PS_OK;
+        }
+      }
     };
 
     class LinExp : public PrimitiveMap::Primitive {
