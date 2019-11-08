@@ -418,10 +418,12 @@ namespace MiniZinc {
     binding(interpreter,binding0);
     _domain.destroy(interpreter);
     _domain = newDomain;
-    if (_domain.isVec() && _domain.size() == 2 && _domain[0]() == _domain[1]()) {
-      _domain = _domain[0];
-    }
     _domain.construct(interpreter);
+    if (_domain.isVec() && _domain.size() == 2 && _domain[0]() == _domain[1]()) {
+      _domain.destroy(interpreter);
+      _domain = _domain[0];
+      _domain.construct(interpreter);
+    }
     interpreter->schedule(this, isFixed() ? Definition::SEV_VAL : Definition::SEV_DOM);
     if (isFixed() && _pred != PrimitiveMap::MK_INTVAR) {
       // This is a constrained expression, turn it into toplevel constraint
