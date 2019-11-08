@@ -525,6 +525,25 @@ namespace MiniZinc {
     Definition(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
   public:
     Val domain(void) const { return _domain; }
+    IntVal min() const {
+      if (_domain.isInt()) {
+        return _domain();
+      } else {
+        assert(_domain.isVec() && _domain[0].isInt());
+        return _domain[0]();
+      }
+    }
+    IntVal max() const {
+      if (_domain.isInt()) {
+        return _domain();
+      } else {
+        assert(_domain.isVec() && _domain[_domain.size()-1].isInt());
+        return _domain[_domain.size()-1]();
+      }
+    }
+    bool is_bounded() const {
+      return !(min().isFinite() || max().isFinite());
+    }
     /// Set domain to \a newDomain, schedule propagators
     void domain(Interpreter* interpreter, const Val& newDomain, bool binding);
     /// Set domain to \a newDomain, schedule propagators

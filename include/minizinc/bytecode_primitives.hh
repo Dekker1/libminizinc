@@ -124,7 +124,7 @@ namespace MiniZinc {
     public:
       MkIntVar(void) : PrimitiveMap::Primitive("mk_intvar",PrimitiveMap::MK_INTVAR,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        assert(d->domain().isInt());
+        assert(!d->is_bounded());
         if (d->arg(0).isVec()) {
           // Propagate declared domain to definition
           d->domain(&i, d->arg(0), false);
