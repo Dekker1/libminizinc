@@ -403,6 +403,27 @@ namespace MiniZinc {
     IntVal width(void) const { return (*rs)[n+1]()-(*rs)[n]()+1; }
   };
 
+  /// Iterator over a Vec interpreted as a range set
+  class StdVecSetRanges {
+    /// The vector
+    const std::vector<Val>* rs;
+    /// The current range
+    int n;
+  public:
+    /// Constructor
+    StdVecSetRanges(const std::vector<Val>* r) : rs(r), n(0) {}
+    /// Check if iterator is still valid
+    bool operator()(void) const { return n+1<rs->size(); }
+    /// Move to next range
+    void operator++(void) { n+=2; }
+    /// Return minimum of current range
+    IntVal min(void) const { return (*rs)[n](); }
+    /// Return maximum of current range
+    IntVal max(void) const { return (*rs)[n+1](); }
+    /// Return width of current range
+    IntVal width(void) const { return (*rs)[n+1]()-(*rs)[n]()+1; }
+  };
+
   
   inline
   Val::~Val(void) { }
@@ -541,9 +562,21 @@ namespace MiniZinc {
         return _domain[_domain.size()-1]();
       }
     }
-    bool is_bounded() const {
-      return !(min().isFinite() || max().isFinite());
+    bool isBounded() const {
+      return min().isFinite() && max().isFinite();
     }
+    bool isFixed() const {
+      return _domain.isInt();
+    }
+
+    /// Set new minimum value included in the domain
+    bool setMin(Interpreter* interpreter, IntVal i);
+    /// Set new maximum value included in the domain
+    bool setMax(Interpreter* interpreter, IntVal i);
+    /// Restrict domain to a single value
+    bool setVal(Interpreter* interpreter, IntVal i);
+    /// Intersect current domain with given domain
+    bool intersectDom(Interpreter* interpreter, const std::vector<Val>& dom);
     /// Set domain to \a newDomain, schedule propagators
     void domain(Interpreter* interpreter, const Val& newDomain, bool binding);
     /// Set domain to \a newDomain, schedule propagators

@@ -418,10 +418,12 @@ namespace MiniZinc {
     binding(interpreter,binding0);
     _domain.destroy(interpreter);
     _domain = newDomain;
+    if (_domain.isVec() && _domain.size() == 2 && _domain[0]() == _domain[1]()) {
+      _domain = _domain[0];
+    }
     _domain.construct(interpreter);
-    bool assigned = newDomain.toVec()->size()==2 && (*newDomain.toVec())[0]()==(*newDomain.toVec())[1]();
-    interpreter->schedule(this, assigned ? Definition::SEV_VAL : Definition::SEV_DOM);
-    if (assigned && _pred != PrimitiveMap::MK_INTVAR) {
+    interpreter->schedule(this, isFixed() ? Definition::SEV_VAL : Definition::SEV_DOM);
+    if (isFixed() && _pred != PrimitiveMap::MK_INTVAR) {
       // This is a constrained expression, turn it into toplevel constraint
       
       // Create new constraint
@@ -429,7 +431,7 @@ namespace MiniZinc {
       for (unsigned int i=0; i<size(); i++) {
         args[i] = arg(i);
       }
-      Definition* nd = Definition::a(interpreter,(*newDomain.toVec())[0],true,_pred,BytecodeProc::ROOT,args,-1);
+      Definition* nd = Definition::a(interpreter,newDomain,true,_pred,BytecodeProc::ROOT,args,-1);
       interpreter->pushDef(nd);
       
       // Turn this definition into a (fixed) variable
@@ -450,9 +452,10 @@ namespace MiniZinc {
   }
   void
   Definition::domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding0) {
-    if (_domain.isInt()) {
+    if (!isBounded()) {
       domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), newDomain)), binding0);
     } else {
+      assert(!isFixed());
       bool did_update = false;
       Vec* d = _domain.toVec();
       if (newDomain.size() != d->size()) {
@@ -470,7 +473,102 @@ namespace MiniZinc {
       }
     }
   }
-  
+
+  bool Definition::setMin(Interpreter* interpreter, IntVal i) {
+    if (isFixed()) {
+      return min() >= i;
+    }
+    assert(_domain.size() % 2 == 0);
+    size_t j = 0;
+    while (j < _domain.size() && _domain[j]() < i) {
+      ++j;
+    }
+    if (j == 0) {
+      return true;
+    }
+    if (j == _domain.size()) {
+      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), false); // TODO: Is the domain binding when propagating??
+      return false;
+    }
+    std::vector<Val> dom;
+    if (j % 2 == 1) {
+      dom.emplace_back(i);
+    }
+    for (; j < _domain.size(); ++j) {
+      dom.push_back(_domain[j]);
+    }
+    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), false); // TODO: Is the domain binding when propagating??
+    return true;
+  }
+
+  bool Definition::setMax(Interpreter* interpreter, IntVal i) {
+    if (isFixed()) {
+      return max() <= i;
+    }
+    assert(_domain.size() % 2 == 0);
+    size_t j = _domain.size() - 1;
+    while (j >= 0 && _domain[j]() > i) {
+      --j;
+    }
+    if (j == _domain.size() - 1) {
+      return true;
+    }
+    if (j < 0 ) {
+      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), false); // TODO: Is the domain binding when propagating??
+      return false;
+    }
+    std::vector<Val> dom;
+    for (size_t k = 0; k <= j; ++j) {
+      dom.push_back(_domain[j]);
+    }
+    if (j % 2 == 0) {
+      dom.emplace_back(i);
+    }
+    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), false); // TODO: Is the domain binding when propagating??
+    return true;
+  }
+
+  bool Definition::setVal(Interpreter* interpreter, IntVal i) {
+    if (isFixed()) {
+      return i == _domain();
+    }
+    assert(_domain.size() % 2 == 0);
+    for (int j = 0; j < _domain.size(); j+=2) {
+      if (_domain[j]() <= _domain() && _domain() <= _domain[j+1]()) {
+        domain(interpreter, Val(i), false); // TODO: Is the domain binding when propagating??
+        return true;
+      }
+    }
+    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), false); // TODO: Is the domain binding when propagating??
+    return false;
+  }
+
+  bool Definition::intersectDom(Interpreter* interpreter, const std::vector<Val>& dom) {
+    if (isFixed()) {
+      assert(dom.size() % 2 == 0);
+      for (int i = 0; i < dom.size(); i+=2) {
+        if (dom[i]() <= _domain() && _domain() <= dom[i+1]()) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (!isBounded()) {
+      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), false);
+      return true;
+    }
+    VecSetRanges vsr1(_domain.toVec());
+    StdVecSetRanges vsr2(&dom);
+    Ranges::Inter<IntVal,VecSetRanges,StdVecSetRanges> inter(vsr1,vsr2);
+    std::vector<Val> result;
+    for (; inter(); ++inter) {
+      result.emplace_back(inter.min());
+      result.emplace_back(inter.max());
+    }
+    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), result)), false); // TODO: Is the domain binding when propagating??
+    return !result.empty();
+  }
+
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   const std::string AggregationCtx::symbol_to_string[] = { "AND", "OR", "VEC", "OTHER" };
 

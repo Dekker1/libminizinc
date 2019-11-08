@@ -124,7 +124,7 @@ namespace MiniZinc {
     public:
       MkIntVar(void) : PrimitiveMap::Primitive("mk_intvar",PrimitiveMap::MK_INTVAR,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        assert(!d->is_bounded());
+        assert(!d->isBounded());
         if (d->arg(0).isVec()) {
           // Propagate declared domain to definition
           d->domain(&i, d->arg(0), false);
@@ -298,13 +298,13 @@ namespace MiniZinc {
         bool propImmediately = true;
         if (d->arg(0).isDef()) {
           d->arg(0).toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(0).toDef()->is_bounded()) {
+          if (!d->arg(0).toDef()->isBounded()) {
             propImmediately = false;
           }
         }
         if (d->arg(1).isDef()) {
           d->arg(1).toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(1).toDef()->is_bounded()) {
+          if (!d->arg(1).toDef()->isBounded()) {
             propImmediately = false;
           }
         }
@@ -345,13 +345,9 @@ namespace MiniZinc {
         }
 
         if (bounds[0] == bounds[1]) {
-          // TODO: Check if value is in the current domain
-          d->domain(&i, Val(bounds[0]), true); // TODO: Is the domain binding when propagating??
-          return PS_ENTAILED;
+          return d->setVal(&i, bounds[0]) ? PS_ENTAILED : PS_FAILED;
         } else {
-          // TODO: Intersect new bounds with the current bounds
-          d->domain(&i, {bounds[0], bounds[1]}, true); // TODO: Is the domain binding when propagating??
-          return PS_OK;
+          return d->intersectDom(&i, {bounds[0], bounds[1]}) ? PS_OK : PS_FAILED;
         }
       }
     };
