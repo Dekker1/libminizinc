@@ -537,7 +537,7 @@ namespace MiniZinc {
     Definition* defs(void) const { return _defs; }
     void defs(Interpreter* interpreter, Definition* defs) {
       if (!_defs) {
-        _defs = Definition::a(interpreter,IntVal(0),false,0,0,{},-1);
+        _defs = Definition::a(interpreter,IntVal(0),false,0,0,{},-1); // Empty Head
       }
       _defs->appendBefore(interpreter, defs);
     }
@@ -924,6 +924,9 @@ namespace MiniZinc {
     std::deque<Definition*> _propQueue;
     RegisterFile globals;
     Status _status = ROGER;
+
+    Vec* infinite_dom;
+    Vec* boolean_dom;
   public:
     Trail trail;
 
@@ -931,6 +934,10 @@ namespace MiniZinc {
                 const BytecodeFrame& f) : _procs(procs), _identCount(0), cse(procs.size())
     {
       _stack.push_back(f);
+      infinite_dom = Vec::a(this, newIdent(), {Val(-IntVal::infinity()), Val(-IntVal::infinity())});
+      infinite_dom->addRef(this);
+      boolean_dom = Vec::a(this, newIdent(), {Val(IntVal(0)), Val(IntVal(1))});
+      boolean_dom->addRef(this);
     }
     ~Interpreter(void);
     Status status() { return _status; }
@@ -957,6 +964,13 @@ namespace MiniZinc {
     void propagate(void);
     Model* toFZN();
     void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
+
+    Val infinite_domain() {
+      return Val(infinite_dom);
+    }
+    Val boolean_domain() {
+      return Val(boolean_dom);
+    }
     
     /// Perform optimizatin by basic propagation on generated FlatZinc
     void optimize(void);
@@ -1006,7 +1020,7 @@ namespace MiniZinc {
 
   inline
   AggregationCtx::AggregationCtx(Interpreter* interpreter, int s) :
-    def_stack(Definition::a(interpreter,IntVal(0),false,0,0,{},-1)),
+    def_stack(Definition::a(interpreter,IntVal(0),false,0,0,{},-1)), // Empty Head
     def_ident_start(interpreter->currentIdent()),
     symbol(static_cast<Symbol>(s)), n_symbols(1) {
     assert(s >= 0 && s <= VCTX_OTHER);

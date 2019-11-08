@@ -589,7 +589,7 @@ namespace MiniZinc {
             auto cmode = BytecodeProc::FUN;
             std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
             if (!found) {
-              auto d = Definition::a(interpreter, IntVal(0), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter->newIdent());
+              auto d = Definition::a(interpreter, interpreter->boolean_domain(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter->newIdent());
               interpreter->pushDef(d);
               new_val = Val(d);
               interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
@@ -650,7 +650,7 @@ namespace MiniZinc {
             Val new_val;
             std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
             if (!found) {
-              auto negation = Definition::a(interpreter, IntVal(0), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent());
+              auto negation = Definition::a(interpreter, interpreter->infinite_domain(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent());
               interpreter->pushDef(negation);
               new_val = Val(negation);
               interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
@@ -1536,7 +1536,7 @@ namespace MiniZinc {
             DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
             // this is a FlatZinc builtin
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-            Definition* def = Definition::a(this,IntVal(0),false,code,mode,args,ident);
+            Definition* def = Definition::a(this,infinite_domain(),false,code,mode,args,ident);
             for (int i = 0; i < args.size(); ++i) {
               if (args[i].isDef()) {
                 Definition* argDef = args[i].toDef();
@@ -1875,7 +1875,7 @@ namespace MiniZinc {
                   pushAgg(IntVal(!isFalse),-2);
                 } else if (_agg.size()==2) {
                   // Push into root context
-                  Definition* d = Definition::a(this,IntVal(0),false,PrimitiveMap::FORALL,BytecodeProc::ROOT,
+                  Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::FORALL,BytecodeProc::ROOT,
                                                 {Val(Vec::a(this,newIdent(),args))},-1);
                   if (defs) {
                     d->appendBefore(this, defs);
@@ -1883,7 +1883,7 @@ namespace MiniZinc {
                     defs = d;
                   }
                 } else {
-                  result = Definition::a(this,IntVal(0),false,PrimitiveMap::FORALL,BytecodeProc::FUN,
+                  result = Definition::a(this,boolean_domain(),false,PrimitiveMap::FORALL,BytecodeProc::FUN,
                                          {Val(Vec::a(this,newIdent(),args))},newIdent());
                   pushAgg(Val(result),-2);
                 }
@@ -1912,7 +1912,7 @@ namespace MiniZinc {
                   pushAgg(IntVal(isTrue),-2);
                 } else if (_agg.size()==2) {
                   // Push into root context
-                  Definition* d = Definition::a(this,IntVal(0),false,PrimitiveMap::EXISTS,BytecodeProc::ROOT,
+                  Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::EXISTS,BytecodeProc::ROOT,
                                                 {Val(Vec::a(this,newIdent(),args))},-1);
                   if (defs) {
                     d->appendBefore(this, defs);
@@ -1920,7 +1920,7 @@ namespace MiniZinc {
                     defs = d;
                   }
                 } else {
-                  result = Definition::a(this,IntVal(0),false,PrimitiveMap::EXISTS,BytecodeProc::FUN,
+                  result = Definition::a(this,boolean_domain(),false,PrimitiveMap::EXISTS,BytecodeProc::FUN,
                                          {Val(Vec::a(this,newIdent(),args))},newIdent());
                   pushAgg(Val(result),-2);
                 }
@@ -2054,6 +2054,8 @@ namespace MiniZinc {
     for (auto &table : cse) {
       table.destroy(this);
     }
+    RefCountedObject::rmRef(this, infinite_dom);
+    RefCountedObject::rmRef(this, boolean_dom);
   }
   
   void
@@ -2094,7 +2096,7 @@ namespace MiniZinc {
       DBG_INTERPRETER("--- FZN Builtin\n");
       // this is a FlatZinc builtin
       int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-      Definition* def = Definition::a(this,IntVal(0),false,code,mode,args,ident);
+      Definition* def = Definition::a(this,infinite_domain(),false,code,mode,args,ident);
       pushDef(def);
       if (cse_suited) {
         Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
