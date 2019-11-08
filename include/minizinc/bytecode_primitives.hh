@@ -295,16 +295,18 @@ namespace MiniZinc {
     public:
       IntTimes(void) : PrimitiveMap::Primitive("int_times",PrimitiveMap::INT_TIMES,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        bool propImmediately = false;
+        bool propImmediately = true;
         if (d->arg(0).isDef()) {
           d->arg(0).toDef()->subscribe(d, Definition::SES_ANY);
-        } else {
-          propImmediately = true;
+          if (!d->arg(0).toDef()->is_bounded()) {
+            propImmediately = false;
+          }
         }
         if (d->arg(1).isDef()) {
           d->arg(1).toDef()->subscribe(d, Definition::SES_ANY);
-        } else {
-          propImmediately = true;
+          if (!d->arg(1).toDef()->is_bounded()) {
+            propImmediately = false;
+          }
         }
         if (propImmediately) {
           return propagate(i,d);
@@ -329,25 +331,17 @@ namespace MiniZinc {
         if (a.isInt()) {
           bounds[0] = a();
           bounds[1] = a();
-        } else if(a.toDef()->domain().isInt()) {
-          bounds[0] = a.toDef()->domain()();
-          bounds[1] = a.toDef()->domain()();
         } else {
-          Val dom = a.toDef()->domain();
-          bounds[0] = dom[0]();
-          bounds[1] = dom[dom.size()-1]();
+          bounds[0] = a.toDef()->min();
+          bounds[1] = a.toDef()->max();
         }
 
         if (b.isInt()) {
           bounds[0] *= b();
           bounds[1] *= b();
-        } else if(b.toDef()->domain().isInt()) {
-          bounds[0] *= b.toDef()->domain()();
-          bounds[1] *= b.toDef()->domain()();
         } else {
-          Val dom = b.toDef()->domain();
-          bounds[0] *= dom[0]();
-          bounds[1] *= dom[dom.size()-1]();
+          bounds[0] *= b.toDef()->min();
+          bounds[1] *= b.toDef()->max();
         }
 
         if (bounds[0] == bounds[1]) {
