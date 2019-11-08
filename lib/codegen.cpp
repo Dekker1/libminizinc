@@ -128,6 +128,7 @@ inline void TODO(void) {
 }
 
 void CodeGen::register_builtins(void) {
+  // Solver Built-ins
   register_builtin("mk_intvar", 1);
 
   register_builtin("bool_not", 1);
@@ -153,6 +154,9 @@ void CodeGen::register_builtins(void) {
   register_builtin("float_div", 2);
 
   register_builtin("absent", 1);
+
+  // Interpreter Built-ins
+  register_builtin("uniform", 2);
 }
 
 void OPEN_AGG(CodeGen& cg, CG_Builder& frag, AggregationCtx::Symbol ctx) {
@@ -2677,6 +2681,31 @@ CG::Binding bind_card(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG::Binding(r, CG_Cond::ttt());
 }
 
+CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  std::string name = call->decl()->id().str();
+  CG_ProcID proc = cg.find_builtin(name);
+
+  std::vector<CG_Value> r_args(call->n_args());
+  for (int i = 0; i < call->n_args(); ++i) {
+    CG::Binding b_arg(CG::bind(call->arg(i), cg, frag));
+    r_args[i] = CG::r(b_arg.first);
+    // TODO: What about the CG_Cond (how do they aggregate for builtin calls?)
+  }
+  int r_res(GET_REG(cg));
+
+  OPEN_OTHER(cg, frag);
+
+  // Push BUILTIN instruction with the correct id
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, proc);
+  // Append instruction with register arguments
+  CG_Instr &i = frag.instrs.back();
+  PUSH_INSTR_OPERAND(i, r_args);
+
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_res));
+
+  return {r_res, CG_Cond::ttt()};
+}
 
 builtin_table init_builtins(void) {
   builtin_table tbl;
@@ -2701,6 +2730,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("min", builtin_t { eval_error_b, bind_min } ));
   tbl.insert(std::make_pair("card", builtin_t { eval_error_b, bind_card } ));
   tbl.insert(std::make_pair(c.ids.bool2int, builtin_t { eval_error_b, bind_bool2int } ));
+  tbl.insert(std::make_pair("uniform", builtin_t { eval_error_b, bind_internal } ));
   return tbl;
 }
 builtin_table& builtins(void) {
