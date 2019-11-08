@@ -1388,6 +1388,15 @@ void show_frag(O& out, CodeGen& cg, std::vector<CG_Instr>& frag) {
       case BytecodeStream::OPEN_AGGREGATION:
         out << " " << agg_name((AggregationCtx::Symbol) i.params[0].value);
         break;
+      case BytecodeStream::BUILTIN: {
+        CG_ProcID p(CG_ProcID::of_val(i.params[0]));
+        assert(p.is_builtin());
+        out << " " << cg._builtins[p.id()].first;
+        for(int ii = 1; ii < i.params.size(); ++ii) {
+          out << " " << show(i.params[ii]);
+        }
+        break;
+      }
       case BytecodeStream::CALL: {
         out << " " << mode_name((BytecodeProc::Mode) i.params[0].value);
         CG_ProcID p(CG_ProcID::of_val(i.params[1]));
