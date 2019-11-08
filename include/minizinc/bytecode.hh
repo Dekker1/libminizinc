@@ -193,6 +193,7 @@ namespace MiniZinc {
   protected:
     /// The value
     // Bit 0: 0=int, 1=RefCountedObject
+    // Bit 1: 0=int, 1=Infinity
     void* _v;
   public:
     static Val follow_alias(const Val& v, Interpreter* interpreter = nullptr);
@@ -234,12 +235,16 @@ namespace MiniZinc {
     /// Access value as IntVal
     IntVal operator() (void) const {
       assert(isInt());
-      unsigned long long int i = reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(3);
-      bool pos = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(2)) == 0);
+      unsigned long long int i = reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(7);
+      bool inf = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(2)) != 0);
+      bool pos = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(4)) == 0);
+      if (inf) {
+        return pos ? IntVal::infinity() : -IntVal::infinity();
+      }
       if (pos) {
-        return i >> 2;
+        return i >> 3;
       } else {
-        return -(static_cast<long long int>(i>>2));
+        return -(static_cast<long long int>(i>>3));
       }
     }
     int timestamp() const {
@@ -276,14 +281,22 @@ namespace MiniZinc {
     Vec* toVec(void) const;
   public:
     Val(const IntVal& i=IntVal(0)) {
-      assert(i.isFinite());
       static const unsigned int pointerBits = sizeof(void*)*8;
-      static const long long int maxUnboxedVal = (static_cast<long long int>(1) << (pointerBits - 2)) - static_cast<long long int>(1);
-      assert(i >= -maxUnboxedVal && i <= maxUnboxedVal);
-      long long int j = i < 0 ? -i.toInt() : i.toInt();
-      ptrdiff_t ubi_p = (static_cast<ptrdiff_t>(j) << 2);
-      if (i < 0)
+      static const long long int maxUnboxedVal = (static_cast<long long int>(1) << (pointerBits - 3)) - static_cast<long long int>(1);
+      assert(!i.isFinite() || i >= -maxUnboxedVal && i <= maxUnboxedVal);
+      long long int j;
+      if (i.isFinite()) {
+        j = i < 0 ? -i.toInt() : i.toInt();
+      } else {
+        j = 1;
+      }
+      ptrdiff_t ubi_p = (static_cast<ptrdiff_t>(j) << 3);
+      if (!i.isFinite()) {
         ubi_p = ubi_p | static_cast<ptrdiff_t>(2);
+      }
+      if (i < 0) {
+        ubi_p = ubi_p | static_cast<ptrdiff_t>(4);
+      }
       _v = reinterpret_cast<void*>(ubi_p);
     }
     explicit Val(RefCountedObject* d) {
