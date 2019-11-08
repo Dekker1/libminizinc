@@ -13,6 +13,7 @@
 #define __MINIZINC_BYTECODE_PRIMITIVES_HH__
 
 #include <minizinc/bytecode.hh>
+#include <random>
 
 namespace MiniZinc {
   
@@ -29,7 +30,8 @@ namespace MiniZinc {
       INT_MINUS,
       INT_TIMES,
       LINEXP,
-      MAX_ID=LINEXP
+      UNIFORM,
+      MAX_ID=UNIFORM
     };
     class Primitive {
     protected:
@@ -61,7 +63,7 @@ namespace MiniZinc {
         assert(false);
         throw Error("internal error");
       };
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) const {
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
         assert(false);
         throw Error("internal error");
       };
@@ -344,6 +346,24 @@ namespace MiniZinc {
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+    };
+
+    class Uniform : public PrimitiveMap::Primitive {
+    public:
+      Uniform() : PrimitiveMap::Primitive("uniform",PrimitiveMap::UNIFORM,2) {
+        std::random_device rnd;
+        generator = std::mt19937(rnd());
+      }
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
+        assert(args.size() == 2);
+        assert(args[0].isInt() && args[1].isInt());
+
+        std::uniform_int_distribution<> dis(args[0]().toInt(), args[1]().toInt());
+        Val rnd(dis(generator));
+        i.pushAgg(rnd, -1);
+      };
+    private:
+      std::mt19937 generator;
     };
     
   }

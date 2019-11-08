@@ -24,9 +24,10 @@ namespace MiniZinc {
     IntMinus intminus;
     IntTimes inttimes;
     LinExp linexp;
+    Uniform uniform;
     
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &intminus, &inttimes, &linexp
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &intminus, &inttimes, &linexp, &uniform
     };
   }
   
