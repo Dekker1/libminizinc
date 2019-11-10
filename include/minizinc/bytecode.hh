@@ -986,7 +986,7 @@ namespace MiniZinc {
                 const BytecodeFrame& f) : _procs(procs), _identCount(0), cse(procs.size())
     {
       _stack.push_back(f);
-      infinite_dom = Vec::a(this, newIdent(), {Val(-IntVal::infinity()), Val(-IntVal::infinity())});
+      infinite_dom = Vec::a(this, newIdent(), {Val(-IntVal::infinity()), Val(IntVal::infinity())});
       infinite_dom->addRef(this);
       boolean_dom = Vec::a(this, newIdent(), {Val(IntVal(0)), Val(IntVal(1))});
       boolean_dom->addRef(this);
