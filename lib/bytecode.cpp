@@ -32,7 +32,7 @@ namespace MiniZinc {
 
   Val
   AggregationCtx::createVec(Interpreter* interpreter, Definition* def, int timestamp) const {
-    for (Val v : stack) {
+    for (const Val& v : stack) {
       if (v.isDef() && v.toDef()->timestamp() >= def_ident_start) {
         // this is a new definition created during this aggregation and needs to be added to the hedge
         if (v.toDef()->prev()==v.toDef()) {
@@ -1452,14 +1452,14 @@ namespace MiniZinc {
             IntVal u(vals[0]);
             for(int i = 1; i < vals.size(); ++i) {
               if(u+1 < vals[i]) {
-                result.push_back(l);
-                result.push_back(u);
+                result.emplace_back(l);
+                result.emplace_back(u);
                 l = vals[i];
               }
               u = vals[i];
             }
-            result.push_back(l);
-            result.push_back(u);
+            result.emplace_back(l);
+            result.emplace_back(u);
           }
           Val result_val(Vec::a(this, newIdent(), result));
           frame->reg.assign(this, r2, result_val);
@@ -1487,8 +1487,8 @@ namespace MiniZinc {
             Ranges::Inter<IntVal,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
             std::vector<Val> result;
             for (; inter(); ++inter) {
-              result.push_back(inter.min());
-              result.push_back(inter.max());
+              result.emplace_back(inter.min());
+              result.emplace_back(inter.max());
             }
             result_val = Val(Vec::a(this, newIdent(), result));
           }
@@ -1517,8 +1517,8 @@ namespace MiniZinc {
             Ranges::Union<IntVal,VecSetRanges,VecSetRanges> union_r(vsr1,vsr2);
             std::vector<Val> result;
             for (; union_r(); ++union_r) {
-              result.push_back(union_r.min());
-              result.push_back(union_r.max());
+              result.emplace_back(union_r.min());
+              result.emplace_back(union_r.max());
             }
             result_val = Val(Vec::a(this, newIdent(), result));
           }
@@ -1556,8 +1556,8 @@ namespace MiniZinc {
             Ranges::Inter<IntVal,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
             std::vector<Val> result;
             for (; inter(); ++inter) {
-              result.push_back(inter.min());
-              result.push_back(inter.max());
+              result.emplace_back(inter.min());
+              result.emplace_back(inter.max());
             }
             v1.toDef()->domain(this, result, true);
             result_val = v1.toDef()->domain();
