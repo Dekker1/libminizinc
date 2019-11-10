@@ -1377,8 +1377,8 @@ namespace MiniZinc {
             frame->reg.assign(this, r2, v);
           } else if (v.isDef()) {
             Definition* def = v.toDef();
-            if (def->domain().isVec()) {
-              Val lb = (*def->domain().toVec())[0];
+            if (def->isBounded()) {
+              Val lb(def->min());
               frame->reg.assign(this, r2, lb);
               DBG_INTERPRETER(" R" << r2 <<  "(" << lb.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
             } else {
@@ -1399,8 +1399,8 @@ namespace MiniZinc {
             frame->reg.assign(this, r2, v);
           } else if (v.isDef()) {
             Definition* def = v.toDef();
-            if (def->domain().isVec()) {
-              Val ub = (*def->domain().toVec())[def->domain().toVec()->size()-1];
+            if (def->isBounded()) {
+              Val ub(def->max());
               frame->reg.assign(this, r2, ub);
               DBG_INTERPRETER(" R" << r2 <<  "(" << ub.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
             } else {
