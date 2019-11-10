@@ -63,7 +63,7 @@ namespace MiniZinc {
       }
       os << ":\t";
       os << bs[d->pred()].name << "(";
-      for (unsigned int i=0; i<d->size(); i++) {
+      for (int i=0; i<d->size(); i++) {
         os << d->arg(i).toString();
         if (i<d->size()-1)
           os << ", ";
@@ -463,7 +463,7 @@ namespace MiniZinc {
       if (newDomain.size() != d->size()) {
         did_update = true;
       } else {
-        for (unsigned int i=0; i<newDomain.size(); i++) {
+        for (int i=0; i<newDomain.size(); i++) {
           if (newDomain[i]() != (*d)[i]()) {
             did_update = true;
             break;
@@ -1444,7 +1444,7 @@ namespace MiniZinc {
           std::vector<Val> result;
           if(a1->size() > 0) {
             std::vector<IntVal> vals(a1->size());
-            for (unsigned int i=0; i<a1->size(); i++)
+            for (int i=0; i<a1->size(); i++)
               vals[i] = (*a1)[i]();
 
             std::sort(vals.begin(), vals.end());
@@ -1637,9 +1637,9 @@ namespace MiniZinc {
             // this is a FlatZinc builtin
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
             Definition* def = Definition::a(this,infinite_domain(),false,code,mode,args,ident);
-            for (int i = 0; i < args.size(); ++i) {
-              if (args[i].isDef()) {
-                Definition* argDef = args[i].toDef();
+            for (const Val& arg : args) {
+              if (arg.isDef()) {
+                Definition* argDef = arg.toDef();
                 if (!argDef->attached()) {
                   def->defs(this, argDef);
                 }
@@ -1836,14 +1836,14 @@ namespace MiniZinc {
                 switch (cur->pred()) {
                   case PrimitiveMap::LINEXP:
                   {
-                    for (unsigned int i=0; i<cur->arg(0).size(); i++) {
+                    for (int i=0; i<cur->arg(0).size(); i++) {
                       defs.emplace_back(coeff*cur->arg(0)[i](), cur->arg(1)[i]);
                     }
                     d += coeff*cur->arg(2)();
                   }
                     break;
                   case PrimitiveMap::INT_SUM:
-                    for (unsigned int i=0; i<cur->arg(0).size(); i++) {
+                    for (int i=0; i<cur->arg(0).size(); i++) {
                       defs.emplace_back(coeff,cur->arg(0)[i]);
                     }
                     break;
@@ -1958,7 +1958,7 @@ namespace MiniZinc {
                 std::vector<Val> args;
                 args.reserve(_agg.back().size());
                 bool isFalse = false;
-                for (unsigned int i=0; i<_agg.back().size(); i++) {
+                for (int i=0; i<_agg.back().size(); i++) {
                   const Val& v = _agg.back()[i];
                   if (v.isInt()) {
                     if ( v()==0 ) {
@@ -1997,7 +1997,7 @@ namespace MiniZinc {
                 std::vector<Val> args;
                 args.reserve(_agg.back().size());
                 bool isTrue = false;
-                for (unsigned int i=0; i<_agg.back().size(); i++) {
+                for (int i=0; i<_agg.back().size(); i++) {
                   const Val& v = _agg.back()[i];
                   if (v.isInt() && v()!=0) {
                     // Disjunction is constant true
@@ -2092,7 +2092,7 @@ namespace MiniZinc {
   Model*
   Interpreter::toFZN() {
     GCLock lock;
-    Model* fzn = new Model();
+    auto fzn = new Model();
     if (_status != ROGER) {
       std::vector<Expression*> args = {constants().boollit(true), constants().boollit(false)};
       auto fail = new Call(Location().introduce(), constants().ids.bool_eq, args);
@@ -2122,7 +2122,7 @@ namespace MiniZinc {
             }
             args.push_back(new VarDecl(Location().introduce(), ti, i));
           }
-          TypeInst* ti = new TypeInst(Location().introduce(), Type::varbool());
+          auto ti = new TypeInst(Location().introduce(), Type::varbool());
           fi = new FunctionI(Location().introduce(), call->id().str(), ti, args, nullptr);
           fzn->registerFn(env.envi(), fi);
           toAdd.push_back(fi);
@@ -2135,10 +2135,8 @@ namespace MiniZinc {
       }
     }
 
-    if (fzn) {
-      // TODO: What solve item should we add?
-      fzn->addItem(SolveI::sat(Location().introduce()));
-    }
+    // TODO: What solve item should we add?
+    fzn->addItem(SolveI::sat(Location().introduce()));
     return fzn;
   }
   
