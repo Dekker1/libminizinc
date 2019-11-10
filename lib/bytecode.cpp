@@ -1094,8 +1094,8 @@ namespace MiniZinc {
         case PrimitiveMap::Primitive::PS_OK:
           break;
         case PrimitiveMap::Primitive::PS_FAILED:
-          // TODO: fail entire interpreter state
-          break;
+          _status = INCONSISTENT;
+          return;
         case PrimitiveMap::Primitive::PS_ENTAILED:
           // TODO: remove definition
           break;
