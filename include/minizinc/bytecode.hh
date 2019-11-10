@@ -355,7 +355,7 @@ namespace MiniZinc {
     // TODO: Should vectors be indexed from 1 internally?
     const Val& operator [](int i) const { assert(i >= 0 && i<_size); return _data[i]; }
     static Vec* a(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) {
-      Vec* nv = static_cast<Vec*>(::malloc(sizeof(Vec)+sizeof(Val)*(v.size()-1)));
+      Vec* nv = static_cast<Vec*>(::malloc(sizeof(Vec)+sizeof(Val)*std::max(0, static_cast<int>(v.size()-1))));
       new (nv) Vec(interpreter,timestamp,v);
       return nv;
     }
