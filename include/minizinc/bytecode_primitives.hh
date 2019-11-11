@@ -348,7 +348,7 @@ namespace MiniZinc {
         Val b = d->arg(1);
         IntVal lb, ub;
 
-        if ((a.isDef() && a.toDef()->domain() == Val(IntVal(0))) || (b.isDef() && a.toDef()->domain() == Val(IntVal(0)))) {
+        if ((a.isDef() && !a.toDef()->isBounded()) || (b.isDef() && !b.toDef()->isBounded())) {
           return PS_OK;
         }
 
