@@ -750,7 +750,7 @@ namespace MiniZinc {
             Val new_val;
             std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
             if (!found) {
-              auto negation = Definition::a(interpreter, interpreter->infinite_domain(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent());
+              auto negation = Definition::a(interpreter, interpreter->boolean_domain(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent());
               interpreter->pushDef(negation);
               new_val = Val(negation);
               interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
@@ -1636,7 +1636,23 @@ namespace MiniZinc {
             DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
             // this is a FlatZinc builtin
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-            Definition* def = Definition::a(this,infinite_domain(),false,code,mode,args,ident);
+            Val dom;
+            switch (mode) {
+              case BytecodeProc::ROOT:
+                dom = Val(IntVal(1));
+                break;
+              case BytecodeProc::ROOT_NEG:
+                dom = Val(IntVal(0));
+                break;
+              case BytecodeProc::IMP:
+              case BytecodeProc::IMP_NEG:
+                dom = boolean_domain();
+                break;
+              default:
+                dom = infinite_domain();
+                break;
+            }
+            Definition* def = Definition::a(this,dom,false,code,mode,args,ident);
             for (const Val& arg : args) {
               if (arg.isDef()) {
                 Definition* argDef = arg.toDef();
@@ -2194,7 +2210,23 @@ namespace MiniZinc {
       DBG_INTERPRETER("--- FZN Builtin\n");
       // this is a FlatZinc builtin
       int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-      Definition* def = Definition::a(this,infinite_domain(),false,code,mode,args,ident);
+      Val dom;
+      switch (mode) {
+        case BytecodeProc::ROOT:
+          dom = Val(IntVal(1));
+          break;
+        case BytecodeProc::ROOT_NEG:
+          dom = Val(IntVal(0));
+          break;
+        case BytecodeProc::IMP:
+        case BytecodeProc::IMP_NEG:
+          dom = boolean_domain();
+          break;
+        default:
+          dom = infinite_domain();
+          break;
+      }
+      Definition* def = Definition::a(this,dom,false,code,mode,args,ident);
       pushDef(def);
       if (cse_suited) {
         Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
