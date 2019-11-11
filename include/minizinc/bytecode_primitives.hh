@@ -239,12 +239,11 @@ namespace MiniZinc {
     public:
       IntSum(void) : PrimitiveMap::Primitive("int_sum",PrimitiveMap::INT_SUM,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        bool propImmediately = false;
-        for (unsigned int i=0; i<d->arg(0).size(); i++) {
-          if (d->arg(0)[i].isDef()) {
-            d->arg(0)[i].toDef()->subscribe(d, Definition::SES_ANY);
-          } else {
-            propImmediately = true;
+        bool propImmediately = true;
+        for (int j=0; j<d->arg(0).size(); j++) {
+          d->arg(0)[j].toDef()->subscribe(d, Definition::SES_ANY);
+          if (!d->arg(0)[j].toDef()->isBounded()) {
+            propImmediately = false;
           }
         }
         if (propImmediately) {
@@ -254,13 +253,38 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (unsigned int i=0; i<d->arg(0).size(); i++) {
-          if (d->arg(0)[i].isDef()) {
-            d->arg(0)[i].toDef()->unsubscribe(d);
+        for (int j=0; j < d->arg(0).size(); j++) {
+          if (d->arg(0)[j].isDef()) {
+            d->arg(0)[j].toDef()->unsubscribe(d);
           }
         }
       }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        IntVal lb, ub;
+
+        for (int j=0; j < d->arg(0).size(); j++) {
+          Val v = d->arg(0)[j];
+          if(v.isInt()) {
+            lb += v();
+            lb += v();
+          } else {
+            assert(v.isDef());
+            auto def = v.toDef();
+            if (!def->isBounded()) {
+              return PS_OK;
+            }
+            lb += def->min();
+            ub += def->max();
+          }
+        }
+
+        if (lb == ub) {
+          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+        } else {
+          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+        }
+        // TODO: Backwards Propagation
+      }
     };
 
     class IntMinus : public PrimitiveMap::Primitive {
