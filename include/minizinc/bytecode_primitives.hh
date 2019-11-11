@@ -264,18 +264,11 @@ namespace MiniZinc {
 
         for (int j=0; j < d->arg(0).size(); j++) {
           Val v = d->arg(0)[j];
-          if(v.isInt()) {
-            lb += v();
-            lb += v();
-          } else {
-            assert(v.isDef());
-            auto def = v.toDef();
-            if (!def->isBounded()) {
-              return PS_OK;
-            }
-            lb += def->min();
-            ub += def->max();
+          if (v.isDef() && !v.toDef()->isBounded()) {
+            return PS_OK;
           }
+          lb += v.lb();
+          ub += v.ub();
         }
 
         if (lb == ub) {
@@ -352,21 +345,11 @@ namespace MiniZinc {
           return PS_OK;
         }
 
-        if (a.isInt()) {
-          lb = a();
-          ub = a();
-        } else {
-          lb = a.toDef()->min();
-          ub = a.toDef()->max();
-        }
+        lb = a.lb();
+        ub = a.ub();
 
-        if (b.isInt()) {
-          lb *= b();
-          ub *= b();
-        } else {
-          lb *= b.toDef()->min();
-          ub *= b.toDef()->max();
-        }
+        lb *= b.lb();
+        ub *= b.ub();
 
         if (lb == ub) {
           return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;

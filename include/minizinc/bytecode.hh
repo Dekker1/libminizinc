@@ -337,6 +337,8 @@ namespace MiniZinc {
         return al;
       }
     }
+    IntVal lb() const;
+    IntVal ub() const;
   };
   
   class Vec : public RefCountedObject {
@@ -546,7 +548,7 @@ namespace MiniZinc {
     Definition(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
   public:
     Val domain(void) const { return _domain; }
-    IntVal min() const {
+    IntVal lb() const {
       if (_domain.isInt()) {
         return _domain();
       } else {
@@ -554,7 +556,7 @@ namespace MiniZinc {
         return _domain[0]();
       }
     }
-    IntVal max() const {
+    IntVal ub() const {
       if (_domain.isInt()) {
         return _domain();
       } else {
@@ -563,7 +565,7 @@ namespace MiniZinc {
       }
     }
     bool isBounded() const {
-      return min().isFinite() && max().isFinite();
+      return lb().isFinite() && ub().isFinite();
     }
     bool isFixed() const {
       return _domain.isInt();

@@ -478,7 +478,7 @@ namespace MiniZinc {
 
   bool Definition::setMin(Interpreter* interpreter, IntVal i) {
     if (isFixed()) {
-      return min() >= i;
+      return lb() >= i;
     }
     assert(_domain.size() % 2 == 0);
     size_t j = 0;
@@ -505,7 +505,7 @@ namespace MiniZinc {
 
   bool Definition::setMax(Interpreter* interpreter, IntVal i) {
     if (isFixed()) {
-      return max() <= i;
+      return ub() <= i;
     }
     assert(_domain.size() % 2 == 0);
     size_t j = _domain.size() - 1;
@@ -634,8 +634,33 @@ namespace MiniZinc {
     }
   }
 
+  IntVal Val::lb() const {
+    if (isInt()) {
+      return operator()();
+    } else if (isVec()) {
+      // Assume it is a set (sorted Vec of integer ranges)
+      assert(operator[](0).isInt());
+      return operator[](0)();
+    } else {
+      assert(isDef());
+      return toDef()->lb();
+    }
+  }
 
-    CSETable::Key::Key(const std::vector<Val> &vec) {
+  IntVal Val::ub() const {
+    if (isInt()) {
+      return operator()();
+    } else if (isVec()) {
+      // Assume it is a set (sorted Vec of integer ranges)
+      assert(operator[](size()-1).isInt());
+      return operator[](size()-1)();
+    } else {
+      assert(isDef());
+      return toDef()->ub();
+    }
+  }
+
+  CSETable::Key::Key(const std::vector<Val> &vec) {
     _size = vec.size();
     for (const auto& val : vec) {
       if (val.isVec() && val.size() <= 3) {
@@ -1378,10 +1403,12 @@ namespace MiniZinc {
           } else if (v.isDef()) {
             Definition* def = v.toDef();
             if (def->isBounded()) {
-              Val lb(def->min());
+              Val lb(def->lb());
               frame->reg.assign(this, r2, lb);
               DBG_INTERPRETER(" R" << r2 <<  "(" << lb.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
             } else {
+              std::cerr << "PROPAGATE " << _procs[v.toDef()->pred()].name << "!\n";
+              std::cerr << v.toString() << " with domain " << v.toDef()->domain().toString() << std::endl;
               throw Error("Error: lb on unbounded variable");
             }
           } else {
@@ -1400,7 +1427,7 @@ namespace MiniZinc {
           } else if (v.isDef()) {
             Definition* def = v.toDef();
             if (def->isBounded()) {
-              Val ub(def->max());
+              Val ub(def->ub());
               frame->reg.assign(this, r2, ub);
               DBG_INTERPRETER(" R" << r2 <<  "(" << ub.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
             } else {
