@@ -346,33 +346,34 @@ namespace MiniZinc {
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
         Val a = d->arg(0);
         Val b = d->arg(1);
-        IntVal bounds[2];
+        IntVal lb, ub;
 
         if ((a.isDef() && a.toDef()->domain() == Val(IntVal(0))) || (b.isDef() && a.toDef()->domain() == Val(IntVal(0)))) {
           return PS_OK;
         }
 
         if (a.isInt()) {
-          bounds[0] = a();
-          bounds[1] = a();
+          lb = a();
+          ub = a();
         } else {
-          bounds[0] = a.toDef()->min();
-          bounds[1] = a.toDef()->max();
+          lb = a.toDef()->min();
+          ub = a.toDef()->max();
         }
 
         if (b.isInt()) {
-          bounds[0] *= b();
-          bounds[1] *= b();
+          lb *= b();
+          ub *= b();
         } else {
-          bounds[0] *= b.toDef()->min();
-          bounds[1] *= b.toDef()->max();
+          lb *= b.toDef()->min();
+          ub *= b.toDef()->max();
         }
 
-        if (bounds[0] == bounds[1]) {
-          return d->setVal(&i, bounds[0]) ? PS_ENTAILED : PS_FAILED;
+        if (lb == ub) {
+          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
         } else {
-          return d->intersectDom(&i, {bounds[0], bounds[1]}) ? PS_OK : PS_FAILED;
+          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
         }
+        // TODO: Backwards Propagation
       }
     };
 
