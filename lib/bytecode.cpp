@@ -537,7 +537,7 @@ namespace MiniZinc {
     }
     assert(_domain.size() % 2 == 0);
     for (int j = 0; j < _domain.size(); j+=2) {
-      if (_domain[j]() <= _domain() && _domain() <= _domain[j+1]()) {
+      if (_domain[j]() <= i && i <= _domain[j+1]()) {
         domain(interpreter, Val(i), false); // TODO: Is the domain binding when propagating??
         return true;
       }
