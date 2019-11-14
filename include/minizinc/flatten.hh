@@ -108,7 +108,7 @@ namespace MiniZinc {
   };
   
   /// Compute statistics for flat model in \a m
-  FlatModelStatistics statistics(Env& m);
+  FlatModelStatistics statistics(Model* m);
   
 }
 

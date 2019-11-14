@@ -3780,13 +3780,9 @@ namespace MiniZinc {
     std::stable_sort(m->begin(),m->end(),_cmp);
   }
 
-  FlatModelStatistics statistics(Env& m) {
-    Model* flat = m.flat();
+  FlatModelStatistics statistics(Model* m) {
+    Model* flat = m;
     FlatModelStatistics stats;
-    stats.n_reif_ct = m.envi().n_reif_ct;
-    stats.n_imp_ct = m.envi().n_imp_ct;
-    stats.n_imp_del = m.envi().n_imp_del;
-    stats.n_lin_del = m.envi().n_lin_del;
     for (unsigned int i=0; i<flat->size(); i++) {
       if (!(*flat)[i]->removed()) {
         if (VarDeclI* vdi = (*flat)[i]->dyn_cast<VarDeclI>()) {

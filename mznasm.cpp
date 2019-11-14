@@ -36,20 +36,15 @@ int main(int argc, const char** argv) {
     std::cerr << "Usage: mznasm [-v] <ASMFILE>\n";
     return 1;
   }
-  
-  bool verbose = false;
-  std::string filename = argv[1];
-  if (filename=="-v") {
-    verbose = true;
-    if (argc < 3) {
-      std::cerr << "Usage: mznasm [-v] <ASMFILE>\n";
-      return 1;
-    }
-    filename = argv[2];
+
+  std::string filename = argv[argc-1];
+  std::vector<std::string> args;
+  for (int i = 1; i < argc-1; ++i) {
+    args.emplace_back(argv[i]);
   }
 
   try {
-    MznSolver slv(filename, "gecode", verbose);
+    MznSolver slv(filename, "org.minizinc.mzn-fzn", args);
     auto result = slv.run();
     while (result.first != SolverInstance::ERROR) {
       std::cout << result.second;

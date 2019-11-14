@@ -150,12 +150,10 @@ void SolverFactory::destroySI(SolverInstanceBase * pSI) {
   sistorage.erase(it);
 }
 
-MznSolver::MznSolver(const std::string& file, const std::string& solver, bool verbose)
-  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()), file(file), solver_str(solver), flag_verbose(verbose) {
+MznSolver::MznSolver(const std::string& file, const std::string& solver, std::vector<std::string> args0)
+  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()), file(file), solver_str(solver) {
   std::vector<std::string> args = {executable_name, "--solver", solver_str};
-  if (flag_verbose) {
-    args.emplace_back("--verbose-compilation");
-  }
+  args.insert(args.end(), args0.begin(), args0.end());
   switch (processOptions(args)) {
     case OPTION_FINISH:
       return;
@@ -640,8 +638,6 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
 
 void MznSolver::flatten(const std::string& filename, const std::string& modelName)
 {
-  // flt.set_flag_verbose(flag_compiler_verbose);
-  // flt.set_flag_statistics(flag_compiler_statistics);
   bool verbose = flag_compiler_verbose;
   Timer tm01;
   std::ifstream t(filename, std::ifstream::in);
@@ -694,9 +690,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
       std::cout << printSolution(getFltStatus()) << std::endl;
       break;
   }
-  /// The following message tells mzn-test.py that flattening succeeded.
-  if (flag_compiler_verbose)
-    log << "  Flattening done, " << tm01.stoptime() << std::endl;
+  flatten_time = tm01.s();
 }
 
 std::pair<SolverInstance::Status, std::string> MznSolver::solve()
@@ -794,8 +788,56 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
     sf->processOption(si_opt, i, timeoutArgs);
   }
 
-  if (SolverInstance::UNKNOWN == getFltStatus())
-  {
+  if (ifMzn2Fzn()) {
+    Model* fzn = interpreter->toFZN();
+    // Print flatzinc to file
+    std::ofstream ofs;
+    ofs.open((file.substr(0, file.size()-4) + std::string(".fzn")).c_str(), ios::out);
+    checkIOStatus (ofs.good(), " I/O error: cannot open fzn output file. ");
+    Printer p(ofs,0);
+    p.print(fzn);
+    checkIOStatus (ofs.good(), " I/O error: cannot write fzn output file. ");
+    ofs.close();
+    // Output flat statistics
+    if (flag_statistics) {
+      FlatModelStatistics stats = statistics(fzn);
+      os << "% Generated FlatZinc statistics:\n";
+
+      if (stats.n_bool_vars) { os << "%%%mzn-stat: flatBoolVars=" << stats.n_bool_vars << endl; }
+      if (stats.n_int_vars) { os << "%%%mzn-stat: flatIntVars=" << stats.n_int_vars << endl; }
+      if (stats.n_float_vars) { os << "%%%mzn-stat: flatFloatVars=" << stats.n_float_vars << endl; }
+      if (stats.n_set_vars) { os << "%%%mzn-stat: flatSetVars=" << stats.n_set_vars << endl; }
+
+      if (stats.n_bool_ct) { os << "%%%mzn-stat: flatBoolConstraints=" << stats.n_bool_ct << endl; }
+      if (stats.n_int_ct) { os << "%%%mzn-stat: flatIntConstraints=" << stats.n_int_ct << endl; }
+      if (stats.n_float_ct) { os << "%%%mzn-stat: flatFloatConstraints=" << stats.n_float_ct << endl; }
+      if (stats.n_set_ct) { os << "%%%mzn-stat: flatSetConstraints=" << stats.n_set_ct << endl; }
+
+      if (stats.n_reif_ct) { os << "%%%mzn-stat: evaluatedReifiedConstraints=" << stats.n_reif_ct << endl; }
+      if (stats.n_imp_ct) { os << "%%%mzn-stat: evaluatedHalfReifiedConstraints=" << stats.n_imp_ct << endl; }
+
+      if (stats.n_imp_del) { os << "%%%mzn-stat: eliminatedImplications=" << stats.n_imp_del << endl; }
+      if (stats.n_lin_del) { os << "%%%mzn-stat: eliminatedLinearConstraints=" << stats.n_lin_del << endl; }
+
+      /// Objective / SAT. These messages are used by mzn-test.py.
+      SolveI* solveItem = fzn->solveItem();
+      if (solveItem->st() != SolveI::SolveType::ST_SAT) {
+        if (solveItem->st() == SolveI::SolveType::ST_MAX) {
+          os << "%%%mzn-stat: method=\"maximize\"" << endl;
+        } else {
+          os << "%%%mzn-stat: method=\"minimize\"" << endl;
+        }
+      } else {
+        os << "%%%mzn-stat: method=\"satisfy\"" << endl;
+      }
+
+      os << "%%%mzn-stat: flatTime=" << flatten_time << endl;
+      os << "%%%mzn-stat-end" << endl << endl;
+    }
+
+    delete fzn;
+    return {SolverInstance::UNKNOWN, ""};
+  } else if (SolverInstance::UNKNOWN == getFltStatus()) {
     if (!si) {          // only then
       // GCLock lock;                  // better locally, to enable cleanup after ProcessFlt()
       addSolverInterface();

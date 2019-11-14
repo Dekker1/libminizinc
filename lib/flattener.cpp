@@ -652,7 +652,7 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
         }
 
         if (flag_statistics) {
-          FlatModelStatistics stats = statistics(*env);
+          FlatModelStatistics stats = statistics(env->flat());
           os << "% Generated FlatZinc statistics:\n";
 
           os << "%%%mzn-stat: paths=" << env->envi().getPathMap().size() << endl;

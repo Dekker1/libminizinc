@@ -130,6 +130,7 @@ namespace MiniZinc {
     std::ostream& log;
     SolverInstance::Status interpreter_status = SolverInstance::UNKNOWN;
     Definition* def_ptr = nullptr;
+    double flatten_time = 0;
   public:
     Interpreter* interpreter = nullptr;
     Solns2Out s2out;
@@ -145,7 +146,7 @@ namespace MiniZinc {
     int flag_overall_time_limit=0;
 
   public:
-    MznSolver(const std::string& file, const std::string& solver, bool verbose = false);
+    MznSolver(const std::string& file, const std::string& solver, std::vector<std::string> args = {});
     ~MznSolver();
     
     std::pair<SolverInstance::Status, std::string> run();
