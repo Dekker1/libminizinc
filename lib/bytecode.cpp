@@ -111,6 +111,7 @@ namespace MiniZinc {
     if (_defs) {
       Definition* cur = _defs->next();
       while (cur != _defs) {
+        Definition* nxt = cur->next();
         if (cur->_ref_count > 0) {
           // Promote cur to parent level
           cur->unlink(interpreter);
@@ -125,7 +126,7 @@ namespace MiniZinc {
             ::free(cur);
           }
         }
-        cur = cur->next();
+        cur = nxt;
       }
       if (_defs->next() == _defs) {
         if (!interpreter->trail.trail_ptr(this, &_defs)) {
