@@ -31,7 +31,8 @@ namespace MiniZinc {
       INT_TIMES,
       LINEXP,
       UNIFORM,
-      MAX_ID=UNIFORM
+      SOL,
+      MAX_ID=SOL
     };
     class Primitive {
     protected:
@@ -404,6 +405,21 @@ namespace MiniZinc {
       };
     private:
       std::mt19937 generator;
+    };
+
+    class Sol : public PrimitiveMap::Primitive {
+    public:
+      Sol() : PrimitiveMap::Primitive("sol",PrimitiveMap::SOL, 1) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
+        assert(args.size() == 1);
+        assert(args[0].isDef());
+
+        auto it = i.solutions.find(args[0].timestamp());
+        assert(it != i.solutions.end());
+        Val sol(it->second);
+
+        i.pushAgg(sol, -1);
+      };
     };
     
   }

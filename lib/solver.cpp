@@ -731,7 +731,16 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
           }
         }
         ss << "]" << endl;
+
+        // Set output for sol() builtin
+        interpreter->solutions.clear();
+        for (int i = 0; i < vec.size(); ++i) {
+          if (vec[i].isDef()) {
+            interpreter->solutions.emplace(vec[i].timestamp(), si->getSolutionValue(vec[i].toDef())());
+          }
+        }
       } else {
+        interpreter->solutions.clear();
         Definition* head = interpreter->_agg[0].def_stack;
         Definition* d = head->next(); //ignore dummy head
         bool first = true;
@@ -745,7 +754,11 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
             ss << "    \"" << timestamp << "\"" << ": ";
             ss << si->getSolutionValue(d).toString();
             first = false;
+
+            // Set output for sol() builtin
+            interpreter->solutions.emplace(timestamp, si->getSolutionValue(d)());
           }
+
           d = d->next();
         }
         ss << std::endl << "}";

@@ -767,6 +767,8 @@ function var int: objective_deopt_(var opt int: x, bool: direction) =
 
 predicate output_this(array[int] of var int: arr);
 
+function int: sol(var int: x);
+
 /***
  @groupdef options Compiler options
 */

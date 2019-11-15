@@ -157,6 +157,7 @@ void CodeGen::register_builtins(void) {
 
   // Interpreter Built-ins
   register_builtin("uniform", 2);
+  register_builtin("sol", 1);
 }
 
 void OPEN_AGG(CodeGen& cg, CG_Builder& frag, AggregationCtx::Symbol ctx) {
@@ -2740,6 +2741,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("card", builtin_t { eval_error_b, bind_card } ));
   tbl.insert(std::make_pair(c.ids.bool2int, builtin_t { eval_error_b, bind_bool2int } ));
   tbl.insert(std::make_pair("uniform", builtin_t { eval_error_b, bind_internal } ));
+  tbl.insert(std::make_pair("sol", builtin_t { eval_error_b, bind_internal } ));
   return tbl;
 }
 builtin_table& builtins(void) {

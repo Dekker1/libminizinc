@@ -983,6 +983,7 @@ namespace MiniZinc {
     Vec* boolean_dom;
   public:
     Trail trail;
+    std::unordered_map<int, IntVal> solutions;
 
     Interpreter(std::vector<BytecodeProc>& procs,
                 const BytecodeFrame& f) : _procs(procs), _identCount(0), cse(procs.size())
