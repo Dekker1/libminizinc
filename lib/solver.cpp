@@ -873,10 +873,10 @@ void MznSolver::addDefinitions() {
       output = def_ptr;
       continue;
     }
+    si->addDefinition(interpreter->_procs, def_ptr);
     if (def_ptr->defs()) {
       Definition::addToSolver(interpreter, def_ptr->defs(), interpreter->_procs, si);
     }
-    si->addDefinition(interpreter->_procs, def_ptr);
   } while(def_ptr->next() != head);
   // TODO: Domain Changes
 }
