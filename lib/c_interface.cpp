@@ -11,9 +11,10 @@
 
 #include <minizinc/c_interface.h>
 #include <minizinc/solver.hh>
+#include <minizinc/bytecode_primitives.hh>
 
 #include <iostream>
-#include <stdarg.h>
+#include <cstdarg>
 
 using namespace MiniZinc;
 
@@ -24,6 +25,10 @@ public:
   MznSolver slv;
   std::string result;
 };
+
+void set_rnd_seed(int seed) {
+  dynamic_cast<BytecodePrimitives::Uniform*>(primitiveMap()[PrimitiveMap::UNIFORM])->setSeed(seed);
+}
 
 MZNInstance minizinc_instance_init(const char* mza_file, const char* solver){
   auto inst = new Instance(mza_file, solver);

@@ -18,6 +18,8 @@ extern "C" {
 struct _MZNInstance;
 typedef struct _MZNInstance* MZNInstance;
 
+void set_rnd_seed(int seed);
+
 MZNInstance minizinc_instance_init(const char* mza_file, const char* solver);
 void minizinc_instance_destroy(MZNInstance);
 

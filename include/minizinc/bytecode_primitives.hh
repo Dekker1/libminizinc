@@ -393,7 +393,7 @@ namespace MiniZinc {
     public:
       Uniform() : PrimitiveMap::Primitive("uniform",PrimitiveMap::UNIFORM,2) {
         std::random_device rnd;
-        generator = std::mt19937(rnd());
+        generator = std::mt19937(0);
       }
       virtual void execute(Interpreter& i, const std::vector<Val>& args) {
         assert(args.size() == 2);
@@ -403,6 +403,9 @@ namespace MiniZinc {
         Val rnd(dis(generator));
         i.pushAgg(rnd, -1);
       };
+      void setSeed(int seed) {
+        generator = std::mt19937(seed);
+      }
     private:
       std::mt19937 generator;
     };
