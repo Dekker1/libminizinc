@@ -1233,8 +1233,8 @@ int _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
     return r;
   } else if(p->kind() == CG_Cond::CC_And && !cond.sign()) {
     std::vector<int> leaves;
-    force_and_leaves(leaves, cond, cg, frag);
     OPEN_OTHER(cg, frag);
+    force_and_leaves(leaves, cond, cg, frag);
     OPEN_AND(cg, frag);
     for(int r_c : leaves)
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
@@ -1246,8 +1246,8 @@ int _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
   } else {
     assert(p->kind() == CG_Cond::CC_And && cond.sign());
     std::vector<int> leaves;
-    force_or_leaves(leaves, ~cond, cg, frag);
     OPEN_OTHER(cg, frag);
+    force_or_leaves(leaves, ~cond, cg, frag);
     OPEN_OR(cg, frag);
     for(int r_c : leaves)
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
@@ -1730,11 +1730,11 @@ private:
     }
     
     // Now compile the result.
+    OPEN_OTHER(cg, frag);
     CG::Binding b_res = CG::bind(e, cg, frag);
     if(b_res.second.p) {
       CG::force(b_res.second, cg, frag);
     }
-    OPEN_OTHER(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b_res.first));
     CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::RET);
@@ -2070,6 +2070,7 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       */
     default:
       {
+        OPEN_OTHER(cg, frag);
         CG::Binding b_param(CG::bind(param, cg, frag));
         int r_A(b_param.first);
         std::vector<int> p_A;
@@ -2079,7 +2080,6 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         } else  {
           force_and_leaves(p_A, b_param.second, cg, frag);
         }
-        OPEN_OTHER(cg, frag);
         OPEN_AND(cg, frag);
         // First, push the constraints attached to A.
         for(int r_c : p_A) {
@@ -2493,9 +2493,9 @@ CG::Binding bind_ub_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
 CG::Binding bind_indexset(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
+  OPEN_OTHER(cg, frag);
   CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
   {
-  OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
@@ -2503,8 +2503,8 @@ CG::Binding bind_indexset(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_arg.first), CG::r(r));
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
   CLOSE_AGG(cg, frag);
-  CLOSE_AGG(cg, frag);
   }
+  CLOSE_AGG(cg, frag);
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   return CG::Binding(r, b_arg.second);
@@ -2703,6 +2703,7 @@ CG::Binding bind_card(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::string name = call->decl()->id().str();
   CG_ProcID proc = cg.find_builtin(name);
+  OPEN_OTHER(cg, frag);
 
   std::vector<CG_Value> r_args(call->n_args());
   for (int i = 0; i < call->n_args(); ++i) {
@@ -2711,8 +2712,6 @@ CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     // TODO: What about the CG_Cond (how do they aggregate for builtin calls?)
   }
   int r_res(GET_REG(cg));
-
-  OPEN_OTHER(cg, frag);
 
   // Push BUILTIN instruction with the correct id
   PUSH_INSTR(frag, BytecodeStream::BUILTIN, proc);
@@ -2861,6 +2860,9 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // Collect partiality of the expression.
   std::vector<CG_Cond::T> cond;
 
+  if(idx[0]->type().isvar()) {
+    OPEN_OTHER(cg, frag);
+  }
   // Now evaluate the array body, and emit the indices.
   int sz(idx.size());
   std::vector<int> r_idxs(sz);
@@ -2875,19 +2877,16 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   cond.push_back(b_A.second);
 
   assert(sz == 1);
-  int r;
-  if(idx[0]->type().ispar()) {
-    // Just read the vector, and get the appropriate element.
-    r = GET_REG(cg);
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idxs[0]), CG::r(r));
-  } else {
-    OPEN_OTHER(cg, frag);
+  int r = GET_REG(cg);
+  if(idx[0]->type().isvar()) {
     PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_element"), CG::r(r_A), CG::r(r_idxs[0]));
     CLOSE_AGG(cg, frag);
-    r = GET_REG(cg);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  } else {
+    // Just read the vector, and get the appropriate element.
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idxs[0]), CG::r(r));
   }
-  return CG::Binding(r, CG_Cond::forall(ctx, cond));
+  return {r, CG_Cond::forall(ctx, cond)};
 }
 
 int make_vec(CodeGen& cg, CG_Builder& frag, const std::vector<int>& regs) {
@@ -3195,6 +3194,7 @@ CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // Collects the partiality of the arguments
   std::vector<CG_Cond::T> p_arg;
 
+  OPEN_OTHER(cg, frag);
   int sz = call->n_args();
   std::vector<CG_Value> r_arg(sz);
   for(int ii = 0; ii < sz; ++ii) {
@@ -3210,8 +3210,9 @@ CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // p_arg.push_back(CG_Cond::call(find_call_pred(cg, call), ctx, r_arg));
 
   // Bind the value part.
-  int r_ret(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, call, BytecodeProc::ROOT), r_arg);
+  CLOSE_AGG(cg, frag);
+  int r_ret(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
 
   return std::make_pair(r_ret, CG_Cond::forall(ctx, p_arg));
