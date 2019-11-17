@@ -823,7 +823,7 @@ namespace MiniZinc {
     for (int i=offset; i--;)
         ia[i] = IntVar(*this->_current_space, 0, 0);
     for (int i=arg.size(); i--;) {
-        const Val& val = arg[i];
+        const Val& val = Val::follow_alias(arg[i]);
         if (val.isDef()) {
             //ia[i+offset] = _current_space->iv[*(int*)resolveVar(getVarDecl(e))];
             GecodeSolver::Variable var = resolveVar(val.toDef());
@@ -889,7 +889,7 @@ namespace MiniZinc {
     for (int i=0; i<static_cast<int>(arg.size()); i++) {
         if (i==siv)
             continue;
-        const Val& v = arg[i];
+        const Val& v = Val::follow_alias(arg[i]);
         if(v.isDef()) {
             GecodeVariable var = resolveVar(v.toDef());
             if (var.isbool()) {
@@ -963,21 +963,23 @@ namespace MiniZinc {
     _current_space->bv.push_back(boolVar);
     insertVar(def, GecodeVariable(GecodeVariable::BOOL_TYPE, _current_space->bv.size()-1));
     _current_space->bv_introduced.push_back(true);
+    _current_space->bv_defined.push_back(true);
     return boolVar;
   }
 
   Gecode::BoolVar
   GecodeSolverInstance::arg2boolvar(const Val& v) {
+    Val _v = Val::follow_alias(v);
     BoolVar x0;
-    if (v.isDef()) {
+    if (_v.isDef()) {
       //x0 = _current_space->bv[*(int*)resolveVar(getVarDecl(e))];
       GecodeVariable var = resolveVar(v.toDef());
       assert(var.isbool());
       x0 = var.boolVar(_current_space);
     } else {
-      long long int i = v().toInt();
+      long long int i = _v().toInt();
       if(i < 0 || i > 1) {
-        std::stringstream ssm; ssm << "Expected bool literal instead of: " << v.toString();
+        std::stringstream ssm; ssm << "Expected bool literal instead of: " << _v.toString();
         throw new InternalError(ssm.str());
       } else {
         x0 = BoolVar(*this->_current_space, i, i);
@@ -1027,9 +1029,10 @@ namespace MiniZinc {
   Gecode::IntVar
   GecodeSolverInstance::arg2intvar(const Val& val) {
     IntVar x0;
-    if (val.isDef()) {
+    Val _val = Val::follow_alias(val);
+    if (_val.isDef()) {
       //x0 = _current_space->iv[*(int*)resolveVar(getVarDecl(e))];
-      GecodeVariable var = resolveVar(val.toDef());
+      GecodeVariable var = resolveVar(_val.toDef());
       assert(var.isint());
       x0 = var.intVar(_current_space);
     } else {
@@ -1069,7 +1072,7 @@ namespace MiniZinc {
     if (arr.size() == 0)
       return true;
     for (int i=arr.size(); i--;) {
-      const Val& val = arr[i];
+      const Val& val = Val::follow_alias(arr[i]);
       if (val.isInt() && val().toInt() >= 0 && val().toInt() <= 1) {
         continue;
       } else if (val.isDef()) {

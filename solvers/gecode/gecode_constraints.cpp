@@ -554,20 +554,23 @@ namespace MiniZinc {
     }
 
     void p_int_minus(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       if (!call->arg(0).isDef()) {
+        IntVar res = create_intvar(s, call);
         rel(*gi._current_space, call->arg(0)().toInt() - gi.arg2intvar(call->arg(1))
-            == gi.arg2intvar(call->arg(2)), gi.ann2icl(call->ann()));
+            == res, gi.ann2icl(call->ann()));
       } else if (!call->arg(1).isDef()) {
+        IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - call->arg(1)().toInt()
-            == gi.arg2intvar(call->arg(2)), gi.ann2icl(call->ann()));
-      } else if (!call->arg(2).isDef()) {
+            == res, gi.ann2icl(call->ann()));
+      } else if (!call->isFixed()) {
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) 
-            == call->arg(2)().toInt(), gi.ann2icl(call->ann()));
+            == call->lb().toInt(), gi.ann2icl(call->ann()));
       } else {
+        IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) 
-            == gi.arg2intvar(call->arg(2)), gi.ann2icl(call->ann()));
+            == res, gi.ann2icl(call->ann()));
       }
     }
 
@@ -605,12 +608,12 @@ namespace MiniZinc {
       min(*gi._current_space, x0, x1, x2, gi.ann2icl(call->ann()));
     }
     void p_int_max(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar x0 = gi.arg2intvar(call->arg(0));
       IntVar x1 = gi.arg2intvar(call->arg(1));
-      IntVar x2 = gi.arg2intvar(call->arg(2));
-      max(*gi._current_space, x0, x1, x2, gi.ann2icl(call->ann()));
+      IntVar res = create_intvar(s, call);
+      max(*gi._current_space, x0, x1, res, gi.ann2icl(call->ann()));
     }
     void p_int_negate(SolverInstanceBase& s, const Definition* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
