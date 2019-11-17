@@ -1378,17 +1378,25 @@ template<class O>
 void show_frag(O& out, CodeGen& cg, std::vector<CG_Instr>& frag) {
   auto show = [&cg](CG_Value v) { return ShowVal(cg, v); };
 
+  int num_agg = 0;
   for(CG_Instr& i : frag) {
+    auto op(static_cast<BytecodeStream::Instr>(i.tag>>1));
+    if (op == BytecodeStream::CLOSE_AGGREGATION) {
+      num_agg--;
+    }
+    for (int j = 0; j < num_agg; ++j) {
+      out << "  ";
+    }
     if(i.tag&1) {
       out << "l" << (i.tag>>1) << ": ";
       continue;
     }
 
-    BytecodeStream::Instr op(static_cast<BytecodeStream::Instr>(i.tag>>1));
     out << instr_name(op);
     switch(op) {
       case BytecodeStream::OPEN_AGGREGATION:
         out << " " << agg_name((AggregationCtx::Symbol) i.params[0].value);
+        num_agg++;
         break;
       case BytecodeStream::BUILTIN: {
         CG_ProcID p(CG_ProcID::of_val(i.params[0]));
