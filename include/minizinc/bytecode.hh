@@ -302,7 +302,7 @@ namespace MiniZinc {
       }
       _v = reinterpret_cast<void*>(ubi_p);
     }
-    explicit Val(RefCountedObject* d) {
+    explicit Val(const RefCountedObject* d) {
       assert(d != nullptr);
       _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(d) | static_cast<ptrdiff_t>(1));
     }
