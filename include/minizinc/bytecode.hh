@@ -182,7 +182,10 @@ namespace MiniZinc {
     static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
     bool exists() { return _ref_count > 0; }
 
-    void addWRef(Interpreter* interpreter) { assert(_ref_count > 0); _weak_ref_count++; }
+    void addWRef(Interpreter* interpreter) {
+//      assert(_ref_count > 0); // TODO: Assertion is not true when a new definition is created in CSE. The definition is added to CSE before it is returned to the interpreter
+      _weak_ref_count++;
+    }
     static void rmWRef(Interpreter* interpreter, RefCountedObject* rco);
   };
   
