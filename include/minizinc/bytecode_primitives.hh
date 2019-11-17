@@ -361,10 +361,17 @@ namespace MiniZinc {
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
         Val a = d->arg(0);
         Val b = d->arg(1);
-        IntVal lb, ub;
+        if (b.isInt() && a.isDef()) {
+          a = d->arg(1);
+          b = d->arg(0);
+        }
 
+        IntVal lb, ub;
         if ((a.isDef() && !a.toDef()->isBounded()) || (b.isDef() && !b.toDef()->isBounded())) {
           return PS_OK;
+        } else if (a.isInt() && a.lb() == IntVal(1)) {
+          d->alias(&i, b);
+          return PS_ENTAILED;
         }
 
         lb = a.lb();
