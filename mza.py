@@ -19,6 +19,8 @@ ffi.cdef(
     struct _MZNInstance;
     typedef struct _MZNInstance* MZNInstance;
 
+    void set_rnd_seed(int seed);
+
     MZNInstance minizinc_instance_init(const char* mza_file, const char* solver);
     void minizinc_instance_destroy(MZNInstance);
 
@@ -33,6 +35,8 @@ ffi.cdef(
 # Set LD_LIBRARY_PATH (DYLD_LIBRARY_PATH on macOS) to the folder containing the mza library.
 lib = ffi.dlopen("mza")
 
+def set_rnd_seed(seed: int):
+    lib.set_rnd_seed(seed)
 
 class Instance:
     def __init__(self, mza_file, solver):
