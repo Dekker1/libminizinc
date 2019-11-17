@@ -204,6 +204,27 @@ namespace MiniZinc {
     {"int_lt", "int_ge"}
   };
 
+  VarDecl* Definition::varDecl(Definition* d) {
+    auto mode = static_cast<BytecodeProc::Mode>(d->mode());
+    assert(mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG);
+
+    Val dom = d->domain();
+    SetLit* dom_set = nullptr;
+    if (dom.isVec()) {
+      assert(dom.size() >= 2 && dom.size() % 2 == 0);
+      std::vector<IntSetVal::Range> ranges;
+      for (int i = 0; i < dom.size(); i += 2) {
+        ranges.emplace_back(dom[i](), dom[i+1]());
+      }
+      dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+    }
+    auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
+    auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
+    vd->addAnnotation(constants().ann.output_var);
+
+    return vd;
+  }
+
   void Definition::toFZN(Definition* head, const std::vector<BytecodeProc>& bs, Model* model,
                          std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter) {
     GCLock lock;
@@ -217,10 +238,16 @@ namespace MiniZinc {
         d = d->next();
         continue;
       }
-      toFZNItem(d, bs, fzn, vdmap, interpreter);
+      // Pre-declaration of current definition
+      auto mode = static_cast<BytecodeProc::Mode>(d->mode());
+      if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
+        auto vd = varDecl(d);
+        vdmap.emplace(d->timestamp(), vd);
+      }
       if (d->defs()) {
         toFZN(d->defs(), bs, fzn, vdmap, interpreter);
       }
+      toFZNItem(d, bs, fzn, vdmap, interpreter);
       d = d->next();
     }
   }
@@ -236,23 +263,11 @@ namespace MiniZinc {
       name = it->second;
       mode = BytecodeProc::negate(mode);
     }
-    Val dom = d->domain();
-    SetLit* dom_set = nullptr;
-    if (dom.isVec()) {
-      assert(dom.size() >= 2 && dom.size() % 2 == 0);
-      std::vector<IntSetVal::Range> ranges;
-      for (int i = 0; i < dom.size(); i += 2) {
-        ranges.emplace_back(dom[i](), dom[i+1]());
-      }
-      dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
-    }
+
     if (proc.name == "mk_intvar") {
-      // Construct domain
-      auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-      auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
-      vd->addAnnotation(constants().ann.output_var);
-      auto vdi = new VarDeclI(Location().introduce(), vd);
-      auto ret = vdmap.emplace(d->timestamp(), vd);
+      auto vdit = vdmap.find(d->timestamp());
+      assert(vdit != vdmap.end());
+      auto vdi = new VarDeclI(Location().introduce(), vdit->second);
       model->addItem(vdi);
     } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
       std::vector<Expression*> args(proc.nargs);
@@ -264,10 +279,10 @@ namespace MiniZinc {
       auto ci = new ConstraintI(Location().introduce(), c);
       model->addItem(ci);
     } else {
-      auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-      auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
-      model->addItem(new VarDeclI(Location().introduce(), vd));
-      auto ret = vdmap.emplace(d->timestamp(), vd);
+      auto vdit = vdmap.find(d->timestamp());
+      assert(vdit != vdmap.end());
+      model->addItem(new VarDeclI(Location().introduce(), vdit->second));
+      auto ret = vdmap.emplace(d->timestamp(), vdit->second);
 
       std::vector<Expression*> args(proc.nargs + 1);
       for (int i = 0; i < proc.nargs; ++i) {

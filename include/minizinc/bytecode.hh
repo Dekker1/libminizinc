@@ -674,7 +674,9 @@ namespace MiniZinc {
     Subscriptions& subscriptions(void) {
       return _subscriptions;
     }
-    
+
+  private:
+    static VarDecl* varDecl(Definition* d);
   };
 
   class WeakVal {
