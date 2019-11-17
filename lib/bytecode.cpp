@@ -24,8 +24,8 @@
 #include <streambuf>
 #include <minizinc/eval_par.hh>
 
-//#define DBG_INTERPRETER(msg) std::cerr << msg
-#define DBG_INTERPRETER(msg) do {} while(0)
+#define DBG_INTERPRETER(msg) std::cerr << msg
+//#define DBG_INTERPRETER(msg) do {} while(0)
 #define DBG_TRIM_OUTPUT true
 
 namespace MiniZinc {
@@ -232,17 +232,28 @@ namespace MiniZinc {
     if (head->next()==head)
       return;
     Definition* d = head->next(); // Ignore dummy head
+    // Forward-declaration of current hedge variables
     while (d != head) {
       assert(d != d->next());
       if (d->pred() == 0) {
         d = d->next();
         continue;
       }
-      // Pre-declaration of current definition
       auto mode = static_cast<BytecodeProc::Mode>(d->mode());
       if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
         auto vd = varDecl(d);
         vdmap.emplace(d->timestamp(), vd);
+      }
+      d = d->next();
+    }
+
+    d = head->next(); // Ignore dummy head
+    // Create FZNItems for current hedge
+    while (d != head) {
+      assert(d != d->next());
+      if (d->pred() == 0) {
+        d = d->next();
+        continue;
       }
       if (d->defs()) {
         toFZN(d->defs(), bs, fzn, vdmap, interpreter);
