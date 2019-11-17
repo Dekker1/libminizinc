@@ -490,6 +490,55 @@ namespace MiniZinc {
       }
     }
 
+    void p_int_sum(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
+      const Val& ann =call->ann();
+      const Val& vars = call->arg(0);
+      std::vector<int> iav(vars.size(), 1);
+      IntArgs ia(iav);
+      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
+      IntVar res;
+      if(call->domain().isVec()) {
+        res = IntVar(*gi._current_space, gi.arg2intset(call->domain()));
+        gi._current_space->iv.push_back(res);
+        gi.insertVar(call, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
+      } else {
+        res = IntVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
+        gi._current_space->iv.push_back(res);
+        gi.insertVar(call, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
+        std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << call->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
+      }
+      gi._current_space->iv_introduced.push_back(false);
+
+      int singleIntVar;
+      IntRelType irt = IRT_EQ;
+      if (gi.isBoolArray(vars,singleIntVar)) {
+        if (singleIntVar != -1) {
+          if (std::abs(ia[singleIntVar]) == 1 && call->arg(2)().toInt() == 0) {
+            IntVar siv = gi.arg2intvar(vars[singleIntVar]);
+            BoolVarArgs iv = gi.arg2boolvarargs(vars, 0, singleIntVar);
+            IntArgs ia_tmp(ia.size()-1);
+            int count = 0;
+            for (int i=0; i<ia.size(); i++) {
+              if (i != singleIntVar)
+                ia_tmp[count++] = ia[singleIntVar] == -1 ? ia[i] : -ia[i];
+            }
+            IntRelType t = (ia[singleIntVar] == -1 ? irt : swap(irt));
+            linear(*gi._current_space, ia_tmp, iv, t, siv, gi.ann2icl(ann));
+          } else {
+            IntVarArgs iv = gi.arg2intvarargs(vars);
+            linear(*gi._current_space, ia, iv, irt, res, gi.ann2icl(ann));
+          }
+        } else {
+          BoolVarArgs iv = gi.arg2boolvarargs(vars);
+          linear(*gi._current_space, ia, iv, irt, res, gi.ann2icl(ann));
+        }
+      } else {
+        IntVarArgs iv = gi.arg2intvarargs(vars);
+        linear(*gi._current_space, ia, iv, irt, res, gi.ann2icl(ann));
+      }
+    }
+
     void p_int_minus(SolverInstanceBase& s, const Definition* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);

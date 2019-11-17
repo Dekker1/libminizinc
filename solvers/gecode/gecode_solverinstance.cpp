@@ -208,6 +208,7 @@ namespace MiniZinc {
       registerConstraint("int_lin_gt_reif", GecodeConstraints::p_int_lin_gt_reif);
       registerConstraint("int_lin_gt_imp", GecodeConstraints::p_int_lin_gt_imp);
       registerConstraint("int_plus", GecodeConstraints::p_int_plus);
+      registerConstraint("int_sum", GecodeConstraints::p_int_sum);
       registerConstraint("int_minus", GecodeConstraints::p_int_minus);
       registerConstraint("int_times", GecodeConstraints::p_int_times);
       registerConstraint("int_div", GecodeConstraints::p_int_div);
@@ -1072,16 +1073,16 @@ namespace MiniZinc {
       if (val.isInt() && val().toInt() >= 0 && val().toInt() <= 1) {
         continue;
       } else if (val.isDef()) {
+        if (val.lb() >= 0 && val.ub() <= 1) {
+          continue;
+        }
+        return false;
         // TODO: Check variable domain
         // GecodeVariable var = resolveVar(getVarDecl((*a)[i]));
         // if (var.hasBoolAlias()) {
-        //   if (singleInt != -1) {
-        //     return false;
-        //   }
         //   singleInt = var.boolAliasIndex();
         // }
         // else {
-          return false;
         // }
       } else {
         return false;
