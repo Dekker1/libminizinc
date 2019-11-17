@@ -746,6 +746,10 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         bool first = true;
         ss << "{" << std::endl;
         while (d != head) {
+          if (d->pred() == 0) {
+            d = d->next();
+            continue;
+          }
           int timestamp = d->timestamp();
           if (timestamp >= 0) {
             if (!first) {
@@ -869,6 +873,10 @@ void MznSolver::addDefinitions() {
   }
   do {
     def_ptr = def_ptr->next();
+    if (def_ptr->pred() == 0) {
+      def_ptr = def_ptr->next();
+      continue;
+    }
     if (interpreter->_procs[def_ptr->pred()].name == "output_this") {
       output = def_ptr;
       continue;
