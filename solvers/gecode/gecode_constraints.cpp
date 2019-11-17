@@ -23,7 +23,7 @@ namespace MiniZinc {
     IntVar create_intvar(SolverInstanceBase& s, const Definition* def) {
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar res;
-      if(def->domain().isVec()) {
+      if(def->isBounded()) {
         res = IntVar(*gi._current_space, gi.arg2intset(def->domain()));
         gi._current_space->iv.push_back(res);
         gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
@@ -47,6 +47,7 @@ namespace MiniZinc {
           gi._current_space->bv.push_back(boolVar);
           gi.insertVar(def, GecodeVariable(GecodeVariable::BOOL_TYPE, gi._current_space->bv.size()-1));
           gi._current_space->bv_introduced.push_back(false);
+          gi._current_space->bv_defined.push_back(false);
         } else {
           IntVar intVar(*gi._current_space, gi.arg2intset(def->domain()));
           gi._current_space->iv.push_back(intVar);
