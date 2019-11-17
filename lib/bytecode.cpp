@@ -324,6 +324,10 @@ namespace MiniZinc {
         d = d->next();
         continue;
       }
+      auto mode = static_cast<BytecodeProc::Mode>(d->mode());
+      if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
+        si->declareDefinition(bs, d);
+      }
       if (d->defs()) {
         addToSolver(interpreter, d->defs(), bs, si);
       }
