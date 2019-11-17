@@ -44,21 +44,9 @@ int main(int argc, const char** argv) {
   }
 
   try {
-    MznSolver slv(filename, "org.minizinc.mzn-fzn", args);
+    MznSolver slv(filename, "gecode_presolver", args);
     auto result = slv.run();
-    while (result.first != SolverInstance::ERROR) {
-      std::cout << result.second;
-      //Do incremental things
-      // interpreter.trail.save_state(&interpreter);
-      // interpreter.call(24, BytecodeProc::ROOT, {});
-      // slv.pushToSolver(interpreter);
-      // slv.solve();
-      // interpreter.trail.untrail(&interpreter);
-      // slv.popFromSolver(interpreter);
-      // slv.solve();
-
-      break;
-    }
+    std::cout << result.second;
   } catch (Error& e) {
     std::cerr << e.msg() << "\n";
   }
