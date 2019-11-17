@@ -26,9 +26,10 @@ namespace MiniZinc {
     LinExp linexp;
     Uniform uniform;
     Sol sol;
-    
+    SortBy sortby;
+
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &intminus, &inttimes, &linexp, &uniform, &sol,
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &intminus, &inttimes, &linexp, &uniform, &sol, &sortby,
     };
   }
   

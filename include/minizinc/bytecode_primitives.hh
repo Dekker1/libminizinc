@@ -32,7 +32,8 @@ namespace MiniZinc {
       LINEXP,
       UNIFORM,
       SOL,
-      MAX_ID=SOL
+      SORT_BY,
+      MAX_ID=SORT_BY
     };
     class Primitive {
     protected:
@@ -422,6 +423,38 @@ namespace MiniZinc {
         Val sol(it->second);
 
         i.pushAgg(sol, -1);
+      };
+    };
+
+    class SortBy : public PrimitiveMap::Primitive {
+    public:
+      SortBy() : PrimitiveMap::Primitive("sort_by",PrimitiveMap::SORT_BY, 2) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
+        assert(args.size()==2);
+
+        Val al = args[0];
+        Val order_e = args[1];
+        std::vector<IntVal> order(order_e.size());
+        std::vector<int> a(order_e.size());
+        for (int j=0; j < order.size(); j++) {
+          a[j] = j;
+          order[j] = order_e[j]();
+        }
+        struct Ord {
+          std::vector<IntVal>& order;
+          explicit Ord(std::vector<IntVal>& order0) : order(order0) {}
+          bool operator()(int i, int j) {
+            return order[i] < order[j];
+          }
+        } _ord(order);
+        std::stable_sort(a.begin(), a.end(), _ord);
+        std::vector<Val> sorted(a.size());
+        for (int j = sorted.size(); j--;) {
+          sorted[j] = al[a[j]];
+        }
+        Vec* al_sorted = Vec::a(&i, i.newIdent(), sorted);
+
+        i.pushAgg(Val(al_sorted), -1);
       };
     };
     
