@@ -205,7 +205,6 @@ namespace MiniZinc {
     }
 
     void p_int_lin_CMP(GecodeSolverInstance& s, IntRelType irt, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       IntArgs ia = s.arg2intargs(call->arg(0));
       const Val& vars = call->arg(1);
@@ -237,19 +236,19 @@ namespace MiniZinc {
       }
     }
     void p_int_lin_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
-      if (rm == RM_EQV && call->arg(2).isInt()) {
-        if (call->arg(2)().toInt()) {
-          p_int_lin_CMP(s, irt, call);
-        } else {
-          p_int_lin_CMP(s, neg(irt), call);
-        }
-        return;
-      }
+//      if (rm == RM_EQV && call->arg(2).isInt()) {
+//        if (call->arg(2)().toInt()) {
+//          p_int_lin_CMP(s, irt, call);
+//        } else {
+//          p_int_lin_CMP(s, neg(irt), call);
+//        }
+//        return;
+//      }
       IntArgs ia = s.arg2intargs(call->arg(0));
       const Val& vars = call->arg(1);
       int singleIntVar;
+      auto var = s.reifyVar(call);
       if (s.isBoolArray(vars,singleIntVar)) {
         if (singleIntVar != -1) {
           if (std::abs(ia[singleIntVar]) == 1 && call->arg(2)().toInt() == 0) {
@@ -262,49 +261,47 @@ namespace MiniZinc {
                 ia_tmp[count++] = ia[singleIntVar] == -1 ? ia[i] : -ia[i];
             }
             IntRelType t = (ia[singleIntVar] == -1 ? irt : swap(irt));
-            linear(*s._current_space, ia_tmp, iv, t, siv, Reify(s.arg2boolvar(call->arg(3)), rm), 
+            linear(*s._current_space, ia_tmp, iv, t, siv, Reify(var, rm),
                 s.ann2icl(ann));
           } else {
             IntVarArgs iv = s.arg2intvarargs(vars);
             linear(*s._current_space, ia, iv, irt, call->arg(2)().toInt(),
-                Reify(s.arg2boolvar(call->arg(3)), rm), s.ann2icl(ann));
+                Reify(var, rm), s.ann2icl(ann));
           }
         } else {
           BoolVarArgs iv = s.arg2boolvarargs(vars);
           linear(*s._current_space, ia, iv, irt, call->arg(2)().toInt(),
-              Reify(s.arg2boolvar(call->arg(3)), rm), s.ann2icl(ann));
+              Reify(var, rm), s.ann2icl(ann));
         }
       } else {
         IntVarArgs iv = s.arg2intvarargs(vars);
         linear(*s._current_space, ia, iv, irt, call->arg(2)().toInt(),
-            Reify(s.arg2boolvar(call->arg(3)), rm), 
+            Reify(var, rm),
             s.ann2icl(ann));
       }
     }
 
     void p_int_lin_eq(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
-      p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
-    }
-    void p_int_lin_eq_reif(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
-      p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_EQV, call);
-    }
-    void p_int_lin_eq_imp(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
-      p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_IMP, call);
-    }
-    void p_int_lin_ne(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
-      p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_NQ, call);
-    }
-    void p_int_lin_ne_reif(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
-      p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_EQV, call);
-    }
-    void p_int_lin_ne_imp(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
-      p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_IMP, call);
+      switch (static_cast<BytecodeProc::Mode>(call->mode())) {
+        case BytecodeProc::ROOT:
+          p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
+          break;
+        case BytecodeProc::ROOT_NEG:
+          p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_NQ, call);
+          break;
+        case BytecodeProc::IMP:
+          p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_IMP, call);
+          break;
+        case BytecodeProc::IMP_NEG:
+          p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_IMP, call);
+          break;
+        case BytecodeProc::FUN:
+          p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_EQV, call);
+          break;
+        case BytecodeProc::FUN_NEG:
+          p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_EQV, call);
+          break;
+      }
     }
     void p_int_lin_le(SolverInstanceBase& s, const Definition* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
