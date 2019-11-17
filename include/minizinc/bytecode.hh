@@ -330,7 +330,7 @@ namespace MiniZinc {
         std::vector<Expression*> vec(this->size());
         bool par = true;
         for (int i = 0; i < this->size(); ++i) {
-          Val v = (*this)[i];
+          Val v = follow_alias((*this)[i]);
           assert(!v.isVec()); // TODO: Handle multi-dimentional vectors
           vec[i] = v.toFZN(vdmap);
           par = par && vec[i]->type().ispar();
