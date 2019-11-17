@@ -39,7 +39,6 @@ using namespace MiniZinc;
 
 int main(int argc, const char** argv) {
   Timer starttime;
-  bool fSuccess = false;
 
   try {
     MznReader r(std::cout,std::cerr);
@@ -99,10 +98,10 @@ int main(int argc, const char** argv) {
       std::cerr << "   Done (";
       cerr << "overall time " << starttime.stoptime() << ")." << std::endl;
     }
-    return !fSuccess;
   } catch (const Exception& e) {
     std::string what = e.what();
     std::cerr << what << (what.empty() ? "" : ": ") << e.msg() << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  return 0;
 }   // int main()
