@@ -648,6 +648,7 @@ namespace MiniZinc {
     bool attached() { return !(this == _prev); }
 
     static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
+    static VarDecl* varDecl(Definition* d);
     static void toFZN(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
     static void toFZNItem(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
     static void addToSolver(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
@@ -674,9 +675,6 @@ namespace MiniZinc {
     Subscriptions& subscriptions(void) {
       return _subscriptions;
     }
-
-  private:
-    static VarDecl* varDecl(Definition* d);
   };
 
   class WeakVal {

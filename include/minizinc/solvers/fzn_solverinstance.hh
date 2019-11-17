@@ -63,6 +63,7 @@ namespace MiniZinc {
 
       void processFlatZinc(void) override;
 
+      void declareDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
       void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
       Val getSolutionValue(Definition* def) override;
 

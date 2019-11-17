@@ -873,10 +873,14 @@ void MznSolver::addDefinitions() {
       output = def_ptr;
       continue;
     }
-    si->addDefinition(interpreter->_procs, def_ptr);
+    auto mode = static_cast<BytecodeProc::Mode>(def_ptr->mode());
+    if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
+      si->declareDefinition(interpreter->_procs, def_ptr);
+    }
     if (def_ptr->defs()) {
       Definition::addToSolver(interpreter, def_ptr->defs(), interpreter->_procs, si);
     }
+    si->addDefinition(interpreter->_procs, def_ptr);
   } while(def_ptr->next() != head);
   // TODO: Domain Changes
 }
