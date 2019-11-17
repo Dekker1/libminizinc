@@ -54,7 +54,7 @@ predicate int_lt(var int: a, var int: b);
 /** @group flatzinc.int Constrains \a r \( \leftrightarrow \) (\a a < \a b) */
 predicate int_lt_reif(var int: a, var int: b, var bool: r);
 /** @group flatzinc.int Constrains max(\a a, \a b) = \a c */
-predicate int_max(var int: a, var int: b, var int: c);
+function var int: int_max(var int: a, var int: b); % TODO: Changed to be a function
 /** @group flatzinc.int Constrains min(\a a, \a b) = \a c */
 predicate int_min(var int: a, var int: b, var int: c);
 /** @group flatzinc.int Constrains \a a % \a b = \a c */

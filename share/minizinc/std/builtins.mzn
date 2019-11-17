@@ -370,9 +370,7 @@ function $$E: max(set of $$E: x);
 
 /** @group builtins.arithmetic Return maximum of \a x and \a y */
 function var int: max(var int: x, var int: y) :: promise_total =
-  let { var max(lb(x),lb(y))..max(ub(x),ub(y)): m ::is_defined_var;
-        constraint int_max(x,y,m) ::defines_var(m);
-  } in m;
+  int_max(x,y);  % TODO: Changed to be a function
 
 /** @group builtins.arithmetic Return maximum of elements in array \a x */
 function var int: max(array[$U] of var int: x) =

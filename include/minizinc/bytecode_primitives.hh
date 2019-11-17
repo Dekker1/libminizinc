@@ -33,7 +33,8 @@ namespace MiniZinc {
       UNIFORM,
       SOL,
       SORT_BY,
-      MAX_ID=SORT_BY
+      INT_MAX_,
+      MAX_ID=INT_MAX_
     };
     class Primitive {
     protected:
@@ -483,6 +484,60 @@ namespace MiniZinc {
 
         i.pushAgg(Val(al_sorted), -1);
       };
+    };
+
+    class IntMax : public PrimitiveMap::Primitive {
+    public:
+      IntMax(void) : PrimitiveMap::Primitive("int_max",PrimitiveMap::INT_MAX_,2) {}
+      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        bool propImmediately = true;
+        if (d->arg(0).isDef()) {
+          d->arg(0).toDef()->subscribe(d, Definition::SES_ANY);
+          if (!d->arg(0).toDef()->isBounded()) {
+            propImmediately = false;
+          }
+        }
+        if (d->arg(1).isDef()) {
+          d->arg(1).toDef()->subscribe(d, Definition::SES_ANY);
+          if (!d->arg(1).toDef()->isBounded()) {
+            propImmediately = false;
+          }
+        }
+        if (propImmediately) {
+          return propagate(i,d);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {
+        if (d->arg(0).isDef()) {
+          d->arg(0).toDef()->unsubscribe(d);
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        Val a = d->arg(0);
+        Val b = d->arg(1);
+
+        if ((a.isDef() && !a.toDef()->isBounded()) || (b.isDef() && !b.toDef()->isBounded())) {
+          return PS_OK;
+        } else if (a.ub() <= b.lb()) {
+          d->alias(&i, b);
+          return PS_ENTAILED;
+        } else if (b.ub() <= a.lb()) {
+          d->alias(&i, a);
+          return PS_ENTAILED;
+        }
+
+        IntVal lb, ub;
+        lb = std::max(a.lb(), b.lb());
+        ub = std::max(a.ub(), b.ub());
+        if (lb == ub) {
+          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+        } else {
+          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+        }
+        // TODO: Backwards Propagation
+      }
     };
     
   }
