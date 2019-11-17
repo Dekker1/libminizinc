@@ -286,12 +286,17 @@ namespace MiniZinc {
     public:
       IntMinus(void) : PrimitiveMap::Primitive("int_minus",PrimitiveMap::INT_MINUS,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        bool propImmediately = false;
-        for (unsigned int i=0; i<2; i++) {
-          if (d->arg(i).isDef()) {
-            d->arg(i).toDef()->subscribe(d, Definition::SES_ANY);
-          } else {
-            propImmediately = true;
+        bool propImmediately = true;
+        if (d->arg(0).isDef()) {
+          d->arg(0).toDef()->subscribe(d, Definition::SES_ANY);
+          if (!d->arg(0).toDef()->isBounded()) {
+            propImmediately = false;
+          }
+        }
+        if (d->arg(1).isDef()) {
+          d->arg(1).toDef()->subscribe(d, Definition::SES_ANY);
+          if (!d->arg(1).toDef()->isBounded()) {
+            propImmediately = false;
           }
         }
         if (propImmediately) {
@@ -301,13 +306,28 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (unsigned int i=0; i<2; i++) {
-          if (d->arg(i).isDef()) {
-            d->arg(i).toDef()->unsubscribe(d);
+        for (int j=0; j < 2; j++) {
+          if (d->arg(j).isDef()) {
+            d->arg(j).toDef()->unsubscribe(d);
           }
         }
       }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        IntVal lb, ub;
+
+        lb = d->arg(0).lb();
+        ub = d->arg(0).ub();
+
+        lb -= d->arg(1).ub();
+        ub -= d->arg(1).lb();
+
+        if (lb == ub) {
+          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+        } else {
+          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+        }
+        // TODO: Backwards Propagation
+      }
     };
 
     class IntTimes : public PrimitiveMap::Primitive {
