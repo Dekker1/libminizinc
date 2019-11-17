@@ -20,6 +20,23 @@ using namespace Gecode;
 namespace MiniZinc {
   namespace GecodeConstraints {
 
+    IntVar create_intvar(SolverInstanceBase& s, const Definition* def) {
+      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
+      IntVar res;
+      if(def->domain().isVec()) {
+        res = IntVar(*gi._current_space, gi.arg2intset(def->domain()));
+        gi._current_space->iv.push_back(res);
+        gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
+      } else {
+        res = IntVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
+        gi._current_space->iv.push_back(res);
+        gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
+        std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << def->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
+      }
+      gi._current_space->iv_introduced.push_back(false);
+      return res;
+    }
+
     void p_mk_intvar(SolverInstanceBase& s, const Definition* def) {
       assert(static_cast<BytecodeProc::Mode>(def->mode()) == BytecodeProc::RAW);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -504,18 +521,7 @@ namespace MiniZinc {
       std::vector<int> iav(vars.size(), 1);
       IntArgs ia(iav);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
-      IntVar res;
-      if(call->domain().isVec()) {
-        res = IntVar(*gi._current_space, gi.arg2intset(call->domain()));
-        gi._current_space->iv.push_back(res);
-        gi.insertVar(call, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
-      } else {
-        res = IntVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
-        gi._current_space->iv.push_back(res);
-        gi.insertVar(call, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
-        std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << call->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
-      }
-      gi._current_space->iv_introduced.push_back(false);
+      IntVar res = create_intvar(s, call);
 
       int singleIntVar;
       IntRelType irt = IRT_EQ;
@@ -565,12 +571,12 @@ namespace MiniZinc {
     }
 
     void p_int_times(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar x0 = gi.arg2intvar(call->arg(0));
       IntVar x1 = gi.arg2intvar(call->arg(1));
-      IntVar x2 = gi.arg2intvar(call->arg(2));
-      mult(*gi._current_space, x0, x1, x2, gi.ann2icl(call->ann()));
+      IntVar res = create_intvar(s, call);
+      mult(*gi._current_space, x0, x1, res, gi.ann2icl(call->ann()));
     }
     void p_int_div(SolverInstanceBase& s, const Definition* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
