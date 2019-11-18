@@ -34,6 +34,7 @@ namespace MiniZinc {
         std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << def->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
       }
       gi._current_space->iv_introduced.push_back(false);
+      gi._current_space->iv_defined.push_back(true);
       return res;
     }
 
@@ -53,6 +54,7 @@ namespace MiniZinc {
           gi._current_space->iv.push_back(intVar);
           gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
           gi._current_space->iv_introduced.push_back(false);
+          gi._current_space->iv_defined.push_back(false);
         }
       } else {
         IntVar intVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
@@ -60,6 +62,7 @@ namespace MiniZinc {
         gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
         std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << def->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
         gi._current_space->iv_introduced.push_back(false);
+        gi._current_space->iv_defined.push_back(false);
       }
     }
 
