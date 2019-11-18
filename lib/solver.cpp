@@ -719,18 +719,19 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
     {
       if (output) {
         Val vec = output->arg(0);
-        ss << "[";
+        ss << "{";
         for (int i = 0; i < vec.size(); ++i) {
           if (i > 0) {
             ss << ", ";
           }
           if (vec[i].isDef()) {
+            ss << "\"" << vec[i].timestamp() << "\"" << ": ";
             ss << si->getSolutionValue(vec[i].toDef()).toString();
           } else {
             ss << vec[i].toString();
           }
         }
-        ss << "]" << endl;
+        ss << "}" << endl;
 
         // Set output for sol() builtin
         interpreter->solutions.clear();
