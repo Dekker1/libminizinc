@@ -216,13 +216,16 @@ namespace MiniZinc {
       Exists(void) : PrimitiveMap::Primitive("exists",PrimitiveMap::EXISTS,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = false;
-        for (unsigned int i=0; i<d->arg(0).size(); i++) {
-          if (d->arg(0)[i].isDef()) {
-            d->arg(0)[i].toDef()->subscribe(d, Definition::SES_VAL);
-          } else {
-            propImmediately = true;
+        for (int j = 0; j < Val::follow_alias(d->arg(0), &i).size(); ++j) {
+          Val arg = Val::follow_alias(d->arg(0)[j], &i);
+          if (arg.isDef()) {
+            arg.toDef()->subscribe(d, Definition::SES_ANY);
+            if (arg.toDef()->isFixed()) {
+              propImmediately = true;
+            }
           }
         }
+        propImmediately = propImmediately || Val::follow_alias(d->arg(0), &i).size() <= 1;
         if (propImmediately) {
           return propagate(i,d);
         } else {
@@ -230,13 +233,25 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (unsigned int i=0; i<d->arg(0).size(); i++) {
-          if (d->arg(0)[i].isDef()) {
-            d->arg(0)[i].toDef()->unsubscribe(d);
+        for (int j = 0; j < Val::follow_alias(d->arg(0), &i).size(); ++j) {
+          Val arg = Val::follow_alias(d->arg(0)[j], &i);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
           }
         }
       }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        int size = Val::follow_alias(d->arg(0), &i).size();
+        if (size == 0) {
+          return PS_FAILED;
+        } else if (size == 1) {
+          Val arg = Val::follow_alias(d->arg(0)[0], &i);
+          d->alias(&i, arg);
+        }
+
+        // TODO: More propagation
+        return PS_OK;
+      }
     };
 
     class IntSum : public PrimitiveMap::Primitive {
