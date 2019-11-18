@@ -373,7 +373,9 @@ namespace MiniZinc {
     assert(_defs == nullptr || interpreter->trail.is_trailed(this));
 
     _domain.destroy(interpreter);
+    _domain = Val(IntVal(0));
     _ann.destroy(interpreter);
+    _ann = Val(IntVal(0));
     for (unsigned int i=0; i<_size; i++) {
       _args[i].destroy(interpreter);
     }
