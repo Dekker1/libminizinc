@@ -655,7 +655,7 @@ namespace MiniZinc {
         nval = nval.toDef()->arg(0);
       }
       if (interpreter) {
-        auto mut_v = const_cast<Val&>(v);
+        Val& mut_v = const_cast<Val&>(v);
         mut_v.destroy(interpreter);
         mut_v._v = nval._v;
         mut_v.construct(interpreter);
