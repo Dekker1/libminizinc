@@ -2756,6 +2756,7 @@ CG::Binding bind_card(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::string name = call->decl()->id().str();
   CG_ProcID proc = cg.find_builtin(name);
+  int r_res(GET_REG(cg));
   OPEN_OTHER(cg, frag);
 
   std::vector<CG_Value> r_args(call->n_args());
@@ -2764,7 +2765,6 @@ CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     r_args[i] = CG::r(b_arg.first);
     // TODO: What about the CG_Cond (how do they aggregate for builtin calls?)
   }
-  int r_res(GET_REG(cg));
 
   // Push BUILTIN instruction with the correct id
   PUSH_INSTR(frag, BytecodeStream::BUILTIN, proc);
