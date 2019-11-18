@@ -201,7 +201,10 @@ namespace MiniZinc {
   std::map<const std::string, const std::string> negated_constraints = {
     {"int_eq", "int_ne"},
     {"int_le", "int_gt"},
-    {"int_lt", "int_ge"}
+    {"int_lt", "int_ge"},
+    {"int_lin_eq", "int_lin_ne"},
+    {"int_lin_le", "int_lin_gt"},
+    {"int_lin_lt", "int_lin_ge"},
   };
 
   VarDecl* Definition::varDecl(Definition* d) {
