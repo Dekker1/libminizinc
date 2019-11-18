@@ -300,6 +300,25 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       return;
+    case BOT_PLUSPLUS:
+    {
+      OPEN_OTHER(cg, frag);
+      OPEN_VEC(cg, frag);
+
+      Foreach iter_lhs(cg, r_lhs);
+      iter_lhs.emit_pre(frag);
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter_lhs.val()));
+      iter_lhs.emit_post(frag);
+
+      Foreach iter_rhs(cg, r_rhs);
+      iter_rhs.emit_pre(frag);
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter_rhs.val()));
+      iter_rhs.emit_post(frag);
+
+      CLOSE_AGG(cg, frag);
+      CLOSE_AGG(cg, frag);
+      return;
+    }
     default:
       TODO();
     // BOT_PLUS, BOT_MINUS, BOT_MULT, BOT_DIV, BOT_IDIV, BOT_MOD, BOT_POW,
