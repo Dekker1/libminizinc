@@ -383,6 +383,8 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
         return OPTION_ERROR;
       }
       solver = argv[i];
+    } else if (argv[i]=="--output-dict") {
+      output_dict = true;
     } else if (argv[i]=="-c" || argv[i]=="--compile") {
       is_mzn2fzn = true;
     } else if (argv[i]=="-v" || argv[i]=="--verbose" || argv[i]=="-l") {
@@ -719,19 +721,22 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
     {
       if (output) {
         Val vec = output->arg(0);
-        ss << "{";
+        ss << (output_dict ? '{' : '[');
         for (int i = 0; i < vec.size(); ++i) {
           if (i > 0) {
             ss << ", ";
           }
           if (vec[i].isDef()) {
-            ss << "\"" << vec[i].timestamp() << "\"" << ": ";
+            if (output_dict) {
+              ss << "\"" << vec[i].timestamp() << "\"" << ": ";
+            }
             ss << si->getSolutionValue(vec[i].toDef()).toString();
           } else {
+            assert(!output_dict);
             ss << vec[i].toString();
           }
         }
-        ss << "}" << endl;
+        ss << (output_dict ? '}' : ']');
 
         // Set output for sol() builtin
         interpreter->solutions.clear();
