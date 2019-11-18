@@ -124,6 +124,7 @@ namespace GecodeConstraints {
       PosterImpl(p_array_bool_and);
       PosterImpl(p_array_bool_and_imp);
       PosterImpl(p_array_bool_or);
+      PosterImpl(p_exists);
       PosterImpl(p_array_bool_or_imp);
       PosterImpl(p_array_bool_xor);
       PosterImpl(p_array_bool_xor_imp);

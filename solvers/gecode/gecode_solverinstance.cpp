@@ -244,6 +244,7 @@ namespace MiniZinc {
       registerConstraint("array_bool_and", GecodeConstraints::p_array_bool_and);
       registerConstraint("array_bool_and_imp", GecodeConstraints::p_array_bool_and_imp);
       registerConstraint("array_bool_or", GecodeConstraints::p_array_bool_or);
+      registerConstraint("exists", GecodeConstraints::p_exists);
       registerConstraint("array_bool_or_imp", GecodeConstraints::p_array_bool_or_imp);
       registerConstraint("array_bool_xor", GecodeConstraints::p_array_bool_xor);
       registerConstraint("array_bool_xor_imp", GecodeConstraints::p_array_bool_xor_imp);

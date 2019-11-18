@@ -785,6 +785,16 @@ namespace MiniZinc {
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_ARRAY_OP(BoolOpType::BOT_OR);
     }
+    void p_exists(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
+      const Val& ann =call->ann();
+      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
+      BoolVarArgs bvp = gi.arg2boolvarargs(call->arg(0));
+      BoolVarArgs bvn;
+      auto var = gi.reifyVar(call);
+      bvn << var;
+      clause(*gi._current_space, BoolOpType::BOT_OR, bvp, bvn, 1, gi.ann2icl(ann));
+    }
     void p_array_bool_or_imp(SolverInstanceBase& s, const Definition* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
