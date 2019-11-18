@@ -1044,8 +1044,19 @@ namespace MiniZinc {
     if (_val.isDef()) {
       //x0 = _current_space->iv[*(int*)resolveVar(getVarDecl(e))];
       GecodeVariable var = resolveVar(_val.toDef());
-      assert(var.isint());
-      x0 = var.intVar(_current_space);
+      if (var.isbool()) {
+        // TODO: We should cache the channeling
+        IntVar intVar(*_current_space, 0, 1);
+        _current_space->iv.push_back(intVar);
+//            insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, _current_space->iv.size()-1));
+        _current_space->iv_introduced.push_back(true);
+        _current_space->iv_defined.push_back(true);
+        channel(*_current_space, intVar, var.boolVar(_current_space), MZ_ICL_DEF);
+        x0 = intVar;
+      } else {
+        assert(var.isint());
+        x0 = var.intVar(_current_space);
+      }
     } else {
       IntVal i = val();
       x0 = IntVar(*this->_current_space, i.toInt(), i.toInt());

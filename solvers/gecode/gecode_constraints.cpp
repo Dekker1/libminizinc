@@ -25,14 +25,12 @@ namespace MiniZinc {
       IntVar res;
       if(def->isBounded()) {
         res = IntVar(*gi._current_space, gi.arg2intset(def->domain()));
-        gi._current_space->iv.push_back(res);
-        gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
       } else {
         res = IntVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
-        gi._current_space->iv.push_back(res);
-        gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
         std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << def->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
       }
+      gi._current_space->iv.push_back(res);
+      gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
       gi._current_space->iv_introduced.push_back(false);
       gi._current_space->iv_defined.push_back(true);
       return res;
@@ -501,20 +499,23 @@ namespace MiniZinc {
     ///* arithmetic constraints */
 
     void p_int_plus(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       if (!call->arg(0).isDef()) {
+        IntVar res = create_intvar(s, call);
         rel(*gi._current_space, call->arg(0)().toInt() + gi.arg2intvar(call->arg(1))
-            == gi.arg2intvar(call->arg(2)), gi.ann2icl(call->ann()));
+            == res, gi.ann2icl(call->ann()));
       } else if (!call->arg(1).isDef()) {
+        IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + call->arg(1)().toInt()
-            == gi.arg2intvar(call->arg(2)), gi.ann2icl(call->ann()));
-      } else if (!call->arg(2).isDef()) {
+            == res, gi.ann2icl(call->ann()));
+      } else if (call->isFixed()) {
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + gi.arg2intvar(call->arg(1)) 
-            == call->arg(2)().toInt(), gi.ann2icl(call->ann()));
+            == call->lb().toInt(), gi.ann2icl(call->ann()));
       } else {
+        IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + gi.arg2intvar(call->arg(1)) 
-            == gi.arg2intvar(call->arg(2)), gi.ann2icl(call->ann()));
+            == res, gi.ann2icl(call->ann()));
       }
     }
 
