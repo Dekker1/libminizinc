@@ -243,10 +243,13 @@ namespace MiniZinc {
       IntSum(void) : PrimitiveMap::Primitive("int_sum",PrimitiveMap::INT_SUM,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = true;
-        for (int j=0; j<d->arg(0).size(); j++) {
-          d->arg(0)[j].toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(0)[j].toDef()->isBounded()) {
-            propImmediately = false;
+        for (int j = 0; j < Val::follow_alias(d->arg(0), &i).size(); ++j) {
+          Val arg = Val::follow_alias(d->arg(0)[j], &i);
+          if (arg.isDef()) {
+            arg.toDef()->subscribe(d, Definition::SES_ANY);
+            if (!arg.toDef()->isBounded()) {
+              propImmediately = false;
+            }
           }
         }
         if (propImmediately) {
@@ -265,8 +268,8 @@ namespace MiniZinc {
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
         IntVal lb, ub;
 
-        for (int j=0; j < d->arg(0).size(); j++) {
-          Val v = d->arg(0)[j];
+        for (int j=0; j < Val::follow_alias(d->arg(0), &i).size(); j++) {
+          Val v = Val::follow_alias(d->arg(0)[j], &i);
           if (v.isDef() && !v.toDef()->isBounded()) {
             return PS_OK;
           }
@@ -288,16 +291,13 @@ namespace MiniZinc {
       IntMinus(void) : PrimitiveMap::Primitive("int_minus",PrimitiveMap::INT_MINUS,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = true;
-        if (d->arg(0).isDef()) {
-          d->arg(0).toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(0).toDef()->isBounded()) {
-            propImmediately = false;
-          }
-        }
-        if (d->arg(1).isDef()) {
-          d->arg(1).toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(1).toDef()->isBounded()) {
-            propImmediately = false;
+        for (int j = 0; j < 2; ++j) {
+          Val arg = Val::follow_alias(d->arg(j), &i);
+          if (arg.isDef()) {
+            arg.toDef()->subscribe(d, Definition::SES_ANY);
+            if (!arg.toDef()->isBounded()) {
+              propImmediately = false;
+            }
           }
         }
         if (propImmediately) {
@@ -308,19 +308,20 @@ namespace MiniZinc {
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
         for (int j=0; j < 2; j++) {
-          if (d->arg(j).isDef()) {
-            d->arg(j).toDef()->unsubscribe(d);
+          Val arg = Val::follow_alias(d->arg(j));
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
           }
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
         IntVal lb, ub;
 
-        lb = d->arg(0).lb();
-        ub = d->arg(0).ub();
+        lb = Val::follow_alias(d->arg(0), &i).lb();
+        ub = Val::follow_alias(d->arg(0), &i).ub();
 
-        lb -= d->arg(1).ub();
-        ub -= d->arg(1).lb();
+        lb -= Val::follow_alias(d->arg(1), &i).ub();
+        ub -= Val::follow_alias(d->arg(1), &i).lb();
 
         if (lb == ub) {
           return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
@@ -336,16 +337,13 @@ namespace MiniZinc {
       IntTimes(void) : PrimitiveMap::Primitive("int_times",PrimitiveMap::INT_TIMES,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = true;
-        if (d->arg(0).isDef()) {
-          d->arg(0).toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(0).toDef()->isBounded()) {
-            propImmediately = false;
-          }
-        }
-        if (d->arg(1).isDef()) {
-          d->arg(1).toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(1).toDef()->isBounded()) {
-            propImmediately = false;
+        for (int j = 0; j < 2; ++j) {
+          Val arg = Val::follow_alias(d->arg(j), &i);
+          if (arg.isDef()) {
+            arg.toDef()->subscribe(d, Definition::SES_ANY);
+            if (!arg.toDef()->isBounded()) {
+              propImmediately = false;
+            }
           }
         }
         if (propImmediately) {
@@ -355,16 +353,19 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        if (d->arg(0).isDef()) {
-          d->arg(0).toDef()->unsubscribe(d);
+        for (int j = 0; j < 2; ++j) {
+          Val arg = Val::follow_alias(d->arg(j), &i);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
+          }
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        Val a = d->arg(0);
-        Val b = d->arg(1);
+        Val a = Val::follow_alias(d->arg(0), &i);
+        Val b = Val::follow_alias(d->arg(1), &i);
         if (b.isInt() && a.isDef()) {
-          a = d->arg(1);
-          b = d->arg(0);
+          a = Val::follow_alias(d->arg(1), &i);
+          b = Val::follow_alias(d->arg(0), &i);
         }
 
         IntVal lb, ub;
@@ -491,16 +492,13 @@ namespace MiniZinc {
       IntMax(void) : PrimitiveMap::Primitive("int_max",PrimitiveMap::INT_MAX_,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = true;
-        if (d->arg(0).isDef()) {
-          d->arg(0).toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(0).toDef()->isBounded()) {
-            propImmediately = false;
-          }
-        }
-        if (d->arg(1).isDef()) {
-          d->arg(1).toDef()->subscribe(d, Definition::SES_ANY);
-          if (!d->arg(1).toDef()->isBounded()) {
-            propImmediately = false;
+        for (int j = 0; j < 2; ++j) {
+          Val arg = Val::follow_alias(d->arg(j), &i);
+          if (arg.isDef()) {
+            arg.toDef()->subscribe(d, Definition::SES_ANY);
+            if (!arg.toDef()->isBounded()) {
+              propImmediately = false;
+            }
           }
         }
         if (propImmediately) {
@@ -510,13 +508,16 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        if (d->arg(0).isDef()) {
-          d->arg(0).toDef()->unsubscribe(d);
+        for (int j = 0; j < 2; ++j) {
+          Val arg = Val::follow_alias(d->arg(j), &i);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
+          }
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        Val a = d->arg(0);
-        Val b = d->arg(1);
+        Val a = Val::follow_alias(d->arg(0), &i);
+        Val b = Val::follow_alias(d->arg(1), &i);
 
         if ((a.isDef() && !a.toDef()->isBounded()) || (b.isDef() && !b.toDef()->isBounded())) {
           return PS_OK;
