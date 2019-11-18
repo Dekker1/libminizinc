@@ -481,13 +481,11 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       int c = GET_REG(cg);
       int x = GET_REG(cg);
       int k = GET_REG(cg);
-      int z = bind_cst(0, cg, frag);
       OPEN_OTHER(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
       return CG_Cond::call(cg.find_builtin("int_lin_eq"), ctx, CG::r(c), CG::r(x), CG::r(k));
     }
     case BOT_LQ:
