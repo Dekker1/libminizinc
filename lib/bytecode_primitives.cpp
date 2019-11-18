@@ -20,6 +20,7 @@ namespace MiniZinc {
     Clause clause;
     Forall forall;
     Exists exists;
+    IntPlus intplus;
     IntSum intsum;
     IntMinus intminus;
     IntTimes inttimes;
@@ -30,7 +31,7 @@ namespace MiniZinc {
     IntMax intmax;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &intminus, &inttimes, &linexp, &uniform, &sol, &sortby, &intmax,
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intplus, &intsum, &intminus, &inttimes, &linexp, &uniform, &sol, &sortby, &intmax,
     };
   }
   

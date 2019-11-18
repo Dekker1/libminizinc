@@ -26,6 +26,7 @@ namespace MiniZinc {
       CLAUSE,
       FORALL,
       EXISTS,
+      INT_PLUS,
       INT_SUM,
       INT_MINUS,
       INT_TIMES,
@@ -270,6 +271,55 @@ namespace MiniZinc {
 
         for (int j=0; j < Val::follow_alias(d->arg(0), &i).size(); j++) {
           Val v = Val::follow_alias(d->arg(0)[j], &i);
+          if (v.isDef() && !v.toDef()->isBounded()) {
+            return PS_OK;
+          }
+          lb += v.lb();
+          ub += v.ub();
+        }
+
+        if (lb == ub) {
+          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+        } else {
+          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+        }
+        // TODO: Backwards Propagation
+      }
+    };
+
+    class IntPlus : public PrimitiveMap::Primitive {
+    public:
+      IntPlus(void) : PrimitiveMap::Primitive("int_plus",PrimitiveMap::INT_PLUS,2) {}
+      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        bool propImmediately = true;
+        for (int j = 0; j < 2; ++j) {
+          Val arg = Val::follow_alias(d->arg(j), &i);
+          if (arg.isDef()) {
+            arg.toDef()->subscribe(d, Definition::SES_ANY);
+            if (!arg.toDef()->isBounded()) {
+              propImmediately = false;
+            }
+          }
+        }
+        if (propImmediately) {
+          return propagate(i,d);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {
+        for (int j=0; j < 2; j++) {
+          Val arg = Val::follow_alias(d->arg(j), &i);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
+          }
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        IntVal lb, ub;
+
+        for (int j=0; j < 2; j++) {
+          Val v = Val::follow_alias(d->arg(j), &i);
           if (v.isDef() && !v.toDef()->isBounded()) {
             return PS_OK;
           }

@@ -26,6 +26,8 @@ namespace MiniZinc {
 // this is done to avoid a unnecessary push/pop sequences, when a result is already bound to
 // a register, and is needed for e.g. a call.
 
+#define ENABLE_PLUS 1
+
 using Mode = CG::Mode;
 
 struct builtin_t {
@@ -143,6 +145,7 @@ void CodeGen::register_builtins(void) {
   register_builtin("int_lin_eq", 3);
 
   register_builtin("int_sum", 1);
+  register_builtin("int_plus", 2);
   register_builtin("int_minus", 2);
   register_builtin("int_times", 2);
   register_builtin("int_pow", 2);
@@ -246,15 +249,19 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("set_in"), CG::r(r_lhs), CG::r(r_rhs));
       return;
     case BOT_PLUS: {
-      OPEN_OTHER(cg, frag);
-      OPEN_VEC(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_lhs));
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_rhs));
-      CLOSE_AGG(cg, frag);
-      CLOSE_AGG(cg, frag);
-      int r = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_sum"), CG::r(r));
+      if (ENABLE_PLUS) {
+        PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_plus"), CG::r(r_lhs), CG::r(r_rhs));
+      } else {
+        OPEN_OTHER(cg, frag);
+        OPEN_VEC(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_lhs));
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_rhs));
+        CLOSE_AGG(cg, frag);
+        CLOSE_AGG(cg, frag);
+        int r = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_sum"), CG::r(r));
+      }
       return;
     }
     case BOT_MINUS:
@@ -2186,7 +2193,40 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     return CG::Binding(r_sum, b_elts.second);
   }
 
-  {
+  if (ENABLE_PLUS) {
+    OPEN_OTHER(cg, frag);
+    // int r_one(CG::locate_immi(1, cg, frag));
+    int r_one(bind_cst(1, cg, frag));
+    int r_sz(GET_REG(cg));
+    int r_elt(GET_REG(cg));
+    int r_acc(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_A), CG::r(r_sz));
+    int l_hd(GET_LABEL(cg));
+    int l_end(GET_LABEL(cg));
+
+    // Slightly cheeky here -- if this fails, we know the accumulator should be zero.
+    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_acc));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_acc), CG::l(l_end));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_acc));
+    // Second element.
+    PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r_sz));
+    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_elt));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_elt), CG::l(l_end));
+    PUSH_LABEL(frag, l_hd);
+
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_elt));
+    // OPEN_OTHER(cg, frag); // maybe needed?
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_plus"), CG::r(r_elt), CG::r(r_acc));
+    // CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_acc));
+
+    PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r_sz));
+    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_elt));
+    PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_elt), CG::l(l_hd));
+    PUSH_LABEL(frag, l_end);
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_acc));
+    CLOSE_AGG(cg, frag);
+  } else {
     OPEN_OTHER(cg, frag);
     int r_one(bind_cst(1, cg, frag));
     int r_sz(GET_REG(cg));
