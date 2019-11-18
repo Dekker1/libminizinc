@@ -1663,14 +1663,16 @@ namespace MiniZinc {
           assert(mode_c <= BytecodeProc::MAX_MODE);
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           int n = _procs[code].nargs;
-          DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
+          DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")");
           // TODO: See if args is created when not necessary
           std::vector<Val> args(n);
           bool cse_suited = n < 5 && mode != BytecodeProc::RAW;
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
             args[i] = frame->reg[r];
+            DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
           }
+          DBG_INTERPRETER("\n");
           CSETable::Key cse_key;
           if (cse_suited) {
             cse_key = CSETable::Key(args);
