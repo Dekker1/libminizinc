@@ -25,6 +25,7 @@ ffi.cdef(
     void minizinc_instance_destroy(MZNInstance);
 
     void minizinc_add_call(MZNInstance, const char* call, ...);
+    void minizinc_set_solution(MZNInstance, int def, int sol);
     void minizinc_output_dict(MZNInstance, bool);
 
     void minizinc_push_state(MZNInstance);
@@ -54,6 +55,11 @@ class Instance:
     def output_dict(self, b: bool):
         debugprint(f"minizinc_output_dict(inst, {b});")
         lib.minizinc_output_dict(self._ptr, b)
+
+    def set_incumbent(self, sol):
+        for k,v in sol.items():
+            debugprint(f"minizinc_set_solution(inst, {k}, {v});")
+            lib.minizinc_set_solution(self._ptr, int(k), v)
 
     @contextlib.contextmanager
     def branch(self):

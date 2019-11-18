@@ -495,7 +495,7 @@ namespace MiniZinc {
         assert(args[0].isInt() && args[1].isInt());
 
         std::uniform_int_distribution<> dis(args[0]().toInt(), args[1]().toInt());
-        Val rnd(dis(generator));
+        Val rnd(IntVal(dis(generator)));
         i.pushAgg(rnd, -1);
       };
       void setSeed(int seed) {
