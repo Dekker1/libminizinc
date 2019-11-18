@@ -25,6 +25,7 @@ ffi.cdef(
     void minizinc_instance_destroy(MZNInstance);
 
     void minizinc_add_call(MZNInstance, const char* call, ...);
+    void minizinc_output_dict(MZNInstance, bool);
 
     void minizinc_push_state(MZNInstance);
     void minizinc_pop_state(MZNInstance);
@@ -49,6 +50,10 @@ class Instance:
         debugprint(f"minizinc_instance_destroy(inst);")
         lib.minizinc_instance_destroy(self._ptr)
         self._ptr = None
+
+    def output_dict(self, b: bool):
+        debugprint(f"minizinc_output_dict(inst, {b});")
+        lib.minizinc_output_dict(self._ptr, b)
 
     @contextlib.contextmanager
     def branch(self):

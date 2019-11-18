@@ -56,6 +56,12 @@ void minizinc_add_call(MZNInstance _inst, const char* call, ...) {
   inst->slv.interpreter->call(it->second.first, BytecodeProc::ROOT, args);
 }
 
+
+void minizinc_output_dict(MZNInstance _inst, bool b) {
+  auto inst = reinterpret_cast<Instance*>(_inst);
+  inst->slv.output_dict = b;
+}
+
 void minizinc_push_state(MZNInstance _inst) {
   auto inst = reinterpret_cast<Instance*>(_inst);
   inst->slv.interpreter->trail.save_state(inst->slv.interpreter);

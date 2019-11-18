@@ -117,7 +117,6 @@ namespace MiniZinc {
     /// Solver configurations
     SolverConfigs solver_configs;
     Definition* output = nullptr;
-    bool output_dict = false;
     std::vector<BytecodeProc> bs;
     SolverInstanceBase* si=0;
     SolverInstanceBase::Options* si_opt=0;
@@ -133,6 +132,7 @@ namespace MiniZinc {
     Definition* def_ptr = nullptr;
     double flatten_time = 0;
   public:
+    bool output_dict = false;
     Interpreter* interpreter = nullptr;
     Solns2Out s2out;
     // name -> <code, nargs>
