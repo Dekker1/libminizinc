@@ -456,32 +456,33 @@ namespace MiniZinc {
       _domain.construct(interpreter);
     }
     interpreter->schedule(this, isFixed() ? Definition::SEV_VAL : Definition::SEV_DOM);
-    if (isFixed() && _pred != PrimitiveMap::MK_INTVAR) {
-      // This is a constrained expression, turn it into toplevel constraint
-      
-      // Create new constraint
-      std::vector<Val> args(size());
-      for (unsigned int i=0; i<size(); i++) {
-        args[i] = arg(i);
-      }
-      Definition* nd = Definition::a(interpreter,newDomain,true,_pred,BytecodeProc::ROOT,args,-1);
-      interpreter->pushDef(nd);
-      
-      // Turn this definition into a (fixed) variable
-      _pred = PrimitiveMap::MK_INTVAR;
-      binding(interpreter,false);
-      for (unsigned int i=0; i<_size; i++) {
-        _args[i].destroy(interpreter);
-        _args[i] = IntVal(0);
-      }
-      interpreter->unsubscribe(this);
-      
-      // Promote hedge to parent
-      if (_defs) {
-        interpreter->pushDefs(_defs);
-        _defs = nullptr;
-      }
-    }
+    // TODO: This is currently not correct. We cannot just remove a constraint when its domain is fixed.
+//    if (isFixed() && _pred != PrimitiveMap::MK_INTVAR) {
+//      // This is a constrained expression, turn it into toplevel constraint
+//
+//      // Create new constraint
+//      std::vector<Val> args(size());
+//      for (unsigned int i=0; i<size(); i++) {
+//        args[i] = arg(i);
+//      }
+//      Definition* nd = Definition::a(interpreter,newDomain,true,_pred,BytecodeProc::ROOT,args,-1);
+//      interpreter->pushDef(nd);
+//
+//      // Turn this definition into a (fixed) variable
+//      _pred = PrimitiveMap::MK_INTVAR;
+//      binding(interpreter,false);
+//      for (unsigned int i=0; i<_size; i++) {
+//        _args[i].destroy(interpreter);
+//        _args[i] = IntVal(0);
+//      }
+//      interpreter->unsubscribe(this);
+//
+//      // Promote hedge to parent
+//      if (_defs) {
+//        interpreter->pushDefs(_defs);
+//        _defs = nullptr;
+//      }
+//    }
   }
   void
   Definition::domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding0) {
