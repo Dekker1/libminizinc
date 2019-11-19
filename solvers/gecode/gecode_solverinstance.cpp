@@ -1064,7 +1064,7 @@ namespace MiniZinc {
         x0 = var.intVar(_current_space);
       }
     } else {
-      IntVal i = val();
+      IntVal i = _val();
       x0 = IntVar(*this->_current_space, i.toInt(), i.toInt());
     }
     return x0;
