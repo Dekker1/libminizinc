@@ -880,7 +880,6 @@ void MznSolver::addDefinitions() {
   do {
     def_ptr = def_ptr->next();
     if (def_ptr->pred() == 0) {
-      def_ptr = def_ptr->next();
       continue;
     }
     if (interpreter->_procs[def_ptr->pred()].name == "output_this") {
