@@ -53,7 +53,7 @@ class Instance:
         self._ptr = None
 
     def output_dict(self, b: bool):
-        debugprint(f"minizinc_output_dict(inst, {b});")
+        debugprint(f"minizinc_output_dict(inst, {int(b)});")
         lib.minizinc_output_dict(self._ptr, b)
 
     def set_incumbent(self, sol):
