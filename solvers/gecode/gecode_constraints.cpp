@@ -887,11 +887,11 @@ namespace MiniZinc {
       BOOL_OP(BoolOpType::BOT_IMP);
     }
     void p_bool_not(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BoolVar x0 = gi.arg2boolvar(call->arg(0));
-      BoolVar x1 = gi.arg2boolvar(call->arg(1));
+      auto x1 = gi.reifyVar(call);
       rel(*gi._current_space, x0, BoolOpType::BOT_XOR, x1, 1, gi.ann2icl(ann));
     }
 
