@@ -218,11 +218,13 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       int c = GET_REG(cg);
       int x = GET_REG(cg);
       int k = GET_REG(cg);
+      int z = bind_cst(0, cg, frag);
       OPEN_OTHER(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lin_le"), CG::r(c), CG::r(x), CG::r(k));
       // PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_le"), CG::r(r_lhs), CG::r(r_rhs));
       return;
@@ -238,7 +240,7 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(k), CG::r(z), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lin_le"), CG::r(c), CG::r(x), CG::r(k));
       // PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lt"), CG::r(r_lhs), CG::r(r_rhs));
       return;
@@ -514,11 +516,13 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       int c = GET_REG(cg);
       int x = GET_REG(cg);
       int k = GET_REG(cg);
+      int z = bind_cst(0, cg, frag);
       OPEN_OTHER(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, cg.find_builtin("int_minus"), CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lin_le"), CG::r(c), CG::r(x), CG::r(k));
       return CG_Cond::call(cg.find_builtin("int_lin_le"), ctx, CG::r(c), CG::r(x), CG::r(k));
     }
@@ -533,7 +537,7 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(k), CG::r(z), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lin_le"), CG::r(c), CG::r(x), CG::r(k));
       return CG_Cond::call(cg.find_builtin("int_lin_le"), ctx, CG::r(c), CG::r(x), CG::r(k));
     }
