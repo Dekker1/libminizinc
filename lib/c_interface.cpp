@@ -50,7 +50,7 @@ void minizinc_add_call(MZNInstance _inst, const char* call, ...) {
   va_start(my_args, call);
   for (int i = 0; i < it->second.second; ++i) {
     int num = va_arg(my_args, int);
-    args.push_back(Val(num));
+    args.emplace_back(num);
   }
 
   inst->slv.interpreter->call(it->second.first, BytecodeProc::ROOT, args);
