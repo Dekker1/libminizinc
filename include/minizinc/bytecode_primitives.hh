@@ -109,19 +109,27 @@ namespace MiniZinc {
     public:
       BoolNot(void) : PrimitiveMap::Primitive("bool_not",PrimitiveMap::BOOLNOT,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        if (d->arg(0).isDef()) {
-          d->arg(0).toDef()->subscribe(d, Definition::SES_VAL);
+        Val arg = Val::follow_alias(d->arg(0), &i);
+        if (arg.isDef() && !arg.toDef()->isFixed()) {
+          arg.toDef()->subscribe(d, Definition::SES_VAL);
           return PS_OK;
         } else {
           return propagate(i,d);
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        if (d->arg(0).isDef()) {
-          d->arg(0).toDef()->unsubscribe(d);
+        Val arg = Val::follow_alias(d->arg(0), &i);
+        if (arg.isDef()) {
+          arg.toDef()->unsubscribe(d);
         }
       }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        Val arg = Val::follow_alias(d->arg(0), &i);
+        if ((arg.isDef() && arg.toDef()->isFixed()) || arg.isInt()) {
+          return d->setVal(&i, 1 - arg.lb()) ? PS_ENTAILED : PS_FAILED;
+        }
+        return PS_OK;
+      }
     };
 
     class MkIntVar : public PrimitiveMap::Primitive {
