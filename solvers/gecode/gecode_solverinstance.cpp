@@ -242,6 +242,7 @@ namespace MiniZinc {
       registerConstraint("bool_or", GecodeConstraints::p_bool_or);
       registerConstraint("bool_or_imp", GecodeConstraints::p_bool_or_imp);
       registerConstraint("bool_and", GecodeConstraints::p_bool_and);
+      registerConstraint("forall", GecodeConstraints::p_forall);
       registerConstraint("bool_and_imp", GecodeConstraints::p_bool_and_imp);
       registerConstraint("bool_xor", GecodeConstraints::p_bool_xor);
       registerConstraint("bool_xor_imp", GecodeConstraints::p_bool_xor_imp);

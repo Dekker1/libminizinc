@@ -726,10 +726,10 @@ namespace MiniZinc {
     BoolVarArgs bv = gi.arg2boolvarargs(call->arg(0)); \
     if (call->size()==1) { \
       rel(*gi._current_space, op, bv, 1, gi.ann2icl(ann)); \
-    } else if (!call->arg(1).isDef() && call->arg(1).isInt()) { \
-      rel(*gi._current_space, op, bv, call->arg(1)().toInt(), gi.ann2icl(ann)); \
+    } else if (call->isFixed()) { \
+      rel(*gi._current_space, op, bv, call->lb().toInt(), gi.ann2icl(ann)); \
     } else { \
-      rel(*gi._current_space, op, bv, gi.resolveVar(call->arg(1).toDef()).boolVar(gi._current_space), gi.ann2icl(ann)); \
+      rel(*gi._current_space, op, bv, gi.reifyVar(call), gi.ann2icl(ann)); \
     }
 
     void p_bool_or(SolverInstanceBase& s, const Definition* call) {
@@ -766,6 +766,12 @@ namespace MiniZinc {
     }
     void p_array_bool_and(SolverInstanceBase& s, const Definition* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      const Val& ann =call->ann();
+      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
+      BOOL_ARRAY_OP(Gecode::BoolOpType::BOT_AND);
+    }
+    void p_forall(SolverInstanceBase& s, const Definition* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT || static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_ARRAY_OP(Gecode::BoolOpType::BOT_AND);
