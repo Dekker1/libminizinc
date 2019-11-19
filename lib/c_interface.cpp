@@ -105,7 +105,11 @@ const char* minizinc_solve(MZNInstance _inst) {
   std::stringstream ss;
   ss << "{";
   ss <<"\"status\": \"" << status_to_string(result.first) << "\",";
-  ss <<"\"solution\": " << result.second;
+  if (result.first == MiniZinc::SolverInstance::SAT || result.first == MiniZinc::SolverInstance::OPT) {
+    ss << "\"solution\": " << result.second;
+  } else {
+    ss << R"("solution": "")";
+  }
   ss << "}";
 
   inst->result = ss.str();
