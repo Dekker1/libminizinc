@@ -18,12 +18,6 @@
  */
 
 #include <iostream>
-#include <fstream>
-#include <iomanip>
-#include <cstdlib>
-#include <ctime>
-#include <chrono>
-#include <ratio>
 
 #include <minizinc/solver.hh>
 
