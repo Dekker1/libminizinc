@@ -141,12 +141,12 @@ namespace MiniZinc {
 
   protected:
     // IdMap<VarId> _variableMap;      // this to find solver's variables given an Id
-    std::unordered_map<int, VarId> _variableMap;
+    std::vector<std::unordered_map<int, VarId>> _variableMap;
     Registry _constraintRegistry;
 
   public:
     SolverInstanceImpl(std::ostream& log, SolverInstanceBase::Options* opt)
-      : SolverInstanceBase2(log, opt), _constraintRegistry(*this) {}
+      : SolverInstanceBase2(log, opt), _variableMap(1), _constraintRegistry(*this) {}
     
   };
 

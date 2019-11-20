@@ -1310,8 +1310,16 @@ namespace MiniZinc {
 
   GecodeSolver::Variable
   GecodeSolverInstance::resolveVar(Definition* def) {
-    auto it = _variableMap.find(def->timestamp());
-    assert(it != _variableMap.end());
+    int i = _variableMap.size()-1;
+    std::unordered_map<int, VarId>::iterator it;
+    while (i >= 0) {
+      it = _variableMap[i].find(def->timestamp());
+      if (it != _variableMap[i].end()) {
+        break;
+      }
+      i--;
+    }
+    assert(it != _variableMap[0].end());
     return it->second; //lookupVar(id->decl());
   }
 
@@ -1572,6 +1580,7 @@ namespace MiniZinc {
       }
       next_sol = engine->next();
     }
+    _n_found_solutions = 0;
     if (_current_space->_solveType != MiniZinc::SolveI::SolveType::ST_SAT) {
       if (n_max_solutions==-1) {
         // Print last solution
@@ -2425,6 +2434,7 @@ namespace MiniZinc {
 
   void GecodeSolverInstance::pushState() {
     stack.push_back(_current_space);
+    _variableMap.emplace_back();
     _current_space = static_cast<FznSpace*>(_current_space->clone());
   }
 
@@ -2432,6 +2442,7 @@ namespace MiniZinc {
     delete _current_space;
     _current_space = stack.back();
     stack.pop_back();
+    _variableMap.pop_back();
   }
 
   #ifdef GECODE_HAS_SET_VARS

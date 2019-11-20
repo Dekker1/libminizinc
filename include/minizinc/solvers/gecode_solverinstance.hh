@@ -385,7 +385,7 @@ namespace MiniZinc {
 
     /// Inserts variable gv into _variableMap with key id
     inline void insertVar(const Definition* def, GecodeVariable gv) {
-      _variableMap.emplace(def->timestamp(), gv);
+      _variableMap.back().emplace(def->timestamp(), gv);
     }
 
 
