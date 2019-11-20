@@ -27,6 +27,7 @@ ffi.cdef(
     void minizinc_add_call(MZNInstance, const char* call, ...);
     void minizinc_set_solution(MZNInstance, int def, int sol);
     void minizinc_output_dict(MZNInstance, bool);
+    void minizinc_print_hedge(MZNInstance);
 
     void minizinc_push_state(MZNInstance);
     void minizinc_pop_state(MZNInstance);
@@ -38,6 +39,7 @@ ffi.cdef(
 lib = ffi.dlopen("mza")
 
 def set_rnd_seed(seed: int):
+    debugprint(f"set_rnd_seed({seed});")
     lib.set_rnd_seed(seed)
 
 class Instance:
@@ -60,6 +62,11 @@ class Instance:
         for k,v in sol.items():
             debugprint(f"minizinc_set_solution(inst, {k}, {v});")
             lib.minizinc_set_solution(self._ptr, int(k), v)
+
+    def print(self):
+        debugprint(f"minizinc_print_hedge(inst);")
+        lib.minizinc_print_hedge(self._ptr)
+
 
     @contextlib.contextmanager
     def branch(self):

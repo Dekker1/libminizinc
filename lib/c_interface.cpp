@@ -77,6 +77,11 @@ void minizinc_pop_state(MZNInstance _inst) {
   inst->slv.popFromSolver();
 }
 
+void minizinc_print_hedge(MZNInstance _inst) {
+  auto inst = reinterpret_cast<Instance*>(_inst);
+  inst->slv.interpreter->dumpState(std::cerr);
+}
+
 std::string status_to_string(SolverInstance::Status s) {
   switch (s) {
     case SolverInstance::OPT:

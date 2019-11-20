@@ -26,6 +26,7 @@ void minizinc_instance_destroy(MZNInstance);
 void minizinc_add_call(MZNInstance, const char* call, ...);
 void minizinc_set_solution(MZNInstance, int def, int sol);
 void minizinc_output_dict(MZNInstance, bool);
+void minizinc_print_hedge(MZNInstance);
 
 void minizinc_push_state(MZNInstance);
 void minizinc_pop_state(MZNInstance);
