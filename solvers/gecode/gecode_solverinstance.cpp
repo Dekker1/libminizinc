@@ -1410,6 +1410,8 @@ namespace MiniZinc {
   GecodeSolverInstance::prepareEngine(void) {
     GCLock lock;
     GecodeOptions& _opt = static_cast<GecodeOptions&>(*_options);
+    delete engine;
+    engine=nullptr;
     if (engine==NULL) {
       // TODO: check what we need to do options-wise
       std::vector<Expression*> branch_vars;
@@ -1540,6 +1542,11 @@ namespace MiniZinc {
   SolverInstanceBase::Status
   GecodeSolverInstance::solve(void) {
     GCLock lock;
+    // Reset solutions previously found
+    _n_found_solutions = 0;
+    delete _solution;
+    _solution = nullptr;
+
     GecodeOptions& _opt = static_cast<GecodeOptions&>(*_options);
     _only_range_domains = _opt.only_range_domains;
     _run_sac = _opt.sac;
@@ -1567,7 +1574,7 @@ namespace MiniZinc {
     
     FznSpace* next_sol = engine->next();
     while (next_sol) {
-      if(_solution) delete _solution;
+      delete _solution;
       _solution = next_sol;
       _n_found_solutions++;
 
@@ -1580,7 +1587,6 @@ namespace MiniZinc {
       }
       next_sol = engine->next();
     }
-    _n_found_solutions = 0;
     if (_current_space->_solveType != MiniZinc::SolveI::SolveType::ST_SAT) {
       if (n_max_solutions==-1) {
         // Print last solution
