@@ -567,6 +567,12 @@ namespace MiniZinc {
         return _domain[_domain.size()-1]();
       }
     }
+    IntVal val() const {
+      if (!isFixed()) {
+        throw InternalError("Cannot retrieve the value of a Definition that is not fixed.");
+      }
+      return _domain();
+    }
     bool isBounded() const {
       return lb().isFinite() && ub().isFinite();
     }
