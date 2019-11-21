@@ -568,9 +568,9 @@ namespace MiniZinc {
         IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - call->arg(1)().toInt()
             == res, gi.ann2icl(call->ann()));
-      } else if (!call->isFixed()) {
+      } else if (call->isFixed()) {
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) 
-            == call->lb().toInt(), gi.ann2icl(call->ann()));
+            == call->val().toInt(), gi.ann2icl(call->ann()));
       } else {
         IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) 
