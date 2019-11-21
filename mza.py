@@ -28,6 +28,7 @@ ffi.cdef(
     void minizinc_set_solution(MZNInstance, int def, int sol);
     void minizinc_output_dict(MZNInstance, bool);
     void minizinc_print_hedge(MZNInstance);
+    void minizinc_set_limit(MZNInstance, int limit);
 
     void minizinc_push_state(MZNInstance);
     void minizinc_pop_state(MZNInstance);
@@ -62,6 +63,10 @@ class Instance:
         for k,v in sol.items():
             debugprint(f"minizinc_set_solution(inst, {k}, {v});")
             lib.minizinc_set_solution(self._ptr, int(k), v)
+
+    def set_limit(self, limit):
+        debugprint(f"minizinc_set_limit(inst, {limit});")
+        lib.minizinc_set_limit(self._ptr, limit)
 
     def print(self):
         debugprint(f"minizinc_print_hedge(inst);")

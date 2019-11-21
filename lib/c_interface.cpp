@@ -15,6 +15,7 @@
 
 #include <iostream>
 #include <cstdarg>
+#include <minizinc/solvers/gecode_solverinstance.hh>
 
 using namespace MiniZinc;
 
@@ -80,6 +81,12 @@ void minizinc_pop_state(MZNInstance _inst) {
 void minizinc_print_hedge(MZNInstance _inst) {
   auto inst = reinterpret_cast<Instance*>(_inst);
   inst->slv.interpreter->dumpState(std::cerr);
+}
+
+void minizinc_set_limit(MZNInstance _inst, int limit) {
+  auto inst = reinterpret_cast<Instance*>(_inst);
+  auto opt = static_cast<GecodeOptions*>(inst->slv.getSI_OPT());
+  opt->nodes = limit;
 }
 
 std::string status_to_string(SolverInstance::Status s) {
