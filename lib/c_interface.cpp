@@ -102,7 +102,7 @@ std::string status_to_string(SolverInstance::Status s) {
     case SolverInstance::UNSATorUNBND:
       return "UNSATorUNBND";
     case SolverInstance::UNKNOWN:
-      return "UNKOWN";
+      return "UNKNOWN";
     case SolverInstance::ERROR:
       return "ERROR";
     case SolverInstance::NONE:
