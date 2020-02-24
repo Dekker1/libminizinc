@@ -565,9 +565,44 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
     ASTExprVec<VarDecl> params(fun->params());
     
     std::stringstream ss;
-    ss << "f" << p_idx << "_" << fun->id().str();
+    ss << "f_" << fun->id().str();
+    for (auto& param : params) {
+      ss << "_";
+      if (param->type().dim() > 0) {
+        ss << "d" << param->type().dim();
+      }
+      if (param->type().isvar()) {
+        ss << "v";
+      }
+      switch (param->type().bt()) {
+        case Type::BT_BOOL: {
+          ss << "b";
+          break;
+        }
+        case Type::BT_INT: {
+          ss << "i";
+          break;
+        }
+        case Type::BT_FLOAT: {
+          ss << "f";
+          break;
+        }
+        case Type::BT_STRING: {
+          ss << "s";
+          break;
+        }
+        case Type::BT_ANN: {
+          ss << "a";
+          break;
+        }
+        default: {
+          assert(false);
+          break;
+        }
+      }
+    }
 
-    bytecode.push_back(CG_Proc(ss.str(), params.size()));
+    bytecode.emplace_back(ss.str(), params.size());
     fun_bodies.insert(std::make_pair(fun, p_id));
     return p_id;
   } else {
@@ -640,10 +675,42 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
     int p_idx = cg.bytecode.size();
 
     std::stringstream ss;
-    ss << "d_" << p_idx << "_" << call->id().str();
+    ss << "d_" << call->id().str();
+    for (auto& param : call->decl()->params()) {
+      ss << "_";
+      if (param->type().dim() > 0) {
+        ss << "d" << param->type().dim();
+      }
+      switch (param->type().bt()) {
+        case Type::BT_BOOL: {
+          ss << "b";
+          break;
+        }
+        case Type::BT_INT: {
+          ss << "i";
+          break;
+        }
+        case Type::BT_FLOAT: {
+          ss << "f";
+          break;
+        }
+        case Type::BT_STRING: {
+          ss << "s";
+          break;
+        }
+        case Type::BT_ANN: {
+          ss << "a";
+          break;
+        }
+        default: {
+          assert(false);
+          break;
+        }
+      }
+    }
 
     d_proc = CG_ProcID::proc(p_idx);
-    cg.bytecode.push_back(CG_Proc(ss.str(), arg_types.size()));
+    cg.bytecode.emplace_back(ss.str(), arg_types.size());
     cg.dispatch.insert(std::make_pair(sig, d_proc));
   }
 
