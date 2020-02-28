@@ -570,6 +570,8 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
       ss << "_";
       if (param->type().dim() > 0) {
         ss << "d" << param->type().dim();
+      } else if (param->type().dim() < 0) {
+        ss << "d$";
       }
       if (param->type().isvar()) {
         ss << "v";
@@ -593,6 +595,10 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
         }
         case Type::BT_ANN: {
           ss << "a";
+          break;
+        }
+        case Type::BT_TOP: {
+          ss << "t";
           break;
         }
         default: {
@@ -680,6 +686,8 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
       ss << "_";
       if (param->type().dim() > 0) {
         ss << "d" << param->type().dim();
+      } else if (param->type().dim() < 0) {
+        ss << "d$";
       }
       switch (param->type().bt()) {
         case Type::BT_BOOL: {
@@ -700,6 +708,10 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
         }
         case Type::BT_ANN: {
           ss << "a";
+          break;
+        }
+        case Type::BT_TOP: {
+          ss << "t";
           break;
         }
         default: {
