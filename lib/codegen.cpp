@@ -558,13 +558,13 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
   
   GCLock lock;
 
-  if(fun->e()) {
-    std::cerr << "%%%% Resolving: "; debugprint(fun->e());
-    int p_idx = bytecode.size();
-    CG_ProcID p_id(CG_ProcID::proc(p_idx));
-    ASTExprVec<VarDecl> params(fun->params());
-    
-    std::stringstream ss;
+  std::cerr << "%%%% Resolving: "; debugprint(fun);
+  int p_idx = bytecode.size();
+  CG_ProcID p_id(CG_ProcID::proc(p_idx));
+  ASTExprVec<VarDecl> params(fun->params());
+
+  std::stringstream ss;
+  if (fun->e()) {
     ss << "f_" << fun->id().str();
     for (auto& param : params) {
       ss << "_";
@@ -607,17 +607,13 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
         }
       }
     }
-
-    bytecode.emplace_back(ss.str(), params.size());
-    fun_bodies.insert(std::make_pair(fun, p_id));
-    return p_id;
   } else {
-    std::stringstream ss;
-    // ss << "b" << _builtins.size() << "_" << fun->id().str();
     ss << fun->id().str();
-    std::cerr << "%% Adding builtin: "; debugprint(fun);
-    return register_builtin(ss.str(), fun->params().size());
   }
+
+  bytecode.emplace_back(ss.str(), params.size());
+  fun_bodies.insert(std::make_pair(fun, p_id));
+  return p_id;
 }
 
 struct dispatch_node {
@@ -657,12 +653,9 @@ CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
     CG_ProcID body(cg.resolve_fun(b));
     // Force the body to be created
     procs.push_back(body);
-    if(!body.is_builtin()) {
-      assert(body.id() < cg.bytecode.size());
-      if(!cg.bytecode[body.id()].is_available(call_mode)) {
-        cg.bytecode[body.id()].body(call_mode);
-        cg.pending_bodies.push_back(std::make_pair(b, std::make_pair(call_mode, def_mode)));
-      }
+    if(!cg.bytecode[body.id()].is_available(call_mode)) {
+      cg.bytecode[body.id()].body(call_mode);
+      cg.pending_bodies.emplace_back(b, std::make_pair(call_mode, def_mode));
     }
   }
   
@@ -1899,6 +1892,7 @@ public:
 
     // Now generate procedures for any necessary function/predicate bodies.
     while(!cg.pending_bodies.empty()) {
+      GCLock lock;
       auto p(cg.pending_bodies.back()); 
       cg.pending_bodies.pop_back();
       
@@ -1907,7 +1901,27 @@ public:
       Mode call_mode(p.second.first);
       Mode def_mode(p.second.second);
       // Find the body.
-      if(fun->e()) {
+      ASTString reif_id = call_mode == BytecodeProc::FUN ? fun->id().str() + "_reif" : fun->id().str() + "_imp";
+      bool reif_exists = cg.fun_map.id_map.find(reif_id) != cg.fun_map.id_map.end();
+      if ((call_mode == BytecodeProc::IMP || call_mode == BytecodeProc::FUN) && reif_exists) {
+        CG_ProcID proc(cg.resolve_fun(fun));
+        CG_Builder frag;
+        std::vector<Expression*> args;
+        args.reserve(fun->params().size() + 1);
+        for (int i = 0; i < fun->params().size(); ++i) {
+          VarDecl* vd = fun->params()[i];
+          args.emplace_back(vd->id());
+        }
+        TypeInst var_bool(Location().introduce(), Type::varbool());
+        VarDecl new_var(Location().introduce(), &var_bool, "b");
+        args.emplace_back(new_var.id());
+        Call call(Location().introduce(), reif_id, args);
+        call.type(Type::varbool());
+        Let let(Location().introduce(), {&new_var}, &call);
+        let.type(Type::varbool());
+        c.compile_pred(frag, fun->params(), BytecodeProc::ROOT, &let);
+        cg.append(proc.id(), call_mode, frag);
+      } else if (fun->e()) {
         CG_ProcID proc(cg.resolve_fun(fun));
         CG_Builder frag;
         if(fun->e()->type().isbool()) {
@@ -1917,12 +1931,16 @@ public:
           c.compile_fun(frag, fun->params(), fun->e());
         }
         cg.append(proc.id(), call_mode, frag);
+      } else {
+        CG_ProcID proc(cg.resolve_fun(fun));
+        CG_Builder frag;
+        cg.append(proc.id(), call_mode, frag);
       }
     }
 
     // And finally, add the entry function.
     int main_proc = cg.bytecode.size();
-    cg.bytecode.push_back(CG_Proc("main", 0));
+    cg.bytecode.emplace_back("main", 0);
     cg.append(main_proc, BytecodeProc::ROOT, c.root_frag);
  
     show(std::cout, cg);
