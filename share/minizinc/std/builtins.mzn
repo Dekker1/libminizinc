@@ -17,6 +17,7 @@ include "flatzinc_builtins.mzn";
 function     bool: '<'(    $T: x,    $T: y);
 /** @group builtins.compare Return if \a x is less than \a y */
 function var bool: '<'(var $T: x,var $T: y);
+function var bool: '<'(var int: x, var int: y) = int_lt(x, y);
 /** @group builtins.compare Return if \a x is greater than \a y */
 function     bool: '>'(    $T: x,    $T: y);
 /** @group builtins.compare Return if \a x is greater than \a y */
@@ -25,6 +26,7 @@ function var bool: '>'(var $T: x,var $T: y);
 function     bool: '<='(    $T: x,    $T: y);
 /** @group builtins.compare Return if \a x is less than or equal to \a y */
 function var bool: '<='(var $T: x, var $T: y);
+function var bool: '<='(var int: x, var int: y) = int_le(x, y);
 /** @group builtins.compare Return if \a x is greater than or equal to \a y */
 function     bool: '>='(    $T: x,    $T: y);
 /** @group builtins.compare Return if \a x is greater than or equal to \a y */
@@ -270,7 +272,11 @@ function var bool: '!='(array[$T] of var float: x,array[$T] of var float: y) =
 /** @group builtins.arithmetic Return \a x + \a y */
 function     int:   '+'(    int: x,     int: y);
 /** @group builtins.arithmetic Return \a x + \a y */
-function var int:   '+'(var int: x,  var int: y);
+function var int:   '+'(var int: x,  var int: y) =
+  let {
+    var lb(x)+lb(y)..ub(x)+ub(y): z;
+    constraint int_plus(x, y, z);
+  } in z;
 /** @group builtins.arithmetic Return \a x + \a y */
 function     float: '+'(    float: x,    float: y);
 /** @group builtins.arithmetic Return \a x + \a y */
@@ -278,7 +284,11 @@ function var float: '+'(var float: x,var float: y);
 /** @group builtins.arithmetic Return \a x - \a y */
 function     int:   '-'(    int: x,     int: y);
 /** @group builtins.arithmetic Return \a x - \a y */
-function var int:   '-'(var int: x,  var int: y);
+function var int:   '-'(var int: x,  var int: y) =
+  let {
+    var lb(x)-ub(y)..ub(x)-lb(y): z;
+    constraint int_min(x, y, z);
+  } in z;
 /** @group builtins.arithmetic Return \a x - \a y */
 function     float: '-'(    float: x,    float: y);
 /** @group builtins.arithmetic Return \a x - \a y */
@@ -286,7 +296,11 @@ function var float: '-'(var float: x,var float: y);
 /** @group builtins.arithmetic Return \a x * \a y */
 function     int:   '*'(    int: x,     int: y);
 /** @group builtins.arithmetic Return \a x * \a y */
-function var int:   '*'(var int: x,  var int: y);
+function var int:   '*'(var int: x,  var int: y) =
+  let {
+    var lb(x)*lb(y)..ub(x)*lb(y): z;
+    constraint int_times(x, y, z);
+  } in z;
 /** @group builtins.arithmetic Return \(\a x ^ {\a y}\) */
 function     int:   '^'(    int: x,     int: y);
 /** @group builtins.arithmetic Return \(\a x ^ {\a y}\) */
@@ -360,7 +374,12 @@ function     $T: min(    $T: x,     $T: y);
 /** @group builtins.arithmetic Return minimum of elements in array \a x */
 function     $T: min(array[$U] of     par $T: x);
 /** @group builtins.arithmetic Return maximum of \a x and \a y */
-function     $T: max(    $T: x,     $T: y);
+function     $T: max(    $T: x,     $T: y) =
+  if x >= y then
+    x
+  else
+    y
+  endif;
 /** @group builtins.arithmetic Return maximum of elements in array \a x */
 function     $T: max(array[$U] of     $T: x);
 /** @group builtins.arithmetic Return minimum of elements in set \a x */
@@ -370,7 +389,9 @@ function $$E: max(set of $$E: x);
 
 /** @group builtins.arithmetic Return maximum of \a x and \a y */
 function var int: max(var int: x, var int: y) :: promise_total =
-  int_max(x,y);  % TODO: Changed to be a function
+  let { var max(lb(x),lb(y))..max(ub(x),ub(y)): m ::is_defined_var;
+        constraint int_max(x,y,m) ::defines_var(m);
+  } in m;
 
 /** @group builtins.arithmetic Return maximum of elements in array \a x */
 function var int: max(array[$U] of var int: x) =
@@ -726,7 +747,11 @@ function var bool: 'xor'(var bool: x, var bool: y);
 /** @group builtins.logic Return truth value of the negation of \a x */
 function     bool: 'not'(    bool: x);
 /** @group builtins.logic Return truth value of the negation of \a x */
-function var bool: 'not'(var bool: x);
+function var bool: 'not'(var bool: x) =
+  let {
+    var bool: y;
+    constraint bool_not(x, y);
+  } in y;
 
 /** @group builtins.logic Return truth value of \(\bigwedge_i \a x[i]\) */
 function     bool: forall(array[$T] of     bool: x);
