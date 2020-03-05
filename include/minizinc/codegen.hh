@@ -703,7 +703,7 @@ struct CG_FunMap {
     filter_bodies(dest, mid, e, arg+1, sz);
   }
 
-  std::vector<FunctionI*> get_bodies(unsigned int fun_id, std::vector<Type>& args) {
+  std::vector<FunctionI*> get_bodies(unsigned int fun_id, const std::vector<Type>& args) {
     CG_FunDefn& defn(functions[fun_id]);
 
     // First, restrict consideration to feasible specialisations.
@@ -729,7 +729,7 @@ struct CG_FunMap {
     return candidates;
   }
 
-  std::vector<FunctionI*> get_bodies(ASTString id, std::vector<Type>& args) {
+  std::vector<FunctionI*> get_bodies(ASTString id, const std::vector<Type>& args) {
     auto it(id_map.find(id));
     if(it == id_map.end())
       throw InternalError("Attempted to call function not in CG_FunMap.");
@@ -826,6 +826,9 @@ struct CodeGen {
 const char* instr_name(BytecodeStream::Instr i);
 const char* agg_name(AggregationCtx::Symbol s);
 const char* mode_name(BytecodeProc::Mode m);
+
+CG_ProcID find_call_fun(CodeGen& cg, ASTString id, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m);
+CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m);
 
 };
 
