@@ -625,12 +625,13 @@ struct dispatch_node {
   uint64_t sig;
 };
 
-CG_ProcID find_call_fun(CodeGen& cg, ASTString id, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m) {
+CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m) {
   for (auto& arg_type : arg_types) {
     arg_type.ti(Type::TI_PAR);
   }
+  std::cerr << "Find " << ident.str() << std::endl;
   int sz = arg_types.size();
-  CallSig sig(id, arg_types);
+  CallSig sig(ident, arg_types);
   auto it(cg.dispatch.find(sig));
   std::vector<FunctionI*> args;
 
