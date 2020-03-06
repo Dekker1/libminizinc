@@ -647,7 +647,7 @@ CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_typ
   }
 
   GCLock lock;
-  auto bodies = std::move(cg.fun_map.get_bodies(id, arg_types));
+  auto bodies = std::move(cg.fun_map.get_bodies(ident, arg_types));
   assert(bodies.size() > 0);
 
   std::vector<CG_ProcID> procs;
@@ -656,7 +656,6 @@ CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_typ
     // Force the body to be created
     procs.push_back(body);
     if(!cg.bytecode[body.id()].is_available(call_mode)) {
-      std::cerr << "Adding " << b->id() << "\n";
       cg.bytecode[body.id()].body(call_mode);
       cg.pending_bodies.emplace_back(b, std::make_pair(call_mode, def_mode));
     }
@@ -677,7 +676,7 @@ CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_typ
     int p_idx = cg.bytecode.size();
 
     std::stringstream ss;
-    ss << "d_" << id.str();
+    ss << "d_" << ident.str();
     for (auto& type : arg_types) {
       ss << "_";
       if (type.dim() > 0) {
@@ -1918,6 +1917,7 @@ public:
       debugprint(fun);
       Mode call_mode(p.second.first);
       Mode def_mode(p.second.second);
+      annotate_total(fun);
       // Find the body.
       ASTString reif_id = call_mode == BytecodeProc::FUN ? fun->id().str() + "_reif" : fun->id().str() + "_imp";
       bool reif_exists = cg.fun_map.id_map.find(reif_id) != cg.fun_map.id_map.end();
@@ -1950,6 +1950,7 @@ public:
         }
         cg.append(proc.id(), call_mode, frag);
       } else {
+        assert(call_mode == BytecodeProc::ROOT);
         CG_ProcID proc(cg.resolve_fun(fun));
         CG_Builder frag;
         cg.append(proc.id(), call_mode, frag);

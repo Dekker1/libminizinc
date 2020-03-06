@@ -747,7 +747,7 @@ function var bool: 'xor'(var bool: x, var bool: y);
 /** @group builtins.logic Return truth value of the negation of \a x */
 function     bool: 'not'(    bool: x);
 /** @group builtins.logic Return truth value of the negation of \a x */
-function var bool: 'not'(var bool: x) =
+function var bool: 'not'(var bool: x) ::promise_total =
   let {
     var bool: y;
     constraint bool_not(x, y);

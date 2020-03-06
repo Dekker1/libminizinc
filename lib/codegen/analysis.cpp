@@ -159,7 +159,7 @@ namespace MiniZinc {
       // the def-mode of the bound variables.
       for(Expression* e : bindings) {
         // Check whether this is a decl with a def.
-        if (VarDecl* vd = e->dyn_cast<VarDecl>()) {
+        if (auto vd = e->dyn_cast<VarDecl>()) {
           if(!vd->type().isbool())
             update(vd, Def, m);
             /*

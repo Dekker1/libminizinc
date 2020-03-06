@@ -15,11 +15,31 @@
 
 #include <minizinc/ast.hh>
 #include <minizinc/codegen.hh>
+#include <minizinc/astiterator.hh>
 
 // From a given top-level expression and
 // mode, what is the weakest mode covering
 // all occurrences of each sub-expression?
 namespace MiniZinc {
+
+  static void annotate_total(FunctionI* func) {
+    class AnnotateTotal : public EVisitor {
+    public:
+      void vLet(const Let& let) {
+        ASTExprVec<Expression> bindings(let.let());
+        for (auto expr : bindings) {
+          if (expr->eid() != Expression::E_VARDECL) {
+            // Must be a constraint, so it's a use.
+            assert(expr->type().isbool());
+            expr->addAnnotation(constants().ann.promise_total);
+          }
+        }
+      }
+    } _at;
+    if(func->ann().contains(constants().ann.promise_total)) {
+      topDown(_at, func->e());
+    }
+  }
 
 class ModeAnalysis {
   enum Occurrence { Def = 0, Use = 1 };
@@ -51,12 +71,14 @@ public:
   }
 
   void update(Expression* e, Occurrence o, CG::Mode m) {
-    // We only keep Use-modes for Boolean things.
-    if(o == Def) {
-      if(e->type().isbool())
+    if(e->type().isbool()) {
+      if(o == Def) {
+        // We only keep Use-modes for Boolean things.
         return;
-      if(e->ann().contains(constants().ann.promise_total))
+      }
+      if(e->ann().contains(constants().ann.promise_total)) {
         m = BytecodeProc::ROOT;
+      }
     }
     ExprMap<CG::Mode>::t& t(o == Def ? def_map : use_map);
     auto it(t.find(e));
