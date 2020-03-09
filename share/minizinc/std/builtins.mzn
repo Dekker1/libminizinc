@@ -282,7 +282,7 @@ function     float: '+'(    float: x,    float: y);
 /** @group builtins.arithmetic Return \a x + \a y */
 function var float: '+'(var float: x,var float: y);
 /** @group builtins.arithmetic Return \a x - \a y */
-function     int:   '-'(    int: x,     int: y);
+function     int:   '-'(    int: x,     int: y) = x - y;
 /** @group builtins.arithmetic Return \a x - \a y */
 function var int:   '-'(var int: x,  var int: y) =
   let {

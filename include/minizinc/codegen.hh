@@ -729,8 +729,8 @@ struct CG_FunMap {
     return candidates;
   }
 
-  std::vector<FunctionI*> get_bodies(ASTString id, const std::vector<Type>& args) {
-    auto it(id_map.find(id));
+  std::vector<FunctionI*> get_bodies(const ASTString& ident, const std::vector<Type>& args) {
+    auto it(id_map.find(ident));
     if(it == id_map.end())
       throw InternalError("Attempted to call function not in CG_FunMap.");
     unsigned int fun_id((*it).second);
@@ -747,6 +747,26 @@ struct CG_FunMap {
       args.push_back(arg);
     }
     return get_bodies(call->id(), args);
+  }
+
+  bool defines_mode(const ASTString& ident, const std::vector<Type>& args, BytecodeProc::Mode mode) {
+    assert(mode == BytecodeProc::FUN || mode == BytecodeProc::IMP);
+    GCLock lock;
+    ASTString reif_ident = mode == BytecodeProc::FUN ? ident.str() + "_reif" : ident.str() + "_imp";
+    auto it(id_map.find(reif_ident));
+    if(it == id_map.end()) {
+      return false;
+    }
+    unsigned int fun_id((*it).second);
+    std::vector<Type> reif_args;
+    reif_args.reserve(args.size() + 1);
+    for(int ii = 0; ii < args.size(); ++ii) {
+      Type arg(args[ii]);
+      arg.ti(Type::TI_PAR);
+      reif_args.push_back(arg);
+    }
+    reif_args.push_back(Type::parbool());
+    return !get_bodies(fun_id, reif_args).empty();
   }
 };
 

@@ -1976,27 +1976,39 @@ public:
       Mode def_mode(p.second.second);
       annotate_total(fun);
       // Find the body.
-      ASTString reif_id = call_mode == BytecodeProc::FUN ? fun->id().str() + "_reif" : fun->id().str() + "_imp";
-      bool reif_exists = cg.fun_map.id_map.find(reif_id) != cg.fun_map.id_map.end();
-      if ((call_mode == BytecodeProc::IMP || call_mode == BytecodeProc::FUN) && reif_exists) {
-        CG_ProcID proc(cg.resolve_fun(fun));
-        CG_Builder frag;
-        std::vector<Expression*> args;
-        args.reserve(fun->params().size() + 1);
-        for (int i = 0; i < fun->params().size(); ++i) {
-          VarDecl* vd = fun->params()[i];
-          args.emplace_back(vd->id());
+      if (call_mode == BytecodeProc::IMP || call_mode == BytecodeProc::FUN) {
+        std::vector<Type> arg_types (fun->params().size());
+        for (int j = 0; j < arg_types.size(); ++j) {
+          arg_types[j] = fun->params()[j]->type();
         }
-        TypeInst var_bool(Location().introduce(), Type::varbool());
-        VarDecl new_var(Location().introduce(), &var_bool, "b");
-        args.emplace_back(new_var.id());
-        Call call(Location().introduce(), reif_id, args);
-        call.type(Type::varbool());
-        Let let(Location().introduce(), {&new_var}, &call);
-        let.type(Type::varbool());
-        c.compile_pred(frag, fun->params(), BytecodeProc::ROOT, &let);
-        cg.append(proc.id(), call_mode, frag);
-      } else if (fun->e()) {
+        bool reif_exists = cg.fun_map.defines_mode(fun->id(), arg_types, call_mode);
+        if (reif_exists) {
+          CG_ProcID proc(cg.resolve_fun(fun));
+          CG_Builder frag;
+          std::vector<Expression*> args;
+          args.reserve(fun->params().size() + 1);
+          for (int i = 0; i < fun->params().size(); ++i) {
+            VarDecl* vd = fun->params()[i];
+            args.emplace_back(vd->id());
+          }
+          TypeInst var_bool(Location().introduce(), Type::varbool());
+          VarDecl new_var(Location().introduce(), &var_bool, "b");
+          args.emplace_back(new_var.id());
+          Call call(
+            Location().introduce(),
+            call_mode == BytecodeProc::FUN ? fun->id().str() + "_reif" : fun->id().str() + "_imp",
+            args
+          );
+          call.type(Type::varbool());
+          Let let(Location().introduce(), {&new_var}, &call);
+          let.type(Type::varbool());
+          c.compile_pred(frag, fun->params(), BytecodeProc::ROOT, &let);
+          cg.append(proc.id(), call_mode, frag);
+          continue;
+        }
+      }
+
+      if (fun->e()) {
         CG_ProcID proc(cg.resolve_fun(fun));
         CG_Builder frag;
         if(fun->e()->type().isbool()) {
