@@ -827,8 +827,8 @@ const char* instr_name(BytecodeStream::Instr i);
 const char* agg_name(AggregationCtx::Symbol s);
 const char* mode_name(BytecodeProc::Mode m);
 
-CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m);
-CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m);
+std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m);
+std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m);
 
 };
 

@@ -213,9 +213,12 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
   GCLock lock;
   switch(op) {
     // Actual builtins
-    case BOT_EQ:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"'='"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx), CG::r(r_lhs), CG::r(r_rhs));
+    case BOT_EQ: {
+      auto fun = find_call_fun(cg, {"'='"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
+    }
     case BOT_LQ:
     {
       int c = GET_REG(cg);
@@ -223,13 +226,16 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       int k = GET_REG(cg);
       int z = bind_cst(0, cg, frag);
       OPEN_OTHER(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN), CG::r(r_lhs), CG::r(r_rhs));
+      auto fun = find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx), CG::r(c), CG::r(x), CG::r(k));
-      // PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_le"), CG::r(r_lhs), CG::r(r_rhs));
+      fun = find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(c), CG::r(x), CG::r(k));
       return;
     }
     case BOT_LE:
@@ -239,21 +245,29 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       int k = GET_REG(cg);
       int z = bind_cst(-1, cg, frag);
       OPEN_OTHER(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN), CG::r(r_lhs), CG::r(r_rhs));
+      auto fun = find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx), CG::r(c), CG::r(x), CG::r(k));
-      // PUSH_INSTR(frag, BytecodeStream::CALL, ctx, cg.find_builtin("int_lt"), CG::r(r_lhs), CG::r(r_rhs));
+      fun = find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(c), CG::r(x), CG::r(k));
       return;
     }
-    case BOT_IN:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"'in'"}, Type::varint(), {Type::varint(), Type::varsetint()}, BytecodeProc::FUN), CG::r(r_lhs), CG::r(r_rhs));
+    case BOT_IN: {
+      auto fun = find_call_fun(cg, {"'in'"}, Type::varint(), {Type::varint(), Type::varsetint()}, BytecodeProc::FUN);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
+    }
     case BOT_PLUS: {
       if (ENABLE_PLUS) {
-        PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"'+'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx), CG::r(r_lhs), CG::r(r_rhs));
+        auto fun = find_call_fun(cg, {"'+'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
+        assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+        PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       } else {
         OPEN_OTHER(cg, frag);
         OPEN_VEC(cg, frag);
@@ -263,22 +277,36 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
         CLOSE_AGG(cg, frag);
         int r = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-        PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"sum"}, Type::varint(), {Type::varint(), Type::varint()}, ctx), CG::r(r));
+        auto fun = find_call_fun(cg, {"sum"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
+        assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+        PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r));
       }
       return;
     }
-    case BOT_MINUS:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx), CG::r(r_lhs), CG::r(r_rhs));
+    case BOT_MINUS: {
+      auto fun = find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
-    case BOT_MULT:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"'*'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx), CG::r(r_lhs), CG::r(r_rhs));
+    }
+    case BOT_MULT: {
+      auto fun = find_call_fun(cg, {"'*'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.second, CG::r(r_lhs), CG::r(r_rhs));
       return;
-    case BOT_IDIV:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"'div'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx), CG::r(r_lhs), CG::r(r_rhs));
+    }
+    case BOT_IDIV: {
+      auto fun = find_call_fun(cg, {"'div'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
-    case BOT_DIV:
-      PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"'/'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx), CG::r(r_lhs), CG::r(r_rhs));
+    }
+    case BOT_DIV: {
+      auto fun = find_call_fun(cg, {"'/'"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
+    }
     // Normalisation
     case BOT_NQ:
       call_binop(cg, frag, -ctx, BOT_EQ, r_lhs, r_rhs);
@@ -463,18 +491,28 @@ CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs)
   GCLock lock;
   switch(op) {
     // Actual builtins
-    case BOT_EQ:
-      return CG_Cond::call(find_call_fun(cg, {"'='"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx), ctx, CG::r(r_lhs), CG::r(r_rhs));
+    case BOT_EQ: {
+      auto fun = find_call_fun(cg, {"'='"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
+      assert(ctx == fun.second);
+      return CG_Cond::call(fun.first, ctx, CG::r(r_lhs), CG::r(r_rhs));
+    }
     case BOT_LQ:
     {
-      return CG_Cond::call(find_call_fun(cg, {"'<='"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx), ctx, CG::r(r_lhs), CG::r(r_rhs));
+      auto fun = find_call_fun(cg, {"'<='"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
+      assert(ctx == fun.second);
+      return CG_Cond::call(fun.first, ctx, CG::r(r_lhs), CG::r(r_rhs));
     }
     case BOT_LE:
     {
-      return CG_Cond::call(find_call_fun(cg, {"'<'"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx), ctx, CG::r(r_lhs), CG::r(r_rhs));
+      auto fun = find_call_fun(cg, {"'<'"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
+      assert(ctx == fun.second);
+      return CG_Cond::call(fun.first, ctx, CG::r(r_lhs), CG::r(r_rhs));
     }
-    case BOT_IN:
-      return CG_Cond::call(find_call_fun(cg, {"set_in"}, Type::varbool(), {Type::varint(), Type::varsetint()}, ctx), ctx, CG::r(r_lhs), CG::r(r_rhs));
+    case BOT_IN: {
+      auto fun = find_call_fun(cg, {"set_in"}, Type::varbool(), {Type::varint(), Type::varsetint()}, ctx);
+      assert(ctx == fun.second);
+      return CG_Cond::call(fun.first, ctx, CG::r(r_lhs), CG::r(r_rhs));
+    }
     // Normalisation
     case BOT_NQ:
       return ~binop_cond(cg, BOT_EQ, -ctx, r_lhs, r_rhs);
@@ -509,12 +547,16 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       int k = GET_REG(cg);
       int z = bind_cst(0, cg, frag);
       OPEN_OTHER(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN), CG::r(r_lhs), CG::r(r_rhs));
+      auto fun = find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
-      return CG_Cond::call(find_call_fun(cg, {"int_lin_eq"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx), ctx, CG::r(c), CG::r(x), CG::r(k));
+      fun = find_call_fun(cg, {"int_lin_eq"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      return CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k));
     }
     case BOT_LQ:
     {
@@ -523,12 +565,16 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       int k = GET_REG(cg);
       int z = bind_cst(0, cg, frag);
       OPEN_OTHER(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN), CG::r(r_lhs), CG::r(r_rhs));
+      auto fun = find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
-      return CG_Cond::call(find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx), ctx, CG::r(c), CG::r(x), CG::r(k));
+      fun = find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      return CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k));
     }
     case BOT_LE:
     {
@@ -537,12 +583,16 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       int k = GET_REG(cg);
       int z = bind_cst(-1, cg, frag);
       OPEN_OTHER(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN), CG::r(r_lhs), CG::r(r_rhs));
+      auto fun = find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
-      return CG_Cond::call(find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx), ctx, CG::r(c), CG::r(x), CG::r(k));
+      fun = find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      return CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k));
     }
     case BOT_NQ:
       return ~binop_cond(cg, BOT_EQ, -ctx, r_lhs, r_rhs);
@@ -627,11 +677,10 @@ struct dispatch_node {
   uint64_t sig;
 };
 
-CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m) {
+std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m) {
   for (auto& arg_type : arg_types) {
     arg_type.ti(Type::TI_PAR);
   }
-  std::cerr << "Find " << ident.str() << std::endl;
   int sz = arg_types.size();
   CallSig sig(ident, arg_types);
   auto it(cg.dispatch.find(sig));
@@ -643,7 +692,7 @@ CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_typ
   if(it != cg.dispatch.end()) {
     CG_ProcID d_proc(it->second);
     if(d_proc.is_builtin() || cg.bytecode[d_proc.id()].is_available(call_mode))
-      return d_proc;
+      return {d_proc, call_mode};
   }
 
   GCLock lock;
@@ -665,7 +714,7 @@ CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_typ
   if(procs.size() == 1) {
     if(it == cg.dispatch.end())
       cg.dispatch.insert(std::make_pair(sig, procs[0]));
-    return procs[0];
+    return {procs[0], call_mode};
   }
   
   CG_ProcID d_proc(CG_ProcID::builtin(0));
@@ -799,11 +848,11 @@ CG_ProcID find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_typ
 
   cg.append(d_proc.id(), call_mode, frag);
 
-  return d_proc;
+  return {d_proc, call_mode};
 }
 
 
-CG_ProcID find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
+std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
   std::vector<Type> arg_types;
   int sz = call->n_args();
   for(int ii = 0; ii < sz; ++ii) {
@@ -1266,7 +1315,9 @@ void force_and_leaves(std::vector<int>& leaves, CG_Cond::T child, CodeGen& cg, C
   } else if(p->reg[1 - sign].has_reg()) {
     // Create the negation 
     OPEN_OTHER(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN), CG::r(p->reg[1 - sign].reg));
+    auto fun = find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(p->reg[1 - sign].reg));
     CLOSE_AGG(cg, frag);
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));   
@@ -1292,7 +1343,9 @@ void force_or_leaves(std::vector<int>& leaves, CG_Cond::T child, CodeGen& cg, CG
   } else if(p->reg[sign].has_reg()) {
     // Create the negation 
     OPEN_OTHER(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN), CG::r(p->reg[sign].reg));
+    auto fun = find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(p->reg[sign].reg));
     CLOSE_AGG(cg, frag);
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));   
@@ -1382,7 +1435,9 @@ int CG::force(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
     // Emit the negation
     int r_neg(p->reg[1 - sign].reg);
     OPEN_OTHER(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN), CG::r(r_neg));
+    auto fun = find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_neg));
     CLOSE_AGG(cg, frag);
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
@@ -1596,7 +1651,9 @@ void post_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
     PUSH_INSTR(frag, BytecodeStream::POST, CG::r(p->reg[sign].reg));
   } else if(p->reg[1 - sign].has_reg()) {
     OPEN_OTHER(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN), CG::r(p->reg[1 - sign].reg));
+    auto fun = find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(p->reg[1 - sign].reg));
     CLOSE_AGG(cg, frag);
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
@@ -1910,7 +1967,7 @@ public:
     // Now generate procedures for any necessary function/predicate bodies.
     while(!cg.pending_bodies.empty()) {
       GCLock lock;
-      auto p(cg.pending_bodies.back()); 
+      auto p(cg.pending_bodies.back());
       cg.pending_bodies.pop_back();
       
       FunctionI* fun(p.first);
@@ -2350,7 +2407,9 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
     PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_elt));
     // OPEN_OTHER(cg, frag); // maybe needed?
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'+'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN), CG::r(r_elt), CG::r(r_acc));
+    auto fun = find_call_fun(cg, {"'+'"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_elt), CG::r(r_acc));
     // CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_acc));
 
@@ -2376,7 +2435,9 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_res), CG::l(l_eq1));
 
     // Sum n arguments
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"sum"}, Type::varint(), {Type::varint(1)}, BytecodeProc::FUN), CG::r(r_A));
+    auto fun = find_call_fun(cg, {"sum"}, Type::varint(), {Type::varint(1)}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_A));
     PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
 
     // Sum zero arguments (result must be 0)
@@ -3056,7 +3117,9 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(sz == 1);
   int r = GET_REG(cg);
   if(idx[0]->type().isvar()) {
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"element"}, Type::varint(), {Type::varint(), Type::varint(1)}, ctx), CG::r(r_idxs[0]), CG::r(r_A));
+    auto fun = find_call_fun(cg, {"element"}, Type::varint(), {Type::varint(), Type::varint(1)}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_idxs[0]), CG::r(r_A));
     CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   } else {
@@ -3083,7 +3146,9 @@ void call_clause(CodeGen& cg, CG_Builder& frag, Mode ctx, const std::vector<int>
   // Build the arguments vectors.
   int r_pos(make_vec(cg, frag, pos));
   int r_neg(make_vec(cg, frag, neg));
-  PUSH_INSTR(frag, BytecodeStream::CALL, ctx, find_call_fun(cg, {"clause"}, Type::varbool(), {Type::varbool(1), Type::varbool(1)}, ctx), CG::r(r_pos), CG::r(r_neg));
+  auto fun = find_call_fun(cg, {"clause"}, Type::varbool(), {Type::varbool(1), Type::varbool(1)}, ctx);
+  assert (BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+  PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_pos), CG::r(r_neg));
 }
 
 int deinterlace(CodeGen& cg, CG_Builder& frag, int vec, int width, int offset) {
@@ -3289,14 +3354,18 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(!is_total) {
     GCLock lock;
     int r_part(deinterlace(cg, frag, r_VEC, 3, 1));
-    part = CG_Cond::call(find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(), Type::varint(1)}, ctx), ctx, CG::r(r_idx), CG::r(r_part));
+    auto fun = find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(), Type::varint(1)}, ctx);
+    assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+    part = CG_Cond::call(fun.first, fun.second, CG::r(r_idx), CG::r(r_part));
   }
 
   {
     GCLock lock;
     OPEN_OTHER(cg, frag);
     int r_A(deinterlace(cg, frag, r_VEC, 3 - is_total, 0));
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"element"}, Type::varint(), {Type::varint(), Type::varint(1)}, BytecodeProc::FUN), CG::r(r_idx), CG::r(r_A));
+    auto fun = find_call_fun(cg, {"element"}, Type::varint(), {Type::varint(), Type::varint(1)}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_idx), CG::r(r_A));
     CLOSE_AGG(cg, frag);
   }
 
@@ -3341,7 +3410,9 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       // FIXME: Will currently abort if div/mod is called with a zero rhs.
     } else {
       GCLock lock;
-      partial.push_back(~CG_Cond::call(find_call_fun(cg, {"'='"}, Type::varbool(), {Type::varint(), Type::varint()}, -ctx), -ctx, CG::r(b_rhs.first), CG::r(r_zero)));
+      auto fun = find_call_fun(cg, {"'='"}, Type::varbool(), {Type::varint(), Type::varint()}, -ctx);
+      assert(BytecodeProc::is_neg(-ctx) == BytecodeProc::is_neg(fun.second));
+      partial.push_back(~CG_Cond::call(fun.first, fun.second, CG::r(b_rhs.first), CG::r(r_zero)));
     }
   }
   return CG::Binding(r, CG_Cond::forall(ctx, partial));
@@ -3364,7 +3435,9 @@ CG::Binding CG::bind(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       } else {
         GCLock lock;
         OPEN_OTHER(cg, frag);
-        PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint()}, BytecodeProc::FUN), CG::r(b_e.first));
+        auto fun = find_call_fun(cg, {"'-'"}, Type::varint(), {Type::varint()}, BytecodeProc::FUN);
+        assert(fun.second == BytecodeProc::FUN);
+        PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(b_e.first));
         CLOSE_AGG(cg, frag);
         r = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
@@ -3394,7 +3467,8 @@ CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // p_arg.push_back(CG_Cond::call(find_call_pred(cg, call), ctx, r_arg));
 
   // Bind the value part.
-  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, find_call_fun(cg, call, BytecodeProc::ROOT), r_arg);
+  auto fun = find_call_fun(cg, call, BytecodeProc::ROOT);
+  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, r_arg);
   CLOSE_AGG(cg, frag);
   int r_ret(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
@@ -3599,7 +3673,9 @@ CG_Cond::T compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     cond.push_back(CG_Cond::reg(r));
   } else {
     GCLock lock;
-    cond.push_back(CG_Cond::call(find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(), Type::varint(1)}, -ctx), ctx, CG::r(r_idxs[0]),  CG::r(r_A)));
+    auto fun = find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(), Type::varint(1)}, -ctx);
+    assert(BytecodeProc::is_neg(-ctx) == BytecodeProc::is_neg(fun.second));
+    cond.push_back(CG_Cond::call(fun.first, fun.second, CG::r(r_idxs[0]),  CG::r(r_A)));
   }
   return CG_Cond::forall(ctx, cond);
 }
@@ -3790,7 +3866,16 @@ CG_Cond::T compile_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     }
   }
   // And finally, add the call itself
-  p_arg.push_back(CG_Cond::call(find_call_fun(cg, call, ctx), ctx, r_arg));
+  auto fun = find_call_fun(cg, call, ctx);
+  if (BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second)) {
+    p_arg.push_back(CG_Cond::call(fun.first, fun.second, r_arg));
+  } else {
+    assert(call->type().isbool());
+    CG_Value ret = CG::r(CG::force(CG_Cond::call(fun.first, fun.second, r_arg), cg, frag));
+    fun = find_call_fun(cg, {"'not'"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    p_arg.push_back(CG_Cond::call(fun.first, BytecodeProc::FUN, ret));
+  }
   return CG_Cond::forall(ctx, p_arg);
 }
 
@@ -3885,7 +3970,9 @@ CG_Cond::T CG::compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) 
     conj.push_back(CG_Cond::reg(r));
   } else {
     GCLock lock;
-    conj.push_back(CG_Cond::call(find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(1), Type::varint()}, BytecodeProc::FUN), ctx, CG::r(r_idx[0]), CG::r(r_A)));
+    auto fun = find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(1), Type::varint()}, ctx);
+    assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+    conj.push_back(CG_Cond::call(fun.first, fun.second, CG::r(r_idx[0]), CG::r(r_A)));
   }
   return CG_Cond::forall(ctx, conj);
 }
