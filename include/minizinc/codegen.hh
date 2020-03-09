@@ -455,7 +455,7 @@ struct CG {
           return Imp;
         case BytecodeProc::FUN:
         case BytecodeProc::FUN_NEG:
-          return Imp;
+          return Fun;
       default:
         throw InternalError("Unexpected mode.");
       }
