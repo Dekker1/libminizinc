@@ -684,7 +684,6 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
   int sz = arg_types.size();
   CallSig sig(ident, arg_types);
   auto it(cg.dispatch.find(sig));
-  std::vector<FunctionI*> args;
 
   BytecodeProc::Mode call_mode(ret_type.isbool() ? m : BytecodeProc::FUN);
   BytecodeProc::Mode def_mode(ret_type.isbool() ? m : BytecodeProc::ROOT);
@@ -697,7 +696,33 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
 
   GCLock lock;
   auto bodies = std::move(cg.fun_map.get_bodies(ident, arg_types));
-  assert(bodies.size() > 0);
+  assert(!bodies.empty());
+
+  // TODO: Consider negated contexts.
+  if (ret_type.isbool() && call_mode != BytecodeProc::ROOT) {
+    bool valid = false;
+    if (call_mode == BytecodeProc::IMP) {
+      valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::IMP);
+      if (!valid) {
+        valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::FUN);
+        if (valid) {
+          call_mode = BytecodeProc::FUN;
+          def_mode = BytecodeProc::FUN;
+        }
+      }
+    } else if (call_mode == BytecodeProc::FUN) {
+      valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::IMP);
+    }
+    for (auto & body : bodies) {
+      if (body->e()) {
+        valid = true;
+        break;
+      }
+    }
+    if (!valid) {
+      throw InternalError(ident.str() + " is used in a reified context, but no reification is available.");
+    }
+  }
 
   std::vector<CG_ProcID> procs;
   for(FunctionI* b : bodies) {
