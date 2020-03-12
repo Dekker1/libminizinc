@@ -2602,12 +2602,86 @@ CG::Binding bind_assert_g(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG::bind(call->arg(2), cg, frag);
 }
 
-CG::Binding bind_array1d(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+template<int X>
+CG::Binding bind_arrayXd(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == X + 1);
+  std::vector<CG_Cond::T> cond;
+
+  // Bind all index sets
+  std::vector<int> r_index(X);
+  for(int ii = 0; ii < X; ++ii) {
+    CG::Binding b(CG::bind(call->arg(ii), cg, frag));
+    r_index[ii] = b.first;
+    cond.push_back(b.second);
+  }
+
+  // Bind array expression
+  int rA(GET_REG(cg));
+  CG::Binding arr = CG::bind(call->arg(X), cg, frag);
+  cond.push_back(arr.second);
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(arr.first), CG::r(bind_cst(1, cg, frag)), CG::r(rA));
+
+  int rI(GET_REG(cg));
+  OPEN_OTHER(cg, frag);
+  OPEN_VEC(cg, frag);
+    for (int ii = 0; ii < X; ++ii) {
+      // TODO: Ensure the index set is a range (2-elements)
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_index[ii]), CG::r(bind_cst(1, cg, frag)), CG::r(rI));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_index[ii]), CG::r(bind_cst(2, cg, frag)), CG::r(rI));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+    }
+  CLOSE_AGG(cg, frag);
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rI));
+
+  // TODO: Ensure that the new index sets match the size of the array
+  // Combine array and index
+  OPEN_OTHER(cg, frag);
+  OPEN_VEC(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rA));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+  CLOSE_AGG(cg, frag);
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rA));
+
+  return {rA, CG_Cond::forall(ctx, cond)};
+}
+
+  CG::Binding bind_array1d(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(call->n_args() == 1) {
-    return CG::bind(call->arg(0), cg, frag);
+    // Index set: 1..len
+    int rA(GET_REG(cg));
+    int rI(GET_REG(cg));
+
+    // Bind array expression
+    CG::Binding arr = CG::bind(call->arg(0), cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(arr.first), CG::r(bind_cst(1, cg, frag)), CG::r(rA));
+
+    // Add index set
+    OPEN_OTHER(cg, frag);
+    OPEN_VEC(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
+      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(rA), CG::r(rI));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+    CLOSE_AGG(cg, frag);
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rI));
+
+    // Combine array and index
+    OPEN_OTHER(cg, frag);
+    OPEN_VEC(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rA));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+    CLOSE_AGG(cg, frag);
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rA));
+
+    return {rA, arr.second};
   } else {
+    // Index set given by the user
     assert(call->n_args() == 2);
-    return CG::bind(call->arg(1), cg, frag);
+    return bind_arrayXd<1>(call, ctx, cg, frag);
   }
 }
 
@@ -3005,6 +3079,14 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair(c.ids.forall, builtin_t { eval_forall, bind_error_g } ));
   tbl.insert(std::make_pair(c.ids.assert, builtin_t { eval_assert_b, bind_assert_g } ));
   tbl.insert(std::make_pair("array1d", builtin_t { eval_error_b, bind_array1d } ));
+  tbl.insert(std::make_pair("array2d", builtin_t { eval_error_b, bind_arrayXd<2> } ));
+  tbl.insert(std::make_pair("array3d", builtin_t { eval_error_b, bind_arrayXd<3> } ));
+  tbl.insert(std::make_pair("array4d", builtin_t { eval_error_b, bind_arrayXd<4> } ));
+  tbl.insert(std::make_pair("array5d", builtin_t { eval_error_b, bind_arrayXd<5> } ));
+  tbl.insert(std::make_pair("array6d", builtin_t { eval_error_b, bind_arrayXd<6> } ));
+  tbl.insert(std::make_pair("array7d", builtin_t { eval_error_b, bind_arrayXd<7> } ));
+  tbl.insert(std::make_pair("array8d", builtin_t { eval_error_b, bind_arrayXd<8> } ));
+  tbl.insert(std::make_pair("array9d", builtin_t { eval_error_b, bind_arrayXd<9> } ));
   tbl.insert(std::make_pair("array_union", builtin_t { eval_error_b, bind_array_union } ));
   tbl.insert(std::make_pair("index_set", builtin_t { eval_error_b, bind_indexset } ));
   tbl.insert(std::make_pair("length", builtin_t { eval_error_b, bind_length } ));
@@ -3112,16 +3194,39 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       p_vec.push_back(b_ii.second);
     }
   }
+
+//  Build Array
   OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   for(int r_c : r_vec)
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
   CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
-  int r(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  int rA(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rA));
 
-  return CG::Binding(r, CG_Cond::forall(ctx, p_vec));
+//  Build index sets
+  OPEN_OTHER(cg, frag);
+  OPEN_VEC(cg, frag);
+  for (int ii = 0; ii < a->dims(); ++ii) {
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(a->min(ii), cg, frag)));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(a->max(ii), cg, frag)));
+  }
+  CLOSE_AGG(cg, frag);
+  CLOSE_AGG(cg, frag);
+  int rI(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rI));
+
+// Combine array and index sets
+  OPEN_OTHER(cg, frag);
+  OPEN_VEC(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rA));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+  CLOSE_AGG(cg, frag);
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rA));
+
+  return {rA, CG_Cond::forall(ctx, p_vec)};
 }
 
 CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -3151,7 +3256,6 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int r_A(b_A.first);
   cond.push_back(b_A.second);
 
-  assert(sz == 1);
   int r = GET_REG(cg);
   if(idx[0]->type().isvar()) {
     auto fun = find_call_fun(cg, {"element"}, Type::varint(), {Type::varint(), Type::varint(1)}, BytecodeProc::FUN);
@@ -3161,7 +3265,34 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   } else {
     // Just read the vector, and get the appropriate element.
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idxs[0]), CG::r(r));
+    int r_I(GET_REG(cg));
+    int r_index(GET_REG(cg));
+    int r_mult(GET_REG(cg));
+    int r_min(GET_REG(cg));
+    int r_max(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(2, cg, frag)), CG::r(r_I));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(1, cg, frag)), CG::r(r_min));
+    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_idxs[0]), CG::r(r_index));
+    PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_index), CG::r(r_min), CG::r(r_index));
+    if (sz > 1) {
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_mult));
+      for (int idxs = 1; idxs < sz; ++idxs) {
+        PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(idxs*2+1, cg, frag)), CG::r(r_min));
+        PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(idxs*2+2, cg, frag)), CG::r(r_max));
+        PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_max), CG::r(r_min), CG::r(r_max));
+        PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_max));
+        PUSH_INSTR(frag, BytecodeStream::MULI, CG::r(r_mult), CG::r(r_max), CG::r(r_mult));
+
+        PUSH_INSTR(frag, BytecodeStream::MULI, CG::r(r_index), CG::r(r_mult), CG::r(r_index));
+
+        PUSH_INSTR(frag, BytecodeStream::ADDI, CG::r(r_index), CG::r(r_idxs[idxs]), CG::r(r_index));
+        PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_index), CG::r(r_min), CG::r(r_index));
+      }
+    }
+    PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_index)); // Indexes are 1 indexed.
+
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_index), CG::r(r));
   }
   return {r, CG_Cond::forall(ctx, cond)};
 }
@@ -3605,8 +3736,30 @@ CG::Binding CG::bind(Comprehension* comp, Mode ctx, CodeGen& cg, CG_Builder& fra
   cg.env_pop();
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-  if(comp->type().is_set())
+  if(comp->type().is_set()) {
     PUSH_INSTR(frag, BytecodeStream::MAKE_SET, CG::r(r), CG::r(r));
+  } else {
+    assert(comp->type().dim() > 0);
+    int rI(GET_REG(cg));
+//  Add index set
+    OPEN_OTHER(cg, frag);
+    OPEN_VEC(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
+    PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r), CG::r(rI));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+    CLOSE_AGG(cg, frag);
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rI));
+
+// Combine array and index sets
+    OPEN_OTHER(cg, frag);
+    OPEN_VEC(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+    CLOSE_AGG(cg, frag);
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  }
   return CG::Binding(r, CG_Cond::ttt());
 }
 
@@ -3706,7 +3859,34 @@ CG_Cond::T compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(idx[0]->type().ispar()) {
     // Just read the vector, and get the appropriate element.
     int r(GET_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idxs[0]), CG::r(r));
+    int r_I(GET_REG(cg));
+    int r_index(GET_REG(cg));
+    int r_mult(GET_REG(cg));
+    int r_min(GET_REG(cg));
+    int r_max(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(2, cg, frag)), CG::r(r_I));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(1, cg, frag)), CG::r(r_min));
+    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_idxs[0]), CG::r(r_index));
+    PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_index), CG::r(r_min), CG::r(r_index));
+    if (sz > 1) {
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_mult));
+      for (int idxs = 1; idxs < sz; ++idxs) {
+        PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(idxs*2+1, cg, frag)), CG::r(r_min));
+        PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(idxs*2+2, cg, frag)), CG::r(r_max));
+        PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_max), CG::r(r_min), CG::r(r_max));
+        PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_max));
+        PUSH_INSTR(frag, BytecodeStream::MULI, CG::r(r_mult), CG::r(r_max), CG::r(r_mult));
+
+        PUSH_INSTR(frag, BytecodeStream::MULI, CG::r(r_index), CG::r(r_mult), CG::r(r_index));
+
+        PUSH_INSTR(frag, BytecodeStream::ADDI, CG::r(r_index), CG::r(r_idxs[idxs]), CG::r(r_index));
+        PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_index), CG::r(r_min), CG::r(r_index));
+      }
+    }
+    PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_index)); // Indexes are 1 indexed.
+
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_index), CG::r(r));
     cond.push_back(CG_Cond::reg(r));
   } else {
     GCLock lock;
