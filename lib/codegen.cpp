@@ -711,7 +711,7 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
         }
       }
     } else if (call_mode == BytecodeProc::FUN) {
-      valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::IMP);
+      valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::FUN);
     }
     for (auto & body : bodies) {
       if (body->e()) {
