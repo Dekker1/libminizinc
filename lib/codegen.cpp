@@ -2410,7 +2410,8 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // Components of the sum may be partial.
   // TODO: Specialise for literals and comprehensions.
   CG::Binding b_elts(CG::bind(e, cg, frag));
-  int r_A(b_elts.first);
+  int r_A(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_elts.first), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
   if(e->type().ispar()) {
     int r_sum(GET_REG(cg));   
     PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r_sum));
@@ -2498,8 +2499,11 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
 CG::Binding bind_set2array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
+  // Bind set
   Expression* e = call->arg(0);
   CG::Binding b_elts(CG::bind(e, cg, frag));
+
+  // Create array
   OPEN_VEC(cg, frag);
   Forset iter(cg, b_elts.first);
   iter.emit_pre(frag);
@@ -2508,13 +2512,35 @@ CG::Binding bind_set2array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) 
   CLOSE_AGG(cg, frag);
   int r_ret(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
-  return CG::Binding(r_ret, CG_Cond::ttt());
+
+  // Create index set
+  int rI(GET_REG(cg));
+  OPEN_OTHER(cg, frag);
+  OPEN_VEC(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_ret), CG::r(rI));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+  CLOSE_AGG(cg, frag);
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rI));
+
+  // Combine array and index
+  OPEN_OTHER(cg, frag);
+  OPEN_VEC(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_ret));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
+  CLOSE_AGG(cg, frag);
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
+
+  return {r_ret, b_elts.second};
 }
 
 CG::Binding bind_dom_bounds_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
-  int r_A(CG::bind(call->arg(0), cg, frag).first);
-  // FIXME: Correctly handle conditions.
+  CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
+  int r_A(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
   // Open the context here, so we can recover all the registers after.
   OPEN_VEC(cg, frag);
   int r_lb(GET_REG(cg));
@@ -2567,7 +2593,7 @@ CG::Binding bind_dom_bounds_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder&
   CLOSE_AGG(cg, frag);
   int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-  return CG::Binding(r, CG_Cond::ttt());
+  return CG::Binding(r, b_A.second);
 }
 
 CG_Cond::T eval_assert_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -2692,7 +2718,8 @@ CG::Binding bind_array_union(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag
   // Components of the sum may be partial.
   // TODO: Specialise for literals and comprehensions.
   CG::Binding b_elts(CG::bind(e, cg, frag));
-  int r_A(b_elts.first);
+  int r_A(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_elts.first), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
 
   assert (e->type().ispar()); // TODO: var case
   int r_union(GET_REG(cg));
@@ -2770,7 +2797,8 @@ CG::Binding bind_dom(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 CG::Binding bind_lb_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
-  int r_A(b_A.first);
+  int r_A(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
   // Check for emptiness
   int r_agg(GET_REG(cg));
   int r_test(GET_REG(cg));
@@ -2805,7 +2833,8 @@ CG::Binding bind_lb_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 CG::Binding bind_ub_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
-  int r_A(b_A.first);
+  int r_A(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
   // Check for emptiness
   int r_agg(GET_REG(cg));
   int r_test(GET_REG(cg));
