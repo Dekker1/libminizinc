@@ -3275,16 +3275,21 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // in the indices, and that the accesses are within-range.
   ASTExprVec<Expression> idx(a->idx());
   Expression* A(a->v());
+  int sz(idx.size());
+
+  bool is_var = false;
+  for(int ii = 0; ii < sz; ++ii) {
+    is_var = is_var || idx[ii]->type().isvar();
+  }
 
   // Evaluate the indices, put them in registers.
   // Collect partiality of the expression.
   std::vector<CG_Cond::T> cond;
 
-  if(idx[0]->type().isvar()) {
+  if(is_var) {
     OPEN_OTHER(cg, frag);
   }
   // Now evaluate the array body, and emit the indices.
-  int sz(idx.size());
   std::vector<int> r_idxs(sz);
   for(int ii = 0; ii < sz; ++ii) {
     CG::Binding b(CG::bind(idx[ii], cg, frag));
@@ -3297,10 +3302,25 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   cond.push_back(b_A.second);
 
   int r = GET_REG(cg);
-  if(idx[0]->type().isvar()) {
-    auto fun = find_call_fun(cg, {"element"}, Type::varint(), {Type::varint(), Type::varint(1)}, BytecodeProc::FUN);
+
+  if(is_var) {
+    std::vector<Type> types(sz+1, Type::varint());
+    types[sz] = Type::varint(sz);
+    auto fun = find_call_fun(cg, {"element"}, Type::varint(), types, BytecodeProc::FUN);
     assert(fun.second == BytecodeProc::FUN);
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_idxs[0]), CG::r(r_A));
+
+    std::vector<CG_Value> r_args(sz+1);
+    for (int ii = 0; ii < sz; ++ii) {
+      r_args[ii] = CG::r(r_idxs[ii]);
+    }
+    r_args[sz] = CG::r(r_A);
+
+    // Push CALL instruction with the correct id
+    PUSH_INSTR(frag, BytecodeStream::BUILTIN, BytecodeProc::FUN, fun.first);
+    // Append instruction with register arguments
+    CG_Instr &i = frag.instrs.back();
+    PUSH_INSTR_OPERAND(i, r_args);
+
     CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   } else {
@@ -3877,13 +3897,18 @@ CG_Cond::T compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // in the indices, and that the accesses are within-range.
   ASTExprVec<Expression> idx(a->idx());
   Expression* A(a->v());
+  int sz(idx.size());
+
+  bool is_var = false;
+  for(int ii = 0; ii < sz; ++ii) {
+    is_var = is_var || idx[ii]->type().isvar();
+  }
 
   // Evaluate the indices, put them in registers.
   // Collect partiality of the expression.
   std::vector<CG_Cond::T> cond;
 
   // Now evaluate the array body, and emit the indices.
-  int sz(idx.size());
   std::vector<int> r_idxs(sz);
   for(int ii = 0; ii < sz; ++ii) {
     CG::Binding b(CG::bind(idx[ii], cg, frag));
@@ -3895,8 +3920,21 @@ CG_Cond::T compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int r_A(b_A.first);
   cond.push_back(b_A.second);
 
-  assert(sz == 1);
-  if(idx[0]->type().ispar()) {
+  if(is_var) {
+    GCLock lock;
+    std::vector<Type> types(sz+1, Type::varint());
+    types[sz] = Type::varbool(sz);
+    auto fun = find_call_fun(cg, {"element"}, Type::varbool(), types, -ctx);
+    assert(BytecodeProc::is_neg(-ctx) == BytecodeProc::is_neg(fun.second));
+
+    std::vector<CG_Value> r_args(sz+1);
+    for (int ii = 0; ii < sz; ++ii) {
+      r_args[ii] = CG::r(r_idxs[ii]);
+    }
+    r_args[sz] = CG::r(r_A);
+
+    cond.push_back(CG_Cond::call(fun.first, fun.second, r_args));
+  } else {
     // Just read the vector, and get the appropriate element.
     int r(GET_REG(cg));
     int r_I(GET_REG(cg));
@@ -3928,11 +3966,6 @@ CG_Cond::T compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
     PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_index), CG::r(r));
     cond.push_back(CG_Cond::reg(r));
-  } else {
-    GCLock lock;
-    auto fun = find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(), Type::varint(1)}, -ctx);
-    assert(BytecodeProc::is_neg(-ctx) == BytecodeProc::is_neg(fun.second));
-    cond.push_back(CG_Cond::call(fun.first, fun.second, CG::r(r_idxs[0]),  CG::r(r_A)));
   }
   return CG_Cond::forall(ctx, cond);
 }
