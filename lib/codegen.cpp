@@ -2837,23 +2837,25 @@ CG::Binding bind_ub_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG::Binding(r_agg, b_A.second);
 }
 
-CG::Binding bind_indexset(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+template<int X, int Y>
+CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   OPEN_OTHER(cg, frag);
   CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
-  {
-  OPEN_VEC(cg, frag);
   int r(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_arg.first), CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
-  CLOSE_AGG(cg, frag);
+  {
+    OPEN_VEC(cg, frag);
+    int r_tmp(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_arg.first), CG::r(bind_cst(2, cg, frag)), CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r), CG::r(bind_cst((X-1)*2+1, cg, frag)), CG::r(r_tmp));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_tmp));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r), CG::r(bind_cst((X-1)*2+2, cg, frag)), CG::r(r_tmp));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_tmp));
+    CLOSE_AGG(cg, frag);
   }
   CLOSE_AGG(cg, frag);
-  int r(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-  return CG::Binding(r, b_arg.second);
+  return {r, b_arg.second};
 }
 
 CG::Binding bind_bool2int(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -3088,7 +3090,16 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("array8d", builtin_t { eval_error_b, bind_arrayXd<8> } ));
   tbl.insert(std::make_pair("array9d", builtin_t { eval_error_b, bind_arrayXd<9> } ));
   tbl.insert(std::make_pair("array_union", builtin_t { eval_error_b, bind_array_union } ));
-  tbl.insert(std::make_pair("index_set", builtin_t { eval_error_b, bind_indexset } ));
+  tbl.insert(std::make_pair("index_set", builtin_t { eval_error_b, bind_index_set_XofY<1, 1>} ));
+  tbl.insert(std::make_pair("index_set_1of2", builtin_t { eval_error_b, bind_index_set_XofY<1, 2>} ));
+  tbl.insert(std::make_pair("index_set_2of2", builtin_t { eval_error_b, bind_index_set_XofY<2, 2>} ));
+  tbl.insert(std::make_pair("index_set_1of3", builtin_t { eval_error_b, bind_index_set_XofY<1, 3>} ));
+  tbl.insert(std::make_pair("index_set_2of3", builtin_t { eval_error_b, bind_index_set_XofY<2, 3>} ));
+  tbl.insert(std::make_pair("index_set_3of3", builtin_t { eval_error_b, bind_index_set_XofY<3, 3>} ));
+  tbl.insert(std::make_pair("index_set_1of4", builtin_t { eval_error_b, bind_index_set_XofY<1, 4>} ));
+  tbl.insert(std::make_pair("index_set_2of4", builtin_t { eval_error_b, bind_index_set_XofY<2, 4>} ));
+  tbl.insert(std::make_pair("index_set_3of4", builtin_t { eval_error_b, bind_index_set_XofY<3, 4>} ));
+  tbl.insert(std::make_pair("index_set_4of4", builtin_t { eval_error_b, bind_index_set_XofY<4, 4>} ));
   tbl.insert(std::make_pair("length", builtin_t { eval_error_b, bind_length } ));
   tbl.insert(std::make_pair("lb", builtin_t { eval_error_b, bind_lb } ));
   tbl.insert(std::make_pair("ub", builtin_t { eval_error_b, bind_ub } ));
