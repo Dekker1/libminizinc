@@ -2770,8 +2770,9 @@ CG::Binding bind_length(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   CG::Binding b(CG::bind(call->arg(0), cg, frag));
   int r(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b.first), CG::r(r));
-  return CG::Binding(r, b.second);
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b.first), CG::r(bind_cst(1, cg, frag)), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r), CG::r(r));
+  return {r, b.second};
 }
 
 CG::Binding bind_lb(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
