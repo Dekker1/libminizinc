@@ -3104,9 +3104,14 @@ CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG_Cond::T eval_context_is_root(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // TODO: What do we do with the argument?
+  // TODO: I'm not sure this is actually correct....
+  assert(call->n_args() == 1);
+  CG::Mode arg_ctx(BytecodeProc::FUN);
+  try {
+    arg_ctx = cg.mode_map.at(call->arg(0));
+  } catch(const std::out_of_range& exn) { }
 
-  if (ctx == BytecodeProc::ROOT) {
+  if (arg_ctx == BytecodeProc::ROOT) {
     return CG_Cond::ttt();
   } else {
     return CG_Cond::fff();
