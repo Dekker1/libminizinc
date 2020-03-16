@@ -2027,7 +2027,8 @@ public:
           call.type(Type::varbool());
           Let let(Location().introduce(), {&new_var}, &call);
           let.type(Type::varbool());
-          c.compile_pred(frag, fun->params(), BytecodeProc::ROOT, &let);
+          let.addAnnotation(constants().ann.promise_total);
+          c.compile_pred(frag, fun->params(), call_mode, &let);
           cg.append(proc.id(), call_mode, frag);
           continue;
         }
@@ -2674,7 +2675,7 @@ CG::Binding bind_arrayXd(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return {rA, CG_Cond::forall(ctx, cond)};
 }
 
-  CG::Binding bind_array1d(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+CG::Binding bind_array1d(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(call->n_args() == 1) {
     // Index set: 1..len
     int rA(GET_REG(cg));
