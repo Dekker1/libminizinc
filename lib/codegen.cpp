@@ -3405,15 +3405,17 @@ void call_clause(CodeGen& cg, CG_Builder& frag, Mode ctx, const std::vector<int>
 }
 
 int deinterlace(CodeGen& cg, CG_Builder& frag, int vec, int width, int offset) {
+  int r_sz(GET_REG(cg));
+  int r_slice(GET_REG(cg));
+
   OPEN_VEC(cg, frag);
   // int r_i(CG::locate_immi(1 + offset, cg, frag));
   // int r_step(CG::locate_immi(width, cg, frag));
   int r_i(bind_cst(1 + offset, cg, frag));
   int r_step(bind_cst(width, cg, frag));
-  int r_sz(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(vec), CG::r(r_sz));
   int r_elt(GET_REG(cg));
 
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(vec), CG::r(r_sz));
   int l_hd(GET_LABEL(cg));
   int l_tl(GET_LABEL(cg));
   PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_elt));
@@ -3426,8 +3428,21 @@ int deinterlace(CodeGen& cg, CG_Builder& frag, int vec, int width, int offset) {
   PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_elt), CG::l(l_hd));
   PUSH_LABEL(frag, l_tl);
   CLOSE_AGG(cg, frag);
-  int r_slice(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_slice));
+
+  OPEN_VEC(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_slice), CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_sz));
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_sz));
+
+  OPEN_VEC(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_slice));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_sz));
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_slice));
+
   return r_slice;
 }
 
