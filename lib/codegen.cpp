@@ -292,7 +292,7 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
     case BOT_MULT: {
       auto fun = find_call_fun(cg, {"op_times"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
       assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.second, CG::r(r_lhs), CG::r(r_rhs));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
     }
     case BOT_IDIV: {
@@ -3316,7 +3316,7 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     r_args[sz] = CG::r(r_A);
 
     // Push CALL instruction with the correct id
-    PUSH_INSTR(frag, BytecodeStream::BUILTIN, BytecodeProc::FUN, fun.first);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first);
     // Append instruction with register arguments
     CG_Instr &i = frag.instrs.back();
     PUSH_INSTR_OPERAND(i, r_args);
