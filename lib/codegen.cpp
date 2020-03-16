@@ -545,7 +545,7 @@ CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs)
       return CG_Cond::call(fun.first, ctx, CG::r(r_lhs), CG::r(r_rhs));
     }
     case BOT_IN: {
-      auto fun = find_call_fun(cg, {"set_in"}, Type::varbool(), {Type::varint(), Type::varsetint()}, ctx);
+      auto fun = find_call_fun(cg, {"op_in"}, Type::varbool(), {Type::varint(), Type::varsetint()}, ctx);
       assert(ctx == fun.second);
       return CG_Cond::call(fun.first, ctx, CG::r(r_lhs), CG::r(r_rhs));
     }
