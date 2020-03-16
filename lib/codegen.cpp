@@ -472,6 +472,42 @@ int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r
       r = GET_REG(cg);
       PUSH_INSTR(frag, BytecodeStream::INTERSECTION, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
       return r;
+    case BOT_SUBSET: {
+      // (L subset R) <-> ((L intersect R) == L)
+      r = GET_REG(cg);
+      int l_fin(GET_LABEL(cg));
+      int r_inter(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::INTERSECTION, CG::r(r_lhs), CG::r(r_rhs), CG::r(r_inter));
+
+      int r_sz(GET_REG(cg));
+      int r_tmp(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_lhs), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_inter), CG::r(r_sz));
+      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_tmp), CG::r(r_sz), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_fin));
+
+      int r_idx(GET_REG(cg));
+      int l_loop(GET_LABEL(cg));
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_idx));
+      PUSH_LABEL(frag, l_loop);
+      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_idx), CG::r(r_sz), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_tmp), CG::l(l_fin));
+
+      int r_tmp2(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_lhs), CG::r(r_idx), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_inter), CG::r(r_idx), CG::r(r_tmp2));
+      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_tmp), CG::r(r_tmp2), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_fin));
+
+      PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_idx));
+      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_loop));
+
+      PUSH_LABEL(frag, l_fin);
+      return r;
+    }
+    case BOT_SUPERSET: {
+      return bind_binop_par(cg, frag, BOT_SUBSET, r_rhs, r_lhs);
+    }
     // BOT_IN, BOT_SUBSET, BOT_SUPERSET, BOT_UNION, BOT_DIFF, BOT_SYMDIFF,
     // BOT_INTERSECT,
     default:
