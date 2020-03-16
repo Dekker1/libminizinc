@@ -699,24 +699,25 @@ namespace MiniZinc {
 
   CSETable::Key::Key(const std::vector<Val> &vec) {
     _size = vec.size();
-    for (const auto& val : vec) {
-      if (val.isVec() && val.size() <= 3) {
-        _size += val.size();
-      }
-    }
+    // TODO: Should CSEKeys compare arrays with the same content again?
+//    for (const auto& val : vec) {
+//      if (val.isVec() && val.size() <= 3) {
+//        _size += val.size();
+//      }
+//    }
     if (_size > 0) {
      _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
       size_t i = 0;
       for (const auto& val : vec) {
-        if (val.isVec() && val.size() <= 3) {
-          _vals[i++] = WeakVal(Val(val.size()));
-          for (int j = 0; j < val.size(); ++j) {
-            assert(!val[j].isVec());
-            _vals[i++] = WeakVal(val[j]);
-          }
-        } else {
+//        if (val.isVec() && val.size() <= 3) {
+//          _vals[i++] = WeakVal(Val(val.size()));
+//          for (int j = 0; j < val.size(); ++j) {
+//            assert(!val[j].isVec());
+//            _vals[i++] = WeakVal(val[j]);
+//          }
+//        } else {
           _vals[i++] = WeakVal(val);
-        }
+//        }
       }
       assert(i == _size);
     }
