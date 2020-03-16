@@ -385,8 +385,9 @@ namespace MiniZinc {
       }
       return true;
     }
+    bool isPar() const;
   };
-  
+
   /// Iterator over a Vec interpreted as a range set
   class VecSetRanges {
     /// The vector

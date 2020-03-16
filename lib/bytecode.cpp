@@ -47,6 +47,20 @@ namespace MiniZinc {
     return Val(Vec::a(interpreter,timestamp,stack));
   }
 
+  bool
+  Vec::isPar() const {
+    for (int i = 0; i < this->size(); ++i) {
+      Val v = this->operator[](i);
+      if (v.isVec() && (!v.toVec()->isPar())) {
+        return false;
+      }
+      if (v.isDef() && (!v.toDef()->domain().isInt())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   void
   Definition::dump(Definition* head, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent) {
     Definition* d = head->next();
@@ -1373,29 +1387,15 @@ namespace MiniZinc {
             frame->reg.assign(this, r2, IntVal(1));
           } else if (v.isDef()) {
             Definition* def = v.toDef();
-            if (def->domain().isVec() && def->domain().toVec()->size()==2 &&
-                (*def->domain().toVec())[0]==(*def->domain().toVec())[1]) {
-              frame->reg.assign(this, r1, (*def->domain().toVec())[0]);
+            if (def->domain().isInt()) {
+              frame->reg.assign(this, r1, def->lb());
               frame->reg.assign(this, r2, IntVal(1));
             } else {
               frame->reg.assign(this, r2, IntVal(0));
             }
           } else {
             assert(v.isVec());
-            IntVal ret = IntVal(1);
-            for (int i = 0; i < v.size(); ++i) {
-              assert(!v[i].isVec());
-              if (v[i].isDef()) {
-                auto dom = v[i].toDef()->domain();
-                if (dom.isVec() && dom.toVec()->size()==2 && (*dom.toVec())[0]==(*dom.toVec())[1]) {
-                  // TODO: Replace v[i] with its value
-//                  v[i].assign(this, (*dom.toVec())[0]);
-                } else {
-                  ret = IntVal(0);
-                  break;
-                }
-              }
-            }
+            IntVal ret = IntVal(v.toVec()->isPar());
             frame->reg.assign(this, r2, ret);
           }
           DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
@@ -1414,9 +1414,10 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("LENGTH R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           assert(frame->reg[r1].isVec());
           frame->reg.assign(this, r2, IntVal(frame->reg[r1].size()));
-          DBG_INTERPRETER("LENGTH R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::GET_VEC:
