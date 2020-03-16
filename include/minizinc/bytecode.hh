@@ -326,17 +326,21 @@ namespace MiniZinc {
         id->type(vd->type());
         return id;
       } else {
+        // Expected [[actual array], [indexes]]
         assert(this->isVec());
-        std::vector<Expression*> vec(this->size());
+        assert(this->size() == 2 && (*this)[0].isVec() && (*this)[1].isVec());
+        Val vec = (*this)[0];
+        std::vector<Expression*> evec(vec.size());
         bool par = true;
-        for (int i = 0; i < this->size(); ++i) {
-          Val v = follow_alias((*this)[i]);
-          assert(!v.isVec()); // TODO: Handle multi-dimentional vectors
-          vec[i] = v.toFZN(vdmap);
-          par = par && vec[i]->type().ispar();
+        for (int i = 0; i < vec.size(); ++i) {
+          Val v = follow_alias(vec[i]);
+          assert(!v.isVec());
+          evec[i] = v.toFZN(vdmap);
+          par = par && evec[i]->type().ispar();
         }
-        auto al = new ArrayLit(Location().introduce(), vec);
+        auto al = new ArrayLit(Location().introduce(), evec);
         al->type(par ? Type::parint(1) : Type::varint(1));
+        assert((*this)[1].size() == 2 && (*this)[1][0]() == 1 && (*this)[1][1]() == vec.size());
         return al;
       }
     }
