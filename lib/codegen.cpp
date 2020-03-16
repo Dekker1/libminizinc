@@ -2870,9 +2870,9 @@ CG::Binding bind_ub_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 template<int X, int Y>
 CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
+  int r(GET_REG(cg));
   OPEN_OTHER(cg, frag);
   CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
-  int r(GET_REG(cg));
   {
     OPEN_VEC(cg, frag);
     int r_tmp(GET_REG(cg));
