@@ -3102,6 +3102,22 @@ CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return {r_res, CG_Cond::ttt()};
 }
 
+CG_Cond::T eval_context_is_root(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  // TODO: What do we do with the argument?
+
+  if (ctx == BytecodeProc::ROOT) {
+    return CG_Cond::ttt();
+  } else {
+    return CG_Cond::fff();
+  }
+}
+
+CG_Cond::T eval_has_bounds(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  // TODO: Actual implementation!
+
+  return CG_Cond::ttt();
+}
+
 builtin_table init_builtins(void) {
   builtin_table tbl;
   Constants& c(constants());
@@ -3147,6 +3163,8 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("sort_by", builtin_t { eval_error_b, bind_internal } ));
   tbl.insert(std::make_pair("floor", builtin_t { eval_error_b, bind_internal } ));
   tbl.insert(std::make_pair("ceil", builtin_t { eval_error_b, bind_internal } ));
+  tbl.insert(std::make_pair("mzn_in_root_context", builtin_t { eval_context_is_root, bind_error_g } ));
+  tbl.insert(std::make_pair("has_bounds", builtin_t { eval_has_bounds, bind_error_g } ));
   return tbl;
 }
 builtin_table& builtins(void) {
