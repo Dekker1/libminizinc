@@ -3499,6 +3499,10 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
 
   // Build an array of interleaved selectors and conditions.
+  int r_part;
+  if (!is_total) {
+    r_part = GET_REG(cg);
+  }
   int r_UB = CG::locate_immi(1, cg, frag);
   int r_test(GET_REG(cg));
   OPEN_VEC(cg, frag);
@@ -3525,16 +3529,15 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_LABEL(frag, l_skip);
   }
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_res[sz]));
-  if(!is_total)
+  if(!is_total) {
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(p_res[sz]));
+  }
   PUSH_LABEL(frag, l_end);
   CLOSE_AGG(cg, frag);
   // We now have a vector of the form [then(0), p[then(0)], if(0)|then(1), p[then(1)], if(1)|...|else,p[else]].
   // With size r_UB.
   int r_VEC(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_VEC));
-
-  CG_Cond::T part(CG_Cond::ttt()); 
 
   // Check how many values there are.
   int l_fin(GET_LABEL(cg));
@@ -3545,12 +3548,10 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   OPEN_OTHER(cg, frag);
   // If only one, we just return it.
   PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_VEC), CG::r(r_one), CG::r(r_UB));
-  if(!is_total) {
-    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(2), CG::r(r_one));
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_VEC), CG::r(r_one), CG::r(r_UB));
-    part = CG_Cond::reg(r_UB);
-  }
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_UB));
+  if(!is_total) {
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_VEC), CG::r(bind_cst(2, cg, frag)), CG::r(r_part));
+  }
   CLOSE_AGG(cg, frag);
   }
   PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_fin));
@@ -3621,10 +3622,13 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // Now that we've got the selector, compile the conditional part, and the result.
   if(!is_total) {
     GCLock lock;
-    int r_part(deinterlace(cg, frag, r_VEC, 3, 1));
+    OPEN_OTHER(cg, frag);
+    int r_partA(deinterlace(cg, frag, r_VEC, 3, 1));
     auto fun = find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(), Type::varint(1)}, ctx);
     assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-    part = CG_Cond::call(fun.first, fun.second, CG::r(r_idx), CG::r(r_part));
+    PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_idx), CG::r(r_partA));
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_part));
   }
 
   {
@@ -3642,7 +3646,7 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int r_ret(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
   
-  return CG::Binding(r_ret, part);
+  return {r_ret, is_total ? CG_Cond::ttt() : CG_Cond::reg(r_part)};
 }
 
 CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
