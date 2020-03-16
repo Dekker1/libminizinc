@@ -407,10 +407,11 @@ namespace MiniZinc {
 
     class IntTimes : public PrimitiveMap::Primitive {
     public:
-      IntTimes(void) : PrimitiveMap::Primitive("int_times",PrimitiveMap::INT_TIMES,2) {}
+      IntTimes(void) : PrimitiveMap::Primitive("int_times",PrimitiveMap::INT_TIMES,3) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        assert(d->mode() == BytecodeProc::ROOT);
         bool propImmediately = true;
-        for (int j = 0; j < 2; ++j) {
+        for (int j = 0; j < _n_args; ++j) {
           Val arg = Val::follow_alias(d->arg(j), &i);
           if (arg.isDef()) {
             arg.toDef()->subscribe(d, Definition::SES_ANY);
@@ -426,7 +427,7 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (int j = 0; j < 2; ++j) {
+        for (int j = 0; j < _n_args; ++j) {
           Val arg = Val::follow_alias(d->arg(j), &i);
           if (arg.isDef()) {
             arg.toDef()->unsubscribe(d);
@@ -436,6 +437,7 @@ namespace MiniZinc {
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
         Val a = Val::follow_alias(d->arg(0), &i);
         Val b = Val::follow_alias(d->arg(1), &i);
+        Val res = Val::follow_alias(d->arg(2), &i);
         if (b.isInt() && a.isDef()) {
           a = Val::follow_alias(d->arg(1), &i);
           b = Val::follow_alias(d->arg(0), &i);
@@ -456,9 +458,9 @@ namespace MiniZinc {
         ub *= b.ub();
 
         if (lb == ub) {
-          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+          return res.toDef()->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
         } else {
-          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+          return res.toDef()->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
         }
         // TODO: Backwards Propagation
       }
