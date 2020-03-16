@@ -667,6 +667,9 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
       if (param->type().isvar()) {
         ss << "v";
       }
+      if (param->type().is_set()) {
+        ss << "s";
+      }
       switch (param->type().bt()) {
         case Type::BT_BOOL: {
           ss << "b";
@@ -793,6 +796,9 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
         ss << "d" << type.dim();
       } else if (type.dim() < 0) {
         ss << "d$";
+      }
+      if (type.is_set()) {
+        ss << "s";
       }
       switch (type.bt()) {
         case Type::BT_BOOL: {
