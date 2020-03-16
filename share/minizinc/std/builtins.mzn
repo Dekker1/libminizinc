@@ -1,4 +1,5 @@
 include "flatzinc_builtins.mzn";
+include "mzncc_builtins.mzn";
 
 /***
   @groupdef builtins Builtins
@@ -17,7 +18,6 @@ include "flatzinc_builtins.mzn";
 function     bool: '<'(    $T: x,    $T: y);
 /** @group builtins.compare Return if \a x is less than \a y */
 function var bool: '<'(var $T: x,var $T: y);
-function var bool: '<'(var int: x, var int: y) = int_lt(x, y);
 /** @group builtins.compare Return if \a x is greater than \a y */
 function     bool: '>'(    $T: x,    $T: y);
 /** @group builtins.compare Return if \a x is greater than \a y */
@@ -26,7 +26,6 @@ function var bool: '>'(var $T: x,var $T: y);
 function     bool: '<='(    $T: x,    $T: y);
 /** @group builtins.compare Return if \a x is less than or equal to \a y */
 function var bool: '<='(var $T: x, var $T: y);
-function var bool: '<='(var int: x, var int: y) = int_le(x, y);
 /** @group builtins.compare Return if \a x is greater than or equal to \a y */
 function     bool: '>='(    $T: x,    $T: y);
 /** @group builtins.compare Return if \a x is greater than or equal to \a y */
@@ -184,84 +183,9 @@ function var bool: '='(array[$T] of var float: x,array[$T] of var float: y) =
     );
 
 /** @group builtins.compare Return if array \a x is not equal to array \a y */
-function     bool: '!='(array[$T] of     int: x,array[$T] of     int: y) =
-    let {
-        array[int] of int: xx = array1d(x);
-        array[int] of int: yy = array1d(y);
-    } in
-    assert(index_sets_agree(x,y), "array index sets do not match",
-      exists (i in index_set(xx)) (xx[i]!=yy[i])
-    );
-
+function     bool: '!='(array[$U] of     $T: x,array[$U] of     $T: y);
 /** @group builtins.compare Return if array \a x is not equal to array \a y */
-function var bool: '!='(array[$T] of var int: x,array[$T] of var int: y) =
-    let {
-        array[int] of var int: xx = array1d(x);
-        array[int] of var int: yy = array1d(y);
-    } in
-    assert(index_sets_agree(x,y), "array index sets do not match",
-      exists (i in index_set(xx)) (xx[i]!=yy[i])
-    );
-
-/** @group builtins.compare Return if array \a x is not equal to array \a y */
-function     bool: '!='(array[$T] of     bool: x,array[$T] of     bool: y) =
-    let {
-        array[int] of bool: xx = array1d(x);
-        array[int] of bool: yy = array1d(y);
-    } in
-    assert(index_sets_agree(x,y), "array index sets do not match",
-      exists (i in index_set(xx)) (xx[i]!=yy[i])
-    );
-
-/** @group builtins.compare Return if array \a x is not equal to array \a y */
-function var bool: '!='(array[$T] of var bool: x,array[$T] of var bool: y) =
-    let {
-        array[int] of var bool: xx = array1d(x);
-        array[int] of var bool: yy = array1d(y);
-    } in
-    assert(index_sets_agree(x,y), "array index sets do not match",
-      exists (i in index_set(xx)) (xx[i]!=yy[i])
-    );
-
-/** @group builtins.compare Return if array \a x is not equal to array \a y */
-function     bool: '!='(array[$T] of     set of int: x,array[$T] of     set of int: y) =
-    let {
-        array[int] of set of int: xx = array1d(x);
-        array[int] of set of int: yy = array1d(y);
-    } in
-    assert(index_sets_agree(x,y), "array index sets do not match",
-      exists (i in index_set(xx)) (xx[i]!=yy[i])
-    );
-
-/** @group builtins.compare Return if array \a x is not equal to array \a y */
-function var bool: '!='(array[$T] of var set of int: x,array[$T] of var set of int: y) =
-    let {
-        array[int] of var set of int: xx = array1d(x);
-        array[int] of var set of int: yy = array1d(y);
-    } in
-    assert(index_sets_agree(x,y), "array index sets do not match",
-      exists (i in index_set(xx)) (xx[i]!=yy[i])
-    );
-
-/** @group builtins.compare Return if array \a x is not equal to array \a y */
-function     bool: '!='(array[$T] of     float: x,array[$T] of     float: y) =
-    let {
-        array[int] of float: xx = array1d(x);
-        array[int] of float: yy = array1d(y);
-    } in
-    assert(index_sets_agree(x,y), "array index sets do not match",
-      exists (i in index_set(xx)) (xx[i]!=yy[i])
-    );
-
-/** @group builtins.compare Return if array \a x is not equal to array \a y */
-function var bool: '!='(array[$T] of var float: x,array[$T] of var float: y) =
-    let {
-        array[int] of var float: xx = array1d(x);
-        array[int] of var float: yy = array1d(y);
-    } in
-    assert(index_sets_agree(x,y), "array index sets do not match",
-      exists (i in index_set(xx)) (xx[i]!=yy[i])
-    );
+function var bool: '!='(array[$U] of var $T: x,array[$U] of var $T: y);
 
 /***
   @groupdef builtins.arithmetic Arithmetic Builtins
@@ -272,23 +196,15 @@ function var bool: '!='(array[$T] of var float: x,array[$T] of var float: y) =
 /** @group builtins.arithmetic Return \a x + \a y */
 function     int:   '+'(    int: x,     int: y);
 /** @group builtins.arithmetic Return \a x + \a y */
-function var int:   '+'(var int: x,  var int: y) =
-  let {
-    var lb(x)+lb(y)..ub(x)+ub(y): z;
-    constraint int_plus(x, y, z);
-  } in z;
+function var int:   '+'(var int: x,  var int: y);
 /** @group builtins.arithmetic Return \a x + \a y */
 function     float: '+'(    float: x,    float: y);
 /** @group builtins.arithmetic Return \a x + \a y */
 function var float: '+'(var float: x,var float: y);
 /** @group builtins.arithmetic Return \a x - \a y */
-function     int:   '-'(    int: x,     int: y) = x - y;
+function     int:   '-'(    int: x,     int: y);
 /** @group builtins.arithmetic Return \a x - \a y */
-function var int:   '-'(var int: x,  var int: y) =
-  let {
-    var lb(x)-ub(y)..ub(x)-lb(y): z;
-    constraint int_min(x, y, z);
-  } in z;
+function var int:   '-'(var int: x,  var int: y);
 /** @group builtins.arithmetic Return \a x - \a y */
 function     float: '-'(    float: x,    float: y);
 /** @group builtins.arithmetic Return \a x - \a y */
@@ -296,22 +212,18 @@ function var float: '-'(var float: x,var float: y);
 /** @group builtins.arithmetic Return \a x * \a y */
 function     int:   '*'(    int: x,     int: y);
 /** @group builtins.arithmetic Return \a x * \a y */
-function var int:   '*'(var int: x,  var int: y) =
-  let {
-    var lb(x)*lb(y)..ub(x)*lb(y): z;
-    constraint int_times(x, y, z);
-  } in z;
-/** @group builtins.arithmetic Return \(\a x ^ {\a y}\) */
+function var int:   '*'(var int: x,  var int: y);
+/** @group builtins.arithmetic Return \a x ^ \a y */
 function     int:   '^'(    int: x,     int: y);
-/** @group builtins.arithmetic Return \(\a x ^ {\a y}\) */
+/** @group builtins.arithmetic Return \a x ^ \a y */
 function var int:   '^'(var int: x,  var int: y);
 /** @group builtins.arithmetic Return \a x * \a y */
 function     float: '*'(    float: x,    float: y);
 /** @group builtins.arithmetic Return \a x * \a y */
 function var float: '*'(var float: x,var float: y);
-/** @group builtins.arithmetic Return \(\a x ^ {\a y}\) */
+/** @group builtins.arithmetic Return \a x ^ \a y */
 function     float: '^'(    float: x,    float: y);
-/** @group builtins.arithmetic Return \(\a x ^ {\a y}\) */
+/** @group builtins.arithmetic Return \a x ^ \a y */
 function var float: '^'(var float: x,var float: y);
 /** @group builtins.arithmetic Return negative \a x */
 function     int:   '-'(    int: x);
@@ -327,26 +239,23 @@ function     int: 'div'(int: x,int: y);
 
 /** @group builtins.arithmetic Return result of integer division \a x / \a y */
 function var int: 'div'(var int: x,var int: y) =
-  if mzn_in_root_context(y) then div_t(x,y)
-  elseif not (0 in dom(y)) then div_t(x,y)
-  else let { constraint y != 0 } in div_mt(x,y) endif;
+  if mzn_in_root_context(y) \/ not (0 in dom(y)) then div_t(x,y) else
+  let { constraint y != 0 } in div_mt(x,y) endif;
 
 /** @group builtins.arithmetic Return remainder of integer division \a x % \a y */
 function     int: 'mod'(int: x,int: y);
 
 /** @group builtins.arithmetic Return remainder of integer division \a x % \a y */
 function var int: 'mod'(var int: x,var int: y) =
-  if mzn_in_root_context(y) then mod_t(x,y)
-  elseif not (0 in dom(y)) then mod_t(x,y)
-  else let { constraint y != 0 } in mod_mt(x,y) endif;
+  if mzn_in_root_context(y) \/ not (0 in dom(y)) then mod_t(x,y) else
+  let { constraint y != 0 } in mod_mt(x,y) endif;
 
 /** @group builtins.arithmetic Return result of floating point division \a x / \a y */
 function     float: '/'(    float: x,    float: y);
 /** @group builtins.arithmetic Return result of floating point division \a x / \a y */
 function var float: '/'(var float: x,var float: y) =
-  if mzn_in_root_context(y) then fldiv_t(x,y)
-  elseif lb(y) > 0.0 \/ ub(y) < 0.0 then fldiv_t(x,y)
-  else let { constraint y != 0.0 } in fldiv_mt(x,y) endif;
+  if mzn_in_root_context(y) \/ lb(y) > 0.0 \/ ub(y) < 0.0 then fldiv_t(x,y) else
+  let { constraint y != 0.0 } in fldiv_mt(x,y) endif;
 
 /** @group builtins.arithmetic Return sum of elements in array \a x */
 function     int:   sum(array[$T] of     int: x);
@@ -374,12 +283,7 @@ function     $T: min(    $T: x,     $T: y);
 /** @group builtins.arithmetic Return minimum of elements in array \a x */
 function     $T: min(array[$U] of     par $T: x);
 /** @group builtins.arithmetic Return maximum of \a x and \a y */
-function     $T: max(    $T: x,     $T: y) =
-  if x >= y then
-    x
-  else
-    y
-  endif;
+function     $T: max(    $T: x,     $T: y);
 /** @group builtins.arithmetic Return maximum of elements in array \a x */
 function     $T: max(array[$U] of     $T: x);
 /** @group builtins.arithmetic Return minimum of elements in set \a x */
@@ -418,15 +322,9 @@ function var int: min(array[$U] of var int: x) =
 
 /** @group builtins.arithmetic Return maximum of \a x and \a y */
 function var float: max(var float: x, var float: y) :: promise_total =
-  if has_bounds(x) /\ has_bounds(y) then
-  let { var max(lb(x),lb(y))..max(ub(x),ub(y)): m ::is_defined_var;
-        constraint float_max(x,y,m) ::defines_var(m);
-  } in m
-  else
   let { var float: m ::is_defined_var;
         constraint float_max(x,y,m) ::defines_var(m);
-  } in m
-  endif;
+  } in m;
 
 /** @group builtins.arithmetic Return maximum of elements in array \a x */
 function var float: max(array[$U] of var float: x) =
@@ -437,15 +335,9 @@ function var float: max(array[$U] of var float: x) =
 
 /** @group builtins.arithmetic Return minimum of \a x and \a y */
 function var float: min(var float: x, var float: y) :: promise_total =
-  if has_bounds(x) /\ has_bounds(y) then
-  let { var min(lb(x),lb(y))..min(ub(x),ub(y)): m ::is_defined_var;
-        constraint float_min(x,y,m) ::defines_var(m);
-  } in m
-  else
   let { var float: m ::is_defined_var;
         constraint float_min(x,y,m) ::defines_var(m);
-  } in m
-  endif;
+  } in m;
 
 /** @group builtins.arithmetic Return minimum of elements in array \a x */
 function var float: min(array[$U] of var float: x) =
@@ -455,25 +347,13 @@ function var float: min(array[$U] of var float: x) =
   } in min_t(xx);
 
 
-/** @group builtins.arithmetic
-    Returns the index of the minimum value in the array \a x.
-    When breaking ties the least index is returned.
-*/
+/** @group builtins.arithmetic Return index of minimum of elements in array \a x */
 function $$E: arg_min(array[$$E] of int: x);
-/** @group builtins.arithmetic
-    Returns the index of the minimum value in the array \a x.
-    When breaking ties the least index is returned.
-*/
+/** @group builtins.arithmetic Return index of minimum of elements in array \a x */
 function $$E: arg_min(array[$$E] of float: x);
-/** @group builtins.arithmetic
-    Returns the index of the maximum value in the array \a x.
-    When breaking ties the least index is returned.
-*/
+/** @group builtins.arithmetic Return index of maximum of elements in array \a x */
 function $$E: arg_max(array[$$E] of int: x);
-/** @group builtins.arithmetic
-    Returns the index of the maximum value in the array \a x.
-    When breaking ties the least index is returned.
-*/
+/** @group builtins.arithmetic Return index of maximum of elements in array \a x */
 function $$E: arg_max(array[$$E] of float: x);
 
 /** @group builtins.arithmetic Return absolute value of \a x */
@@ -482,7 +362,7 @@ function int: abs(int: x);
 /** @group builtins.arithmetic Return absolute value of \a x */
 function var int: abs(var int: x) :: promise_total =
   if has_bounds(x) /\ lb(x) >= 0 then x
-  elseif has_bounds(x) /\ ub(x) <= 0 then -x else
+  elseif has_bounds(x) /\ ub(x) < 0 then -x else
   let { var 0..max(-lb(x),ub(x)): m ::is_defined_var;
         constraint int_abs(x,m) ::defines_var(m);
   } in m
@@ -493,8 +373,7 @@ function float: abs(float: x);
 /** @group builtins.arithmetic Return absolute value of \a x */
 function var float: abs(var float: x) :: promise_total =
   if has_bounds(x) then
-    if lb(x) >= 0.0 then x
-    elseif ub(x) <= 0.0 then -x else
+    if lb(x) >= 0.0 then x else
     let { var 0.0..max(-lb(x),ub(x)): m ::is_defined_var;
           constraint float_abs(x,m) ::defines_var(m);
     } in m
@@ -745,13 +624,9 @@ function     bool: 'xor'(    bool: x,     bool: y);
 /** @group builtins.logic Return truth value of \a x xor \a y */
 function var bool: 'xor'(var bool: x, var bool: y);
 /** @group builtins.logic Return truth value of the negation of \a x */
-function     bool: 'not'(    bool: x) = not x;
+function     bool: 'not'(    bool: x);
 /** @group builtins.logic Return truth value of the negation of \a x */
-function var bool: 'not'(var bool: x) ::promise_total =
-  let {
-    var bool: y;
-    constraint bool_not(x, y);
-  } in y;
+function var bool: 'not'(var bool: x);
 
 /** @group builtins.logic Return truth value of \(\bigwedge_i \a x[i]\) */
 function     bool: forall(array[$T] of     bool: x);
@@ -809,9 +684,9 @@ function var set of $$T: 'union'(var set of $$T: x, var set of $$T: y);
 function     set of $T:  'intersect'(    set of $T: x,      set of $T: y);
 /** @group builtins.set Return the intersection of sets \a x and \a y */
 function var set of $$T: 'intersect'(var set of $$T: x, var set of $$T: y);
-/** @group builtins.set Return the set difference of sets \(\a x \setminus \a y \) */
+/** @group builtins.set Return the set difference of sets \a x &minus; \a y */
 function     set of $T:  'diff'(    set of $T: x,      set of $T: y);
-/** @group builtins.set Return the set difference of sets \(\a x \setminus \a y \) */
+/** @group builtins.set Return the set difference of sets \a x &minus; \a y */
 function var set of $$T: 'diff'(var set of $$T: x, var set of $$T: y);
 /** @group builtins.set Return the symmetric set difference of sets \a x and \a y */
 function     set of $T:  'symdiff'(    set of $T: x,      set of $T: y);
@@ -873,122 +748,6 @@ function var $$E: min(var set of $$E: s);
 
 /** @group builtins.set Return the maximum of the set \a s */
 function var $$E: max(var set of $$E: s);
-
-/***
-  @groupdef builtins.ifthenelse Conditionals
-  
-  These functions implement conditional (if-then-else-endif) constraints.
-*/
-
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of int: x, var int: y) =
-    fzn_if_then_else_int(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of var int: x, var int: y) =
-    fzn_if_then_else_var_int(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of opt int: x, var opt int: y) =
-    fzn_if_then_else_opt_int(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of var opt int: x, var opt int: y) =
-    fzn_if_then_else_var_opt_int(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of bool: x, var bool: y) =
-    fzn_if_then_else_bool(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of var bool: x, var bool: y) =
-    fzn_if_then_else_var_bool(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of opt bool: x, var opt bool: y) =
-    fzn_if_then_else_opt_bool(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of var opt bool: x, var opt bool: y) =
-    fzn_if_then_else_var_opt_bool(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of float: x, var float: y) =
-    fzn_if_then_else_float(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of var float: x, var float: y) =
-    fzn_if_then_else_var_float(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of set of int: x, var set of int: y) =
-    fzn_if_then_else_set(c, x, y);
-/** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
-
-  This constraint is generated by the compiler for if-then-else expressions.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-*/
-predicate if_then_else(array[int] of var bool: c, array[int] of var set of int: x, var set of int: y) =
-    fzn_if_then_else_var_set(c, x, y);
-/** @group builtins.ifthenelse Conditional partiality constraint
-
-  This constraint is generated by the compiler for if-then-else expressions
-  with potentially undefined cases.
-  The last entry in the \a c array is always the constant true, corresponding
-  to the else case.
-  The \a d[i] variable represents whether case
-  \p i is defined. Constrains that if \b is defined, then the selected case must be defined, and
-  if the selected case is undefined, then \a b must be undefined.
-*/
-predicate if_then_else_partiality(array[int] of var bool: c, array[int] of var bool: d, var bool: b) =
-    fzn_if_then_else_partiality(c, d, b);
-
 
 /***
   @groupdef builtins.array Array operations
@@ -1491,7 +1250,7 @@ function array[$T] of var float: bool2float(array[$T] of var bool: x) ::promise_
 /** @group builtins.coercion Return Boolean \a b coerced to an integer  */
 function var int: bool2int(var bool: b);
 /** @group builtins.coercion Return array of Booleans \a b coerced to an array of integers  */
-function array[$T] of var int: bool2int(array[$T] of var bool: b);
+function array[$$E] of var int: bool2int(array[$$E] of var bool: b);
 /** @group builtins.coercion Return Boolean \a b coerced to a float  */
 function var float: bool2float(var bool: b) = int2float(bool2int(b));
 /** @group builtins.coercion Return integer \a x coerced to a float  */
@@ -1563,7 +1322,7 @@ function string: show(array[$U] of var opt $T: x);
 function string: showDzn(var opt set of $T: x);
 function string: showDzn(var opt $T: x);
 function string: showDzn(array[$U] of var opt $T: x);
-function string: showDznId(string: x);
+
 
 /** @group builtins.string Formatted to-string conversion for integers
 
@@ -1639,10 +1398,6 @@ function string: format(array[$U] of var opt $T: x) = show(x);
 
 /** @group builtins.string Return array for output of all variables in JSON format */
 function array[int] of string: outputJSON();
-/** @group builtins.string Return array for output of all variables in JSON format,
-    including objective if \a b is true
-*/
-function array[int] of string: outputJSON(bool: b);
 /** @group builtins.string Return array for output of all parameters in JSON format */
 function array[int] of string: outputJSONParameters();
 
@@ -2762,8 +2517,6 @@ function var int: div_mt(var int: x, var int: y) :: promise_total =
     var ((dom(y) diff {0}) union {1}): yy = if y=0 then 1 else y endif;
   } in div_t(x,yy);
 
-function var float: fldiv_t(var float: x, float: y) :: promise_total = x*(1.0/y);
-
 function var float: fldiv_t(var float: x, var float: y) :: promise_total =
   let {
     var float: z ::is_defined_var; % TODO: Compute division boundaries
@@ -2971,19 +2724,6 @@ include "redefinitions-2.0.2.mzn";
 include "redefinitions-2.1.mzn";
 include "redefinitions-2.1.1.mzn";
 include "redefinitions-2.2.1.mzn";
-include "fzn_if_then_else_int.mzn";
-include "fzn_if_then_else_opt_int.mzn";
-include "fzn_if_then_else_var_int.mzn";
-include "fzn_if_then_else_var_opt_int.mzn";
-include "fzn_if_then_else_bool.mzn";
-include "fzn_if_then_else_opt_bool.mzn";
-include "fzn_if_then_else_var_bool.mzn";
-include "fzn_if_then_else_var_opt_bool.mzn";
-include "fzn_if_then_else_float.mzn";
-include "fzn_if_then_else_var_float.mzn";
-include "fzn_if_then_else_set.mzn";
-include "fzn_if_then_else_var_set.mzn";
-include "fzn_if_then_else_partiality.mzn";
 
 %-----------------------------------------------------------------------------%
 %-----------------------------------------------------------------------------%
