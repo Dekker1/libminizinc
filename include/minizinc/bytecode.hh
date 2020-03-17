@@ -368,6 +368,7 @@ namespace MiniZinc {
       new (nv) Vec(interpreter,timestamp,v);
       return nv;
     }
+    static Vec* allocate_array(Interpreter* interpreter, int timestamp, const std::vector<Val>& v);
     void destroy(Interpreter* interpreter) {
       for (unsigned int i=0; i<size(); i++) {
         _data[i].destroy(interpreter);

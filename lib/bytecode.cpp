@@ -35,7 +35,7 @@ namespace MiniZinc {
     for (const Val& v : stack) {
       if (v.isDef() && v.toDef()->timestamp() >= def_ident_start) {
         // this is a new definition created during this aggregation and needs to be added to the hedge
-        if (v.toDef()->prev()==v.toDef()) {
+        if (v.toDef()->prev() == v.toDef()) {
           if (def) {
             v.toDef()->insertBefore(interpreter, def);
           } else {
@@ -44,7 +44,14 @@ namespace MiniZinc {
         }
       }
     }
-    return Val(Vec::a(interpreter,timestamp,stack));
+    return Val(Vec::a(interpreter, timestamp, stack));
+  }
+
+  Vec* Vec::allocate_array(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) {
+    Vec* values = a(interpreter, interpreter->newIdent(), v);
+    Vec* idx = a(interpreter, interpreter->newIdent(), {IntVal(1), IntVal(v.size())});
+    Vec* nv = a(interpreter, timestamp, {Val(values), Val(idx)});
+    return nv;
   }
 
   bool
@@ -1905,8 +1912,8 @@ namespace MiniZinc {
           if (frame->reg[r0].isInt()) {
             Val result = frame->reg[r0];
             frame->reg.assign(this, r3, result);
-            frame->reg.assign(this, r1, Val(Vec::a(this, newIdent(), {})));
-            frame->reg.assign(this, r2, Val(Vec::a(this, newIdent(), {})));
+            frame->reg.assign(this, r1, Val(Vec::allocate_array(this, newIdent(), {})));
+            frame->reg.assign(this, r2, Val(Vec::allocate_array(this, newIdent(), {})));
           } else {
             std::vector<Val> coeffs;
             std::vector<Val> vars;
@@ -1924,15 +1931,21 @@ namespace MiniZinc {
                 switch (cur->pred()) {
                   case PrimitiveMap::LINEXP:
                   {
-                    for (int i=0; i<cur->arg(0).size(); i++) {
-                      defs.emplace_back(coeff*cur->arg(0)[i](), cur->arg(1)[i]);
+                    // Assert 1D arrays
+                    assert(cur->arg(0).size() == 2 && cur->arg(0)[1].size() == 2);
+                    assert(cur->arg(1).size() == 2 && cur->arg(1)[1].size() == 2);
+                    assert(cur->arg(0)[0].size() == cur->arg(1)[0].size());
+                    for (int i=0; i<cur->arg(0)[0].size(); i++) {
+                      defs.emplace_back(coeff*cur->arg(0)[0][i](), cur->arg(1)[0][i]);
                     }
                     d += coeff*cur->arg(2)();
                   }
                     break;
                   case PrimitiveMap::INT_SUM:
+                    // Assert 1D array
+                    assert(cur->arg(0).size() == 2 && cur->arg(0)[1].size() == 2);
                     for (int i=0; i<cur->arg(0).size(); i++) {
-                      defs.emplace_back(coeff,cur->arg(0)[i]);
+                      defs.emplace_back(coeff,cur->arg(0)[0][i]);
                     }
                     break;
                   case PrimitiveMap::INT_PLUS:
@@ -2014,8 +2027,8 @@ namespace MiniZinc {
               }
             }
             
-            Val coeffs_v = Val(Vec::a(this, newIdent(), coeffs));
-            Val vars_v = Val(Vec::a(this, newIdent(), vars));
+            Val coeffs_v = Val(Vec::allocate_array(this, newIdent(), coeffs));
+            Val vars_v = Val(Vec::allocate_array(this, newIdent(), vars));
             frame->reg.assign(this, r1, coeffs_v);
             frame->reg.assign(this, r2, vars_v);
             frame->reg.assign(this, r3, d);
