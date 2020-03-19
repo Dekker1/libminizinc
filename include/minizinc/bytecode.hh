@@ -608,7 +608,7 @@ namespace MiniZinc {
       if (!_defs) {
         _defs = Definition::a(interpreter,IntVal(0),false,0,0,{},-1); // Empty Head
       }
-      _defs->appendBefore(interpreter, defs);
+      _defs->next()->appendBefore(interpreter, defs);
     }
     static Definition* a(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
       Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
