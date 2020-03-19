@@ -2438,6 +2438,20 @@ CG_Cond::T eval_isfixed_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG_Cond::reg(r);
 }
 
+CG::Binding bind_fix(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+
+  CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
+  if (call->arg(0)->type().ispar()) {
+    return b_arg;
+  } else {
+    int r(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::LB, CG::r(b_arg.first), CG::r(r));
+    // TODO: Check is_fixed, otherwise abort!
+    return {r, b_arg.second};
+  }
+}
+
 CG_Cond::T eval_error_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   throw InternalError("Call should only appear in general context.");
   return CG_Cond::ttt();
@@ -3215,6 +3229,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("mzn_in_root_context", builtin_t { eval_context_is_root, bind_error_g } ));
   tbl.insert(std::make_pair("has_bounds", builtin_t { eval_has_bounds, bind_error_g } ));
   tbl.insert(std::make_pair("is_fixed", builtin_t { eval_isfixed_b, bind_error_g } ));
+  tbl.insert(std::make_pair("fix", builtin_t { eval_error_b, bind_fix } ));
   return tbl;
 }
 builtin_table& builtins(void) {
