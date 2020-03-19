@@ -3692,6 +3692,9 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  if (b->type().isvar()) {
+    OPEN_OTHER(cg, frag);
+  }
   Binding b_lhs(CG::bind(b->lhs(), cg, frag));
   Binding b_rhs(CG::bind(b->rhs(), cg, frag));
 
@@ -3699,14 +3702,13 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   partial.push_back(b_lhs.second);
   partial.push_back(b_rhs.second);
   int r;
-  if(b->type().ispar()) {
-    r = bind_binop_par(cg, frag, b->op(), b_lhs.first, b_rhs.first);
-  } else {
-    OPEN_OTHER(cg, frag);
+  if(b->type().isvar()) {
     call_binop(cg, frag, BytecodeProc::FUN, b->op(), b_lhs.first, b_rhs.first);
     CLOSE_AGG(cg, frag);
     r = GET_REG(cg);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  } else {
+    r = bind_binop_par(cg, frag, b->op(), b_lhs.first, b_rhs.first);
   }
 
   if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
