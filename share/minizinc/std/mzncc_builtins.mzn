@@ -95,6 +95,14 @@ function var int: op_plus(var int: x, var int: y) ::promise_total =
 /** @group builtins.arithmetic Return \a x * \a y */
 function int: op_times(int: x, int: y) = x * y;
 /** @group builtins.arithmetic Return \a x * \a y */
+function var int: op_times(int: x, var int: y) ::promise_total =
+  let {
+    var fix(x)*lb(y)..fix(x)*ub(y): z;
+    constraint int_lin_eq([fix(x),-1], [y,z], 0);
+  } in z;
+/** @group builtins.arithmetic Return \a x * \a y */
+function var int: op_times(var int: x, int: y) = op_times(y, x);
+/** @group builtins.arithmetic Return \a x * \a y */
 function var int: op_times(var int: x, var int: y) ::promise_total =
   let {
     var lb(x)*lb(y)..ub(x)*ub(y): z;
