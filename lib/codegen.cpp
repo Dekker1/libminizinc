@@ -3214,6 +3214,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("ceil", builtin_t { eval_error_b, bind_internal } ));
   tbl.insert(std::make_pair("mzn_in_root_context", builtin_t { eval_context_is_root, bind_error_g } ));
   tbl.insert(std::make_pair("has_bounds", builtin_t { eval_has_bounds, bind_error_g } ));
+  tbl.insert(std::make_pair("is_fixed", builtin_t { eval_isfixed_b, bind_error_g } ));
   return tbl;
 }
 builtin_table& builtins(void) {
