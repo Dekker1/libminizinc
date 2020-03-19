@@ -3758,23 +3758,25 @@ CG::Binding CG::bind(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     case UOT_PLUS:
       return CG::bind(u->e(), cg, frag);
     case UOT_MINUS: {
+      if (u->type().isvar()) {
+        OPEN_OTHER(cg, frag);
+      }
       Binding b_e(CG::bind(u->e(), cg, frag));
       int r;
-      if(u->type().ispar()) {
-        r = GET_REG(cg);
-        PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
-        PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r), CG::r(b_e.first), CG::r(r));
-      } else {
+      if(u->type().isvar()) {
         GCLock lock;
-        OPEN_OTHER(cg, frag);
         auto fun = find_call_fun(cg, {"op_minus"}, Type::varint(), {Type::varint()}, BytecodeProc::FUN);
         assert(fun.second == BytecodeProc::FUN);
         PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(b_e.first));
         CLOSE_AGG(cg, frag);
         r = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      } else {
+        r = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r), CG::r(b_e.first), CG::r(r));
       }
-      return CG::Binding(r, b_e.second);
+      return {r, b_e.second};
     }
   }
 }
