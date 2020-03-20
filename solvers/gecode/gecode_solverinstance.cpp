@@ -704,14 +704,15 @@ namespace MiniZinc {
   GecodeSolverInstance::arg2intargs(const Val& arg, int offset) {
     if(!arg.isVec()) {
       std::stringstream ssm; ssm << "Invalid argument in arg2intargs: " << arg.toString();
-      ssm << ". Expected Vec.";
+      ssm << ". Expected Array.";
       throw InternalError(ssm.str());
     }
-    IntArgs ia(arg.size()+offset);
+    Val vec = arg[0];
+    IntArgs ia(vec.size()+offset);
     for (int i=offset; i--;)
       ia[i] = 0;
-    for (int i=arg.size(); i--;) {
-      ia[i+offset] = arg[i]().toInt();
+    for (int i=vec.size(); i--;) {
+      ia[i+offset] = vec[i]().toInt();
     }
     return ia;
   }
@@ -739,11 +740,12 @@ namespace MiniZinc {
       ssm << ". Expected Vec.";
       throw InternalError(ssm.str());
     }
-    IntArgs ia(arg.size()+offset);
+    Val vec = arg[0];
+    IntArgs ia(vec.size()+offset);
     for (int i=offset; i--;)
       ia[i] = 0;
-    for (int i=arg.size(); i--;) {
-      ia[i+offset] = arg[i]().toInt();
+    for (int i=vec.size(); i--;) {
+      ia[i+offset] = vec[i]().toInt();
     }
     return ia;
   }
@@ -821,15 +823,16 @@ namespace MiniZinc {
 
   Gecode::IntVarArgs
   GecodeSolverInstance::arg2intvarargs(const Val& arg, int offset) {
-    if (arg.size() == 0) {
+    Val vec = arg[0];
+    if (vec.size() == 0) {
         IntVarArgs emptyIa(0);
         return emptyIa;
     }
-    IntVarArgs ia(arg.size()+offset);
+    IntVarArgs ia(vec.size()+offset);
     for (int i=offset; i--;)
         ia[i] = IntVar(*this->_current_space, 0, 0);
-    for (int i=arg.size(); i--;) {
-        const Val& val = Val::follow_alias(arg[i]);
+    for (int i=vec.size(); i--;) {
+        const Val& val = Val::follow_alias(vec[i]);
         if (val.isDef()) {
             //ia[i+offset] = _current_space->iv[*(int*)resolveVar(getVarDecl(e))];
             GecodeSolver::Variable var = resolveVar(val.toDef());
@@ -896,17 +899,18 @@ namespace MiniZinc {
 
   Gecode::BoolVarArgs
   GecodeSolverInstance::arg2boolvarargs(const Val& arg, int offset, int siv) {
-    if (arg.size() == 0) {
+    Val vec = arg[0];
+    if (vec.size() == 0) {
         BoolVarArgs emptyIa(0);
         return emptyIa;
     }
-    BoolVarArgs ia(arg.size()+offset-(siv==-1?0:1));
+    BoolVarArgs ia(vec.size()+offset-(siv==-1?0:1));
     for (int i=offset; i--;)
         ia[i] = BoolVar(*this->_current_space, 0, 0);
-    for (int i=0; i<static_cast<int>(arg.size()); i++) {
+    for (int i=0; i<static_cast<int>(vec.size()); i++) {
         if (i==siv)
             continue;
-        const Val& v = Val::follow_alias(arg[i]);
+        const Val& v = Val::follow_alias(vec[i]);
         if(v.isDef()) {
             GecodeVariable var = resolveVar(v.toDef());
             if (var.isbool()) {
@@ -1101,7 +1105,8 @@ namespace MiniZinc {
   }
 
   bool
-  GecodeSolverInstance::isBoolArray(const Val& arr, int& singleInt) {
+  GecodeSolverInstance::isBoolArray(const Val& arg, int& singleInt) {
+    Val arr = arg[0];
     singleInt = -1;
     if (arr.size() == 0)
       return true;

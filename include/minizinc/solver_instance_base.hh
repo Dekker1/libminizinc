@@ -76,7 +76,6 @@ namespace MiniZinc {
     virtual StatusReason reason(void) {return _status_reason;}
     virtual Status status(void) {return _status;}
     
-    virtual void declareDefinition(const std::vector<BytecodeProc>& bs, Definition* def) {};
     virtual void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) = 0;
     virtual Val getSolutionValue(Definition* def) = 0;
 

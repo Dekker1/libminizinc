@@ -720,7 +720,7 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
   case SolverInstance::OPT:
     {
       if (output) {
-        Val vec = output->arg(0);
+        Val vec = output->arg(0)[0];
         ss << (output_dict ? '{' : '[');
         for (int i = 0; i < vec.size(); ++i) {
           if (i > 0) {
@@ -736,7 +736,7 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
             ss << vec[i].toString();
           }
         }
-        ss << (output_dict ? '}' : ']');
+        ss << (output_dict ? '}' : ']') << std::endl;
 
         // Set output for sol() builtin
         interpreter->solutions.clear();
@@ -771,7 +771,7 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
 
           d = d->next();
         }
-        ss << std::endl << "}";
+        ss << std::endl << "}" << std::endl;
       }
     }
     break;
@@ -886,14 +886,10 @@ void MznSolver::addDefinitions() {
       output = def_ptr;
       continue;
     }
-    auto mode = static_cast<BytecodeProc::Mode>(def_ptr->mode());
-    if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
-      si->declareDefinition(interpreter->_procs, def_ptr);
-    }
+    si->addDefinition(interpreter->_procs, def_ptr);
     if (def_ptr->defs()) {
       Definition::addToSolver(interpreter, def_ptr->defs(), interpreter->_procs, si);
     }
-    si->addDefinition(interpreter->_procs, def_ptr);
   } while(def_ptr->next() != head);
   // TODO: Domain Changes
 }

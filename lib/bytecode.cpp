@@ -300,9 +300,10 @@ namespace MiniZinc {
     }
 
     if (proc.name == "mk_intvar") {
-      auto vdit = vdmap.find(d->timestamp());
-      assert(vdit != vdmap.end());
-      auto vdi = new VarDeclI(Location().introduce(), vdit->second);
+      GCLock lock;
+      auto vd = Definition::varDecl(d);
+      vdmap.emplace(d->timestamp(), vd);
+      auto vdi = new VarDeclI(Location().introduce(), vd);
       model->addItem(vdi);
     } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
       std::vector<Expression*> args(proc.nargs);
@@ -348,14 +349,10 @@ namespace MiniZinc {
         d = d->next();
         continue;
       }
-      auto mode = static_cast<BytecodeProc::Mode>(d->mode());
-      if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
-        si->declareDefinition(bs, d);
-      }
+      si->addDefinition(bs, d);
       if (d->defs()) {
         addToSolver(interpreter, d->defs(), bs, si);
       }
-      si->addDefinition(bs, d);
       d = d->next();
     }
   }

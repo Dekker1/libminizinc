@@ -195,12 +195,6 @@ namespace MiniZinc {
 
   FZNSolverInstance::~FZNSolverInstance(void) {}
 
-  void FZNSolverInstance::declareDefinition(const std::vector<BytecodeProc>& bs, Definition* def) {
-    GCLock lock;
-    auto vd = Definition::varDecl(def);
-    vdmap.emplace(def->timestamp(), vd);
-  }
-
   void FZNSolverInstance::addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) {
     GCLock lock;
     Definition::toFZNItem(def, bs, _model, vdmap);
