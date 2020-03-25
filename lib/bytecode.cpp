@@ -136,7 +136,7 @@ namespace MiniZinc {
         if (cur->_ref_count > 0) {
           // Promote cur to parent level
           cur->unlink(interpreter);
-          cur->insertBefore(interpreter, this->next());
+          cur->insertBefore(interpreter, this->prev());
         } else {
           cur->destroy(interpreter);
           if(cur->_weak_ref_count > 0) {
