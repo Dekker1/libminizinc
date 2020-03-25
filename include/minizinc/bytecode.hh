@@ -693,6 +693,8 @@ namespace MiniZinc {
     }
   };
 
+  std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v);
+
   class WeakVal {
   protected:
     // Value of the Val

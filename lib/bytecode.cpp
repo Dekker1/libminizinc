@@ -626,6 +626,126 @@ namespace MiniZinc {
     return !result.empty();
   }
 
+  std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v) {
+    if (v.isInt()) {
+      return {{}, {}, v()};
+    }
+
+    std::vector<Val> coeffs;
+    std::vector<Val> vars;
+    std::vector<int> idx;
+    IntVal d = 0;
+    std::vector<std::pair<IntVal,Val>> defs({std::make_pair(IntVal(1), v)});
+    while (!defs.empty()) {
+      IntVal coeff = defs.back().first;
+      Val stacktop = defs.back().second;
+      defs.pop_back();
+      if (stacktop.isInt()) {
+        d += coeff*stacktop();
+      } else {
+        Definition* cur = stacktop.toDef();
+        switch (cur->pred()) {
+          case PrimitiveMap::LINEXP:
+          {
+            // Assert 1D arrays
+            assert(cur->arg(0).size() == 2 && cur->arg(0)[1].size() == 2);
+            assert(cur->arg(1).size() == 2 && cur->arg(1)[1].size() == 2);
+            assert(cur->arg(0)[0].size() == cur->arg(1)[0].size());
+            for (int i=0; i<cur->arg(0)[0].size(); i++) {
+              defs.emplace_back(coeff*cur->arg(0)[0][i](), cur->arg(1)[0][i]);
+            }
+            d += coeff*cur->arg(2)();
+          }
+            break;
+          case PrimitiveMap::INT_SUM:
+            // Assert 1D array
+            assert(cur->arg(0).size() == 2 && cur->arg(0)[1].size() == 2);
+            for (int i=0; i<cur->arg(0).size(); i++) {
+              defs.emplace_back(coeff,cur->arg(0)[0][i]);
+            }
+            break;
+          case PrimitiveMap::INT_PLUS:
+            defs.emplace_back(coeff, cur->arg(0));
+            defs.emplace_back(coeff, cur->arg(1));
+            break;
+          case PrimitiveMap::INT_MINUS:
+            defs.emplace_back(coeff, cur->arg(0));
+            defs.emplace_back(-coeff, cur->arg(1));
+            break;
+          case PrimitiveMap::INT_TIMES:
+            if (cur->arg(0).isInt()) {
+              if (cur->arg(1).isInt()) {
+                // both constants, compute result
+                d += coeff*cur->arg(0)()*cur->arg(1)();
+              } else {
+                defs.emplace_back(coeff*cur->arg(0)(), cur->arg(1));
+              }
+            } else if (cur->arg(1).isInt()) {
+              if (cur->arg(0).isInt()) {
+                // both constants, compute result
+                d += coeff*cur->arg(0)()*cur->arg(1)();
+              } else {
+                defs.emplace_back(coeff*cur->arg(1)(), cur->arg(0));
+              }
+            } else {
+              // Variable multiplication, don't aggregate
+              coeffs.emplace_back(coeff);
+              vars.emplace_back(cur);
+              idx.push_back(idx.size());
+            }
+            break;
+          default:
+            coeffs.emplace_back(coeff);
+            vars.emplace_back(cur);
+            idx.push_back(idx.size());
+            break;
+        }
+      }
+    }
+
+    if (coeffs.size()>1) {
+      // Find and merge duplicate variables
+      class CmpValIdx {
+      public:
+        std::vector<Val>& x;
+        explicit CmpValIdx(std::vector<Val>& x0) : x(x0) {}
+        bool operator ()(int i, int j) const {
+          return x[i].timestamp() < x[j].timestamp();
+        }
+      };
+      std::sort(idx.begin(),idx.end(),CmpValIdx(vars));
+      std::vector<IntVal> coeffs_simple;
+      coeffs_simple.reserve(coeffs.size());
+      std::vector<Val> vars_simple;
+      vars_simple.reserve(vars.size());
+
+      int ci=0;
+      coeffs_simple.push_back(coeffs[idx[0]]());
+      vars_simple.push_back(vars[idx[0]]);
+      bool foundDuplicates = false;
+      for (unsigned int i=1; i<idx.size(); i++) {
+        if (vars[idx[i]].timestamp() == vars_simple[ci].timestamp()) {
+          coeffs_simple[ci] += coeffs[idx[i]]();
+          foundDuplicates = true;
+        } else {
+          coeffs_simple.push_back(coeffs[idx[i]]());
+          vars_simple.push_back(vars[idx[i]]);
+          ci++;
+        }
+      }
+      if (foundDuplicates) {
+        for (unsigned int i=0; i<coeffs_simple.size(); i++) {
+          coeffs[i] = coeffs_simple[i];
+          vars[i] = vars_simple[i];
+        }
+        coeffs.resize(coeffs_simple.size());
+        vars.resize(vars_simple.size());
+      }
+    }
+
+    return {coeffs, vars, d};
+  }
+
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   const std::string AggregationCtx::symbol_to_string[] = { "AND", "OR", "VEC", "OTHER" };
 
@@ -1906,133 +2026,21 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          if (frame->reg[r0].isInt()) {
-            Val result = frame->reg[r0];
-            frame->reg.assign(this, r3, result);
-            frame->reg.assign(this, r1, Val(Vec::allocate_array(this, newIdent(), {})));
-            frame->reg.assign(this, r2, Val(Vec::allocate_array(this, newIdent(), {})));
-          } else {
-            std::vector<Val> coeffs;
-            std::vector<Val> vars;
-            std::vector<int> idx;
-            IntVal d = 0;
-            std::vector<std::pair<IntVal,Val>> defs({std::make_pair(IntVal(1),frame->reg[r0])});
-            while (!defs.empty()) {
-              IntVal coeff = defs.back().first;
-              Val stacktop = defs.back().second;
-              defs.pop_back();
-              if (stacktop.isInt()) {
-                d += coeff*stacktop();
-              } else {
-                Definition* cur = stacktop.toDef();
-                switch (cur->pred()) {
-                  case PrimitiveMap::LINEXP:
-                  {
-                    // Assert 1D arrays
-                    assert(cur->arg(0).size() == 2 && cur->arg(0)[1].size() == 2);
-                    assert(cur->arg(1).size() == 2 && cur->arg(1)[1].size() == 2);
-                    assert(cur->arg(0)[0].size() == cur->arg(1)[0].size());
-                    for (int i=0; i<cur->arg(0)[0].size(); i++) {
-                      defs.emplace_back(coeff*cur->arg(0)[0][i](), cur->arg(1)[0][i]);
-                    }
-                    d += coeff*cur->arg(2)();
-                  }
-                    break;
-                  case PrimitiveMap::INT_SUM:
-                    // Assert 1D array
-                    assert(cur->arg(0).size() == 2 && cur->arg(0)[1].size() == 2);
-                    for (int i=0; i<cur->arg(0).size(); i++) {
-                      defs.emplace_back(coeff,cur->arg(0)[0][i]);
-                    }
-                    break;
-                  case PrimitiveMap::INT_PLUS:
-                    defs.emplace_back(coeff, cur->arg(0));
-                    defs.emplace_back(coeff, cur->arg(1));
-                    break;
-                  case PrimitiveMap::INT_MINUS:
-                    defs.emplace_back(coeff, cur->arg(0));
-                    defs.emplace_back(-coeff, cur->arg(1));
-                    break;
-                  case PrimitiveMap::INT_TIMES:
-                    if (cur->arg(0).isInt()) {
-                      if (cur->arg(1).isInt()) {
-                        // both constants, compute result
-                        d += coeff*cur->arg(0)()*cur->arg(1)();
-                      } else {
-                        defs.emplace_back(coeff*cur->arg(0)(), cur->arg(1));
-                      }
-                    } else if (cur->arg(1).isInt()) {
-                      if (cur->arg(0).isInt()) {
-                        // both constants, compute result
-                        d += coeff*cur->arg(0)()*cur->arg(1)();
-                      } else {
-                        defs.emplace_back(coeff*cur->arg(1)(), cur->arg(0));
-                      }
-                    } else {
-                      // Variable multiplication, don't aggregate
-                      coeffs.emplace_back(coeff);
-                      vars.emplace_back(cur);
-                      idx.push_back(idx.size());
-                    }
-                    break;
-                  default:
-                    coeffs.emplace_back(coeff);
-                    vars.emplace_back(cur);
-                    idx.push_back(idx.size());
-                    break;
-                }
-              }
-            }
-            
-            if (coeffs.size()>1) {
-              // Find and merge duplicate variables
-              class CmpValIdx {
-              public:
-                std::vector<Val>& x;
-                explicit CmpValIdx(std::vector<Val>& x0) : x(x0) {}
-                bool operator ()(int i, int j) const {
-                  return x[i].timestamp() < x[j].timestamp();
-                }
-              };
-              std::sort(idx.begin(),idx.end(),CmpValIdx(vars));
-              std::vector<IntVal> coeffs_simple;
-              coeffs_simple.reserve(coeffs.size());
-              std::vector<Val> vars_simple;
-              vars_simple.reserve(vars.size());
 
-              int ci=0;
-              coeffs_simple.push_back(coeffs[idx[0]]());
-              vars_simple.push_back(vars[idx[0]]);
-              bool foundDuplicates = false;
-              for (unsigned int i=1; i<idx.size(); i++) {
-                if (vars[idx[i]].timestamp() == vars_simple[ci].timestamp()) {
-                  coeffs_simple[ci] += coeffs[idx[i]]();
-                  foundDuplicates = true;
-                } else {
-                  coeffs_simple.push_back(coeffs[idx[i]]());
-                  vars_simple.push_back(vars[idx[i]]);
-                  ci++;
-                }
-              }
-              if (foundDuplicates) {
-                for (unsigned int i=0; i<coeffs_simple.size(); i++) {
-                  coeffs[i] = coeffs_simple[i];
-                  vars[i] = vars_simple[i];
-                }
-                coeffs.resize(coeffs_simple.size());
-                vars.resize(vars_simple.size());
-              }
-            }
-            
-            Val coeffs_v = Val(Vec::allocate_array(this, newIdent(), coeffs));
-            Val vars_v = Val(Vec::allocate_array(this, newIdent(), vars));
-            frame->reg.assign(this, r1, coeffs_v);
-            frame->reg.assign(this, r2, vars_v);
-            frame->reg.assign(this, r3, d);
-            DBG_INTERPRETER(" R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-            DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
-            DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString(DBG_TRIM_OUTPUT) << ")\n");
-          }
+          std::vector<Val> coeffs;
+          std::vector<Val> vars;
+          IntVal d;
+
+          std::tie(coeffs, vars, d) = simplify_linexp(frame->reg[r0]);
+
+          Val coeffs_v = Val(Vec::allocate_array(this, newIdent(), coeffs));
+          Val vars_v = Val(Vec::allocate_array(this, newIdent(), vars));
+          frame->reg.assign(this, r1, coeffs_v);
+          frame->reg.assign(this, r2, vars_v);
+          frame->reg.assign(this, r3, d);
+          DBG_INTERPRETER(" R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
+          DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
+          DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString(DBG_TRIM_OUTPUT) << ")\n");
         }
           break;
         case BytecodeStream::CLOSE_AGGREGATION:
