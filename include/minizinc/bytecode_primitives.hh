@@ -31,6 +31,7 @@ namespace MiniZinc {
       INT_MINUS,
       INT_TIMES,
       LINEXP,
+      INT_LIN_EQ,
       UNIFORM,
       SOL,
       SORT_BY,
@@ -488,6 +489,34 @@ namespace MiniZinc {
         for (unsigned int i=0; i<d->arg(1).size(); i++) {
           if (d->arg(1)[i].isDef()) {
             d->arg(1)[i].toDef()->unsubscribe(d);
+          }
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
+    };
+
+    class IntLinEq : public PrimitiveMap::Primitive {
+    public:
+      IntLinEq(void) : PrimitiveMap::Primitive("int_lin_eq",PrimitiveMap::INT_LIN_EQ,3) {}
+      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        bool propImmediately = false;
+        for (unsigned int j=0; j < d->arg(1).size(); j++) {
+          if (d->arg(1)[j].isDef()) {
+            d->arg(1)[j].toDef()->subscribe(d, Definition::SES_ANY);
+          } else {
+            propImmediately = true;
+          }
+        }
+        if (propImmediately) {
+          return propagate(i,d);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {
+        for (unsigned int j=0; j < d->arg(1).size(); j++) {
+          if (d->arg(1)[j].isDef()) {
+            d->arg(1)[j].toDef()->unsubscribe(d);
           }
         }
       }
