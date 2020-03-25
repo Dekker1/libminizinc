@@ -219,6 +219,9 @@ namespace MiniZinc {
       return isRCO() && toRCO()->rcoType()==RefCountedObject::DEF;
     }
     bool operator==(const Val& rhs) const;
+    bool operator!=(const Val& rhs) const {
+      return !this->operator==(rhs);
+    }
     bool contains(const Val& v) const {
       if (*this == v) {
         return true;
@@ -613,6 +616,18 @@ namespace MiniZinc {
       } else {
         _defs->appendBefore(interpreter, defs);
       }
+    }
+    Definition* defined_by() {
+      if (!_defs) {
+        return nullptr;
+      }
+      // Ignore empty head
+      Definition* d = _defs->next();
+      // If defined using only one definition
+      if (d->next() == _defs) {
+        return d;
+      }
+      return nullptr;
     }
     static Definition* a(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
       Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
