@@ -663,7 +663,7 @@ namespace MiniZinc {
                     defs.emplace_back(mult * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
                   }
                 }
-                d += mult * defby->arg(2)();
+                d += mult * -defby->arg(2)();
                 continue;
               }
               if (std::abs(cur_coeff) == 1) {
@@ -675,7 +675,7 @@ namespace MiniZinc {
                     defs.emplace_back(coeff * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
                   }
                 }
-                d += coeff * defby->arg(2)();
+                d += coeff * -defby->arg(2)();
                 continue;
               }
               break;
