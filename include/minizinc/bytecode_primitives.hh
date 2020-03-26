@@ -26,11 +26,8 @@ namespace MiniZinc {
       CLAUSE,
       FORALL,
       EXISTS,
-      INT_PLUS,
       INT_SUM,
-      INT_MINUS,
       INT_TIMES,
-      LINEXP,
       INT_LIN_EQ,
       UNIFORM,
       SOL,
@@ -311,101 +308,6 @@ namespace MiniZinc {
       }
     };
 
-    class IntPlus : public PrimitiveMap::Primitive {
-    public:
-      IntPlus(void) : PrimitiveMap::Primitive("int_plus",PrimitiveMap::INT_PLUS,2) {}
-      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        bool propImmediately = true;
-        for (int j = 0; j < 2; ++j) {
-          Val arg = Val::follow_alias(d->arg(j), &i);
-          if (arg.isDef()) {
-            arg.toDef()->subscribe(d, Definition::SES_ANY);
-            if (!arg.toDef()->isBounded()) {
-              propImmediately = false;
-            }
-          }
-        }
-        if (propImmediately) {
-          return propagate(i,d);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (int j=0; j < 2; j++) {
-          Val arg = Val::follow_alias(d->arg(j), &i);
-          if (arg.isDef()) {
-            arg.toDef()->unsubscribe(d);
-          }
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        IntVal lb, ub;
-
-        for (int j=0; j < 2; j++) {
-          Val v = Val::follow_alias(d->arg(j), &i);
-          if (v.isDef() && !v.toDef()->isBounded()) {
-            return PS_OK;
-          }
-          lb += v.lb();
-          ub += v.ub();
-        }
-
-        if (lb == ub) {
-          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
-        } else {
-          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
-        }
-        // TODO: Backwards Propagation
-      }
-    };
-
-    class IntMinus : public PrimitiveMap::Primitive {
-    public:
-      IntMinus(void) : PrimitiveMap::Primitive("int_minus",PrimitiveMap::INT_MINUS,2) {}
-      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        bool propImmediately = true;
-        for (int j = 0; j < 2; ++j) {
-          Val arg = Val::follow_alias(d->arg(j), &i);
-          if (arg.isDef()) {
-            arg.toDef()->subscribe(d, Definition::SES_ANY);
-            if (!arg.toDef()->isBounded()) {
-              propImmediately = false;
-            }
-          }
-        }
-        if (propImmediately) {
-          return propagate(i,d);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (int j=0; j < 2; j++) {
-          Val arg = Val::follow_alias(d->arg(j));
-          if (arg.isDef()) {
-            arg.toDef()->unsubscribe(d);
-          }
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        IntVal lb, ub;
-
-        lb = Val::follow_alias(d->arg(0), &i).lb();
-        ub = Val::follow_alias(d->arg(0), &i).ub();
-
-        lb -= Val::follow_alias(d->arg(1), &i).ub();
-        ub -= Val::follow_alias(d->arg(1), &i).lb();
-
-        if (lb == ub) {
-          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
-        } else {
-          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
-        }
-        // TODO: Backwards Propagation
-      }
-    };
-
     class IntTimes : public PrimitiveMap::Primitive {
     public:
       IntTimes(void) : PrimitiveMap::Primitive("int_times",PrimitiveMap::INT_TIMES,3) {}
@@ -465,34 +367,6 @@ namespace MiniZinc {
         }
         // TODO: Backwards Propagation
       }
-    };
-
-    class LinExp : public PrimitiveMap::Primitive {
-    public:
-      LinExp(void) : PrimitiveMap::Primitive("lin_exp",PrimitiveMap::LINEXP,3) {}
-      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        bool propImmediately = false;
-        for (unsigned int i=0; i<d->arg(1).size(); i++) {
-          if (d->arg(1)[i].isDef()) {
-            d->arg(1)[i].toDef()->subscribe(d, Definition::SES_ANY);
-          } else {
-            propImmediately = true;
-          }
-        }
-        if (propImmediately) {
-          return propagate(i,d);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (unsigned int i=0; i<d->arg(1).size(); i++) {
-          if (d->arg(1)[i].isDef()) {
-            d->arg(1)[i].toDef()->unsubscribe(d);
-          }
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
     };
 
     class IntLinEq : public PrimitiveMap::Primitive {
