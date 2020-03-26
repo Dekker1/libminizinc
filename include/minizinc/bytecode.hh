@@ -606,6 +606,12 @@ namespace MiniZinc {
     char mode(void) const { return _mode; }
     int size(void) const { return _size; }
     Val arg(int i) const { assert(i < _size); return _args[i]; }
+    void arg(Interpreter* interpreter, int i, Val nv) {
+      assert(i < _size);
+      _args[i].destroy(interpreter);
+      _args[i] = nv;
+      _args[i].construct(interpreter);
+    }
     Definition* defs(void) const { return _defs; }
     void defs(Interpreter* interpreter, Definition* defs) {
       if (!_defs) {
