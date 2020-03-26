@@ -499,6 +499,19 @@ namespace MiniZinc {
     public:
       IntLinEq(void) : PrimitiveMap::Primitive("int_lin_eq",PrimitiveMap::INT_LIN_EQ,3) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        {
+          std::vector<Val> coeffs = d->arg(0)[0].toVec()->as_vector();
+          std::vector<Val> vars = d->arg(1)[0].toVec()->as_vector();
+          IntVal c = -d->arg(2)();
+          simplify_linexp(coeffs, vars, c);
+
+          Vec* ncoeffs = Vec::allocate_array(&i, i.newIdent(), coeffs);
+          Vec* nvars = Vec::allocate_array(&i, i.newIdent(), vars);
+          d->arg(&i, 0, Val(ncoeffs));
+          d->arg(&i, 1, Val(nvars));
+          d->arg(&i, 2, Val(-c));
+        }
+
         bool propImmediately = false;
         for (unsigned int j=0; j < d->arg(1).size(); j++) {
           if (d->arg(1)[j].isDef()) {

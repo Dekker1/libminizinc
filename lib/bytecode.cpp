@@ -627,15 +627,24 @@ namespace MiniZinc {
   }
 
   std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v) {
-    if (v.isInt()) {
-      return {{}, {}, v()};
-    }
-
-    std::vector<Val> coeffs;
-    std::vector<Val> vars;
-    std::vector<int> idx;
+    std::vector<Val> coeffs = {Val(1)};
+    std::vector<Val> vars = {v};
     IntVal d = 0;
-    std::vector<std::pair<IntVal,Val>> defs({std::make_pair(IntVal(1), v)});
+    simplify_linexp(coeffs, vars, d);
+    return {coeffs, vars, d};
+  };
+
+  void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d) {
+    assert(coeffs.size() == vars.size());
+    std::vector<std::pair<IntVal,Val>> defs;
+    defs.reserve(vars.size());
+    for (int j = vars.size()-1; j >= 0; --j) {
+      defs.emplace_back(coeffs[j](), vars[j]);
+    }
+    coeffs.clear();
+    vars.clear();
+
+    std::vector<int> idx;
     while (!defs.empty()) {
       IntVal coeff = defs.back().first;
       Val stacktop = defs.back().second;
@@ -745,8 +754,6 @@ namespace MiniZinc {
         vars.resize(vars_simple.size());
       }
     }
-
-    return {coeffs, vars, d};
   }
 
   const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };

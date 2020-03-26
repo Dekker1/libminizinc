@@ -394,6 +394,14 @@ namespace MiniZinc {
       return true;
     }
     bool isPar() const;
+    std::vector<Val> as_vector() {
+      std::vector<Val> nv;
+      nv.reserve(size());
+      for (int i = 0; i < size(); ++i) {
+        nv.push_back(_data[i]);
+      }
+      return nv;
+    }
   };
 
   /// Iterator over a Vec interpreted as a range set
@@ -714,6 +722,7 @@ namespace MiniZinc {
     }
   };
 
+  void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
   std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v);
 
   class WeakVal {
