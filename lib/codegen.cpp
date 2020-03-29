@@ -3429,8 +3429,8 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     }
     PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_index)); // Indexes are 1 indexed.
 
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_index), CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(1, cg, frag)), CG::r(r_mult));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_mult), CG::r(r_index), CG::r(r));
   }
   return {r, CG_Cond::forall(ctx, cond)};
 }
