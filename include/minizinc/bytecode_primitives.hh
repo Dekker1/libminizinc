@@ -33,7 +33,8 @@ namespace MiniZinc {
       SOL,
       SORT_BY,
       INT_MAX_,
-      MAX_ID=INT_MAX_
+      INFINITY_,
+      MAX_ID=INFINITY_,
     };
     class Primitive {
     protected:
@@ -531,7 +532,21 @@ namespace MiniZinc {
         // TODO: Backwards Propagation
       }
     };
-    
+
+    class Infinity : public PrimitiveMap::Primitive {
+    public:
+      Infinity() : PrimitiveMap::Primitive("infinity",PrimitiveMap::INFINITY_, 1) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
+        assert(args.size()==1);
+        assert(args[0].isInt());
+
+        if (args[0]() > 0) {
+          i.pushAgg(Val(IntVal::infinity()), -1);
+        } else {
+          i.pushAgg(Val(-IntVal::infinity()), -1);
+        }
+      };
+    };
   }
 }
 

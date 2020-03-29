@@ -27,9 +27,10 @@ namespace MiniZinc {
     Sol sol;
     SortBy sortby;
     IntMax intmax;
+    Infinity infinity;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &int_lin_eq, &uniform, &sol, &sortby, &intmax,
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &int_lin_eq, &uniform, &sol, &sortby, &intmax, &infinity,
     };
   }
   
