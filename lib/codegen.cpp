@@ -133,30 +133,9 @@ void CodeGen::register_builtins(void) {
   // Solver Built-ins
   register_builtin("mk_intvar", 1);
 
-//  register_builtin("bool_not", 1);
-//  register_builtin("bool_clause", 2);
-//
-//  register_builtin("int_eq", 2);
-//  register_builtin("int_lt", 2);
-//  register_builtin("int_le", 2);
-//  register_builtin("set_in", 2);
-//
-//  register_builtin("int_lin_le", 3);
-//  register_builtin("int_lin_eq", 3);
-//
-//  register_builtin("int_sum", 1);
-//  register_builtin("int_plus", 2);
-//  register_builtin("int_min", 2);
-//  register_builtin("int_times", 2);
-//  register_builtin("int_pow", 2);
-//  register_builtin("int_div", 2);
-//
-//  register_builtin("int_element", 2);
-//  register_builtin("bool_element", 2);
-//
-//  register_builtin("float_div", 2);
-
+  // Constants
   register_builtin("absent", 1);
+  register_builtin("infinity", 1);
 
   // Interpreter Built-ins
   register_builtin("uniform", 2);
@@ -3256,11 +3235,27 @@ CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(IntSetVal* s = l->isv()) {
     int r_t(GET_REG(cg));
     for(int ii = 0; ii < s->size(); ++ii) {
-      int l(s->min(ii).toInt());
-      int u(s->max(ii).toInt());
-      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(l), CG::r(r_t));
+      IntVal l(s->min(ii));
+      IntVal u(s->max(ii));
+      if (l.isFinite()) {
+        PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(l.toInt()), CG::r(r_t));
+      } else {
+        assert(l.isMinusInfinity());
+        OPEN_OTHER(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(0, cg, frag)));
+        CLOSE_AGG(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_t));
+      }
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
-      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(u), CG::r(r_t));
+      if (l.isFinite()) {
+        PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(u.toInt()), CG::r(r_t));
+      } else {
+        assert(u.isPlusInfinity());
+        OPEN_OTHER(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(1, cg, frag)));
+        CLOSE_AGG(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_t));
+      }
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
     }
   } else {
