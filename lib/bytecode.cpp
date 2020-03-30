@@ -1444,7 +1444,7 @@ namespace MiniZinc {
         {
           int r0 = frame->bs->reg(frame->pc);
           int i = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("JMPIFNOT R" << r0 << " " << i << "\n");
+          DBG_INTERPRETER("JMPIFNOT R" << r0 << "(" << frame->reg[r0]() << ")" << " " << i << "\n");
           if (frame->reg[r0]() == 0) {
             frame->pc = i;
           }
