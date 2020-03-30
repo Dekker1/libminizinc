@@ -3405,20 +3405,39 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   } else {
     // Just read the vector, and get the appropriate element.
+    int l_finish(GET_LABEL(cg));
     int r_I(GET_REG(cg));
     int r_index(GET_REG(cg));
     int r_mult(GET_REG(cg));
     int r_min(GET_REG(cg));
     int r_max(GET_REG(cg));
+    int r_cond(GET_REG(cg));
+    cond.push_back(CG_Cond::reg(r_cond));
+
     PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(2, cg, frag)), CG::r(r_I));
     PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(1, cg, frag)), CG::r(r_min));
     PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_idxs[0]), CG::r(r_index));
+
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(1, cg, frag)), CG::r(r_min));
+    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_min), CG::r(r_index), CG::r(r_cond));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_finish));
+
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(2, cg, frag)), CG::r(r_max));
+    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_index), CG::r(r_max), CG::r(r_cond));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_finish));
+
     PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_index), CG::r(r_min), CG::r(r_index));
     if (sz > 1) {
       PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_mult));
       for (int idxs = 1; idxs < sz; ++idxs) {
         PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(idxs*2+1, cg, frag)), CG::r(r_min));
+        PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_min), CG::r(r_idxs[idxs]), CG::r(r_cond));
+        PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_finish));
+
         PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_I), CG::r(bind_cst(idxs*2+2, cg, frag)), CG::r(r_max));
+        PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_idxs[idxs]), CG::r(r_max), CG::r(r_cond));
+        PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_finish));
+
         PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r_max), CG::r(r_min), CG::r(r_max));
         PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_max));
         PUSH_INSTR(frag, BytecodeStream::MULI, CG::r(r_mult), CG::r(r_max), CG::r(r_mult));
@@ -3433,6 +3452,7 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
     PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(1, cg, frag)), CG::r(r_mult));
     PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_mult), CG::r(r_index), CG::r(r));
+    PUSH_LABEL(frag, l_finish);
   }
   return {r, CG_Cond::forall(ctx, cond)};
 }
