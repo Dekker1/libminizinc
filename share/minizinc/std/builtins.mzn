@@ -1091,6 +1091,8 @@ function array[$$E] of var $T: col(array[$$E,int] of var $T: x, int: c) = x[..,c
 /** @group builtins.array Return column \a c of array \a x */
 function array[$$E] of var opt $T: col(array[$$E,int] of var opt $T: x, int: c) = x[..,c];
 
+/** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new array with index sets \a dims */
+function array[int] of $T: slice_Xd(array[$E] of $T: x, array[int] of set of int: s, array[int] of set of int: dims);
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 1d array with index set \a dims1 */
 function array[int] of $T: slice_1d(array[$E] of $T: x, array[int] of set of int: s, set of int: dims1);
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 2d array with index sets \a dims1 and \a dims2 */
@@ -1104,6 +1106,8 @@ function array[int,int,int] of $T: slice_5d(array[$E] of $T: x, array[int] of se
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 3d array with index sets \a dims1, \a dims2, \a dims3, \a dims4, \a dims5, \a dims6 */
 function array[int,int,int] of $T: slice_6d(array[$E] of $T: x, array[int] of set of int: s, set of int: dims1, set of int: dims2, set of int: dims3, set of int: dims4, set of int: dims5, set of int: dims6);
 
+/** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new array with index sets \a dims */
+function array[int] of opt $T: slice_Xd(array[$E] of opt $T: x, array[int] of set of int: s, array[int] of set of int: dims);
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 1d array with index set \a dims1 */
 function array[int] of opt $T: slice_1d(array[$E] of opt $T: x, array[int] of set of int: s, set of int: dims1);
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 2d array with index sets \a dims1 and \a dims2 */
@@ -1117,6 +1121,8 @@ function array[int,int,int] of opt $T: slice_5d(array[$E] of opt $T: x, array[in
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 3d array with index sets \a dims1, \a dims2, \a dims3, \a dims4, \a dims5, \a dims6 */
 function array[int,int,int] of opt $T: slice_6d(array[$E] of opt $T: x, array[int] of set of int: s, set of int: dims1, set of int: dims2, set of int: dims3, set of int: dims4, set of int: dims5, set of int: dims6);
 
+/** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new array with index sets \a dims */
+function array[int] of var $T: slice_Xd(array[$E] of var $T: x, array[int] of set of int: s, array[int] of set of int: dims);
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 1d array with index set \a dims1 */
 function array[int] of var $T: slice_1d(array[$E] of var $T: x, array[int] of set of int: s, set of int: dims1);
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 2d array with index sets \a dims1 and \a dims2 */
@@ -1130,6 +1136,8 @@ function array[int,int,int] of var $T: slice_5d(array[$E] of var $T: x, array[in
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 3d array with index sets \a dims1, \a dims2, \a dims3, \a dims4, \a dims5, \a dims6 */
 function array[int,int,int] of var $T: slice_6d(array[$E] of var $T: x, array[int] of set of int: s, set of int: dims1, set of int: dims2, set of int: dims3, set of int: dims4, set of int: dims5, set of int: dims6);
 
+/** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new array with index sets \a dims */
+function array[int] of var opt $T: slice_Xd(array[$E] of var opt $T: x, array[int] of set of int: s, array[int] of set of int: dims);
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 1d array with index set \a dims1 */
 function array[int] of var opt $T: slice_1d(array[$E] of var opt $T: x, array[int] of set of int: s, set of int: dims1);
 /** @group builtins.array Return slice of array \a x specified by sets \a s, coerced to new 2d array with index sets \a dims1 and \a dims2 */
@@ -1749,7 +1757,9 @@ function var int: element_mt(var int: idx, array[int] of var int: x) :: promise_
   } in r;
 
 function var int: element(var int: idx, array[int] of var int: x) =
-  if mzn_in_root_context(idx) then let {
+  if is_fixed(idx) then
+    x[fix(idx)]
+  elseif mzn_in_root_context(idx) then let {
     constraint idx in index_set(x)
   } in element_t(idx,x)
   elseif (has_bounds(idx) /\ lb(idx) >= min(index_set(x)) /\ ub(idx) <= max(index_set(x))) then
@@ -1761,25 +1771,33 @@ function var int: element(var int: idx, array[int] of var int: x) =
 
 function var int: element(var int: idx1, var int: idx2,
                           array[int,int] of var int: x) =
-  let {
-    int: dim = card(index_set_2of2(x));
-    int: min_flat = min(index_set_1of2(x))*dim+min(index_set_2of2(x))-1;
-  } in if mzn_in_root_context(idx1) then
-         let {
-           constraint idx1 in index_set_1of2(x);
-           constraint idx2 in index_set_2of2(x);
-         } in element_t( (idx1*dim+idx2-min_flat)::domain, array1d(x))
-       elseif
-       ((has_bounds(idx1) /\ lb(idx1) >= min(index_set_1of2(x)) /\ ub(idx1) <= max(index_set_1of2(x)))
-        /\ (has_bounds(idx2) /\ lb(idx2) >= min(index_set_2of2(x)) /\ ub(idx2) <= max(index_set_2of2(x))))
-       then
-         element_t( (idx1*dim+idx2-min_flat)::domain, array1d(x))
-       else
-         let {
-           constraint idx1 in index_set_1of2(x);
-           constraint idx2 in index_set_2of2(x);
-         } in element_mt( (idx1*dim+idx2-min_flat)::domain, array1d(x))
-       endif;
+  if is_fixed(idx1) /\ is_fixed(idx2) then
+    x[fix(idx1), fix(idx2)]
+  elseif is_fixed(idx1) then
+    element(idx2, x[fix(idx1),..])
+  elseif is_fixed(idx2) then
+    element(idx1, x[.., fix(idx2)])
+  else
+    let {
+      int: dim = card(index_set_2of2(x));
+      int: min_flat = min(index_set_1of2(x))*dim+min(index_set_2of2(x))-1;
+    } in if mzn_in_root_context(idx1) then
+           let {
+             constraint idx1 in index_set_1of2(x);
+             constraint idx2 in index_set_2of2(x);
+           } in element_t( (idx1*dim+idx2-min_flat)::domain, array1d(x))
+         elseif
+         ((has_bounds(idx1) /\ lb(idx1) >= min(index_set_1of2(x)) /\ ub(idx1) <= max(index_set_1of2(x)))
+          /\ (has_bounds(idx2) /\ lb(idx2) >= min(index_set_2of2(x)) /\ ub(idx2) <= max(index_set_2of2(x))))
+         then
+           element_t( (idx1*dim+idx2-min_flat)::domain, array1d(x))
+         else
+           let {
+             constraint idx1 in index_set_1of2(x);
+             constraint idx2 in index_set_2of2(x);
+           } in element_mt( (idx1*dim+idx2-min_flat)::domain, array1d(x))
+         endif
+  endif;
 
 function var int: element(var int: idx1, var int: idx2, var int: idx3,
                           array[int,int,int] of var int: x) =

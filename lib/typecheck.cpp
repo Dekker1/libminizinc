@@ -833,10 +833,9 @@ namespace MiniZinc {
     if (e->isa<ArrayAccess>() && e->type().dim() > 0) {
       ArrayAccess* aa = e->cast<ArrayAccess>();
       // Turn ArrayAccess into a slicing operation
-      std::vector<Expression*> args;
-      args.push_back(aa->v());
-      args.push_back(NULL);
       std::vector<Expression*> slice;
+      slice.reserve(aa->idx().size());
+      std::vector<Expression*> ndims;
       GCLock lock;
       for (unsigned int i=0; i<aa->idx().size(); i++) {
         if (aa->idx()[i]->type().is_set()) {
@@ -845,7 +844,7 @@ namespace MiniZinc {
           if (SetLit* sl = aa->idx()[i]->dyn_cast<SetLit>()) {
             if (sl->isv() && sl->isv()->size()==1) {
               if (sl->isv()->min().isFinite() && sl->isv()->max().isFinite()) {
-                args.push_back(sl);
+                ndims.push_back(sl);
                 needIdxSet = false;
               } else if (sl->isv()->min()==-IntVal::infinity() && sl->isv()->max()==IntVal::infinity()) {
                 needInter = false;
@@ -869,9 +868,9 @@ namespace MiniZinc {
             if (needInter) {
               BinOp* inter = new BinOp(aa->idx()[i]->loc(), aa->idx()[i], BOT_INTERSECT, origIdxset);
               inter->type(Type::parsetint());
-              args.push_back(inter);
+              ndims.push_back(inter);
             } else {
-              args.push_back(origIdxset);
+              ndims.push_back(origIdxset);
             }
           }
           slice.push_back(aa->idx()[i]);
@@ -881,15 +880,15 @@ namespace MiniZinc {
           slice.push_back(bo);
         }
       }
-      ArrayLit* a_slice = new ArrayLit(e->loc(), slice);
+      ArrayLit* a_slice = new ArrayLit(e->loc().introduce(), slice);
       a_slice->type(Type::parsetint(1));
-      args[1] = a_slice;
-      std::ostringstream oss;
-      oss << "slice_" << (args.size()-2) << "d";
-      Call* c = new Call(e->loc(), ASTString(oss.str()), args);
+      ArrayLit* a_ndims = new ArrayLit(e->loc().introduce(), ndims);
+      a_ndims->type(Type::parsetint(1));
+      std::vector<Expression*> args = {aa->v(), a_slice, a_ndims};
+      Call* c = new Call(e->loc(), ASTString("slice_Xd"), args);
       FunctionI* fi = m->matchFn(env, c, false);
       if (!fi)
-        throw TypeError(env, e->loc(), "missing builtin "+oss.str());
+        throw TypeError(env, e->loc(), "missing builtin slice_Xd");
       c->type(fi->rtype(env, args, false));
       c->decl(fi);
       e = c;
