@@ -1455,8 +1455,9 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("EQI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
           frame->reg.assign(this, r3, IntVal(frame->reg[r1]() == frame->reg[r2]()));
-          DBG_INTERPRETER("EQI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LTI:
@@ -1464,8 +1465,9 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("LTI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
           frame->reg.assign(this, r3, IntVal(frame->reg[r1]() < frame->reg[r2]()));
-          DBG_INTERPRETER("LTI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LEI:
@@ -1473,8 +1475,9 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("LEI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
           frame->reg.assign(this, r3, IntVal(frame->reg[r1]() <= frame->reg[r2]()));
-          DBG_INTERPRETER("LEI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::AND:
@@ -1482,8 +1485,9 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("AND R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
           frame->reg.assign(this, r3, IntVal(frame->reg[r1]()!=0 && frame->reg[r2]()!=0));
-          DBG_INTERPRETER("AND R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::OR:
@@ -1491,16 +1495,18 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("OR R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
           frame->reg.assign(this, r3, IntVal(frame->reg[r1]()!=0 || frame->reg[r2]()!=0));
-          DBG_INTERPRETER("OR R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::NOT:
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("NOT R" << r1);
           frame->reg.assign(this, r2, IntVal(frame->reg[r1]()==0));
-          DBG_INTERPRETER("NOT R" << r1 << " R" << r2 << "(" << frame->reg[r2]() << ")" << "\n");
+          DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2]() << ")" << "\n");
         }
           break;
         case BytecodeStream::XOR:
@@ -1508,14 +1514,16 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("XOR R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
           frame->reg.assign(this, r3, IntVal( (frame->reg[r1]()!=0) ^ (frame->reg[r2]()!=0)));
-          DBG_INTERPRETER("XOR R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::ISPAR:
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
             frame->reg.assign(this, r2, IntVal(1));
@@ -1532,16 +1540,17 @@ namespace MiniZinc {
             IntVal ret = IntVal(v.toVec()->isPar());
             frame->reg.assign(this, r2, ret);
           }
-          DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::ISEMPTY:
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("ISEMPTY R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           assert(frame->reg[r1].isVec());
           frame->reg.assign(this, r2, IntVal(frame->reg[r1].size()==0));
-          DBG_INTERPRETER("ISEMPTY R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2]() << ")" << "\n");
         }
           break;
         case BytecodeStream::LENGTH:
@@ -1891,8 +1900,8 @@ namespace MiniZinc {
         {
           int code = frame->bs->reg(frame->pc);
           assert(code >= 0);
-          assert(code < primitiveMap().size());
           DBG_INTERPRETER("BUILTIN " << code << "(" << _procs[code].name << ")" << "\n");
+          assert(code < primitiveMap().size());
           // this is a Interpreter builtin
           int n = _procs[code].nargs;
           std::vector<Val> args(n);
