@@ -18,7 +18,6 @@
 #include <minizinc/solver_instance_base.hh>
 
 #include <iostream>
-#include <sstream>
 #include <unordered_map>
 #include <fstream>
 #include <streambuf>

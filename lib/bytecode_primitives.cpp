@@ -28,9 +28,10 @@ namespace MiniZinc {
     SortBy sortby;
     IntMax intmax;
     Infinity infinity;
+    SliceXd slice_xd;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &int_lin_eq, &uniform, &sol, &sortby, &intmax, &infinity,
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &int_lin_eq, &uniform, &sol, &sortby, &intmax, &infinity, &slice_xd,
     };
   }
   

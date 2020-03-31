@@ -34,7 +34,8 @@ namespace MiniZinc {
       SORT_BY,
       INT_MAX_,
       INFINITY_,
-      MAX_ID=INFINITY_,
+      SLICE_XD,
+      MAX_ID=SLICE_XD,
     };
     class Primitive {
     protected:
@@ -548,6 +549,66 @@ namespace MiniZinc {
       };
     };
   }
+
+  class SliceXd : public PrimitiveMap::Primitive {
+  public:
+    SliceXd() : PrimitiveMap::Primitive("slice_Xd",PrimitiveMap::SLICE_XD, 3) {}
+    virtual void execute(Interpreter& i, const std::vector<Val>& args) {
+      assert(args.size()==3);
+      assert(args[0].isVec() && args[1].isVec() && args[2].isVec() );
+      assert(args[0][1].size() / 2 == args[1][0].size());
+
+      std::vector<IntVal> idxs(args[1][0].size());
+      std::vector<Val> slice;
+      // Initialise indexes
+      for (int j = 0; j < idxs.size(); ++j) {
+        idxs[j] = args[0][1][j*2]();
+      }
+
+      // Walk through array and make slice selection
+      int level = idxs.size() - 1;
+      int it = 0;
+      while (level >= 0) {
+        bool in_slice = true;
+        for (int k = 0; k < idxs.size(); ++k) {
+          in_slice = in_slice && args[1][0][k][0]() <= idxs[k] && idxs[k] <= args[1][0][k][1]();
+        }
+
+        assert(it < args[0][0].size());
+        if (in_slice) {
+          slice.push_back(args[0][0][it]);
+        }
+        it++;
+
+        while (level >= 0) {
+          if (idxs[level] < args[0][1][level*2+1]()) {
+            idxs[level]++;
+            level = idxs.size() - 1;
+            break;
+          } else {
+            idxs[level] = args[0][1][level*2]();
+            level--;
+          }
+        }
+      }
+
+      // Format new index sets
+      std::vector<Val> dom;
+      dom.reserve(args[2][0].size() * 2);
+      for (int j = 0; j < args[2][0].size(); ++j) {
+        assert(args[2][0][j].size() == 2);
+        dom.push_back(args[2][0][j][0]);
+        dom.push_back(args[2][0][j][1]);
+      }
+
+      Vec* values = Vec::a(&i, i.newIdent(), slice);
+      Vec* idx = Vec::a(&i, i.newIdent(), dom);
+      Vec* nv = Vec::a(&i, i.newIdent(), {Val(values), Val(idx)});
+
+      i.pushAgg(Val(nv), -1);
+    };
+  };
+
 }
 
 #endif
