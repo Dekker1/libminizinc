@@ -1899,7 +1899,7 @@ namespace MiniZinc {
         {
           int code = frame->bs->reg(frame->pc);
           assert(code >= 0);
-          DBG_INTERPRETER("BUILTIN " << code << "(" << _procs[code].name << ")" << "\n");
+          DBG_INTERPRETER("BUILTIN " << code << "(" << _procs[code].name << ")");
           assert(code < primitiveMap().size());
           // this is a Interpreter builtin
           int n = _procs[code].nargs;
@@ -1907,7 +1907,9 @@ namespace MiniZinc {
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
             args[i].assign(this, frame->reg[r]);
+            DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
           }
+          DBG_INTERPRETER("\n");
           primitiveMap()[code]->execute(*this, args);
         }
           break;
