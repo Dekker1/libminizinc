@@ -2426,9 +2426,12 @@ CG::Binding bind_fix(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     return b_arg;
   } else {
     int r(GET_REG(cg));
+    int r_cond(GET_REG(cg));
+
+    PUSH_INSTR(frag, BytecodeStream::ISPAR, CG::r(b_arg.first), CG::r(r_cond));
     PUSH_INSTR(frag, BytecodeStream::LB, CG::r(b_arg.first), CG::r(r));
-    // TODO: Check is_fixed, otherwise abort!
-    return {r, b_arg.second};
+
+    return {r, CG_Cond::forall(ctx, b_arg.second, CG_Cond::reg(r_cond))};
   }
 }
 
