@@ -736,17 +736,14 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
   // TODO: Consider negated contexts.
   if (ret_type.isbool() && call_mode != BytecodeProc::ROOT) {
     bool valid = false;
-    if (call_mode == BytecodeProc::IMP) {
-      valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::IMP);
-      if (!valid) {
-        valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::FUN);
-        if (valid) {
-          call_mode = BytecodeProc::FUN;
-          def_mode = BytecodeProc::FUN;
-        }
-      }
-    } else if (call_mode == BytecodeProc::FUN) {
+    if (call_mode == BytecodeProc::IMP && cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::IMP)) {
+      valid = true;
+    } else {
       valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::FUN);
+      if (valid) {
+        call_mode = BytecodeProc::FUN;
+        def_mode = BytecodeProc::FUN;
+      }
     }
     for (auto & body : bodies) {
       if (body->e()) {
