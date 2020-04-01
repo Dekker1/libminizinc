@@ -645,7 +645,6 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
   
   GCLock lock;
 
-  std::cerr << "%%%% Resolving: "; debugprint(fun);
   int p_idx = bytecode.size();
   CG_ProcID p_id(CG_ProcID::proc(p_idx));
   ASTExprVec<VarDecl> params(fun->params());
@@ -1523,10 +1522,7 @@ private:
     VarDecl* vd(vdi->e());
     if(!vd->type().isann()) {
       if(vd->type().ispar()) {
-        // std::cerr << "%%%% Binding " << vd->id()->str() << " at g" << slot << std::endl;
-        // std::cerr << "%%%% "; debugprint(vd);
         if(!vd->e()) {
-          // debugprint(vd);
           // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
           cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
           std::cout << "%% " << vd->id()->v() << " ~> " << cg.num_globals << std::endl;
@@ -1551,12 +1547,6 @@ private:
   }
 
   void vFunctionI(FunctionI* f) {
-    // std::cout << "%% F: "; debugprint(f);
-    /*
-    if(!f->e() && !f->from_stdlib()) {
-      std::cerr << "%% F: "; debugprint(f);
-    }
-    */
     cg.register_function(f);
   }
 
@@ -1567,9 +1557,6 @@ public:
     EnvInit eb(cg);
     iterItems(eb, m);
     cg.mode_map = std::move(eb.modes.extract());
-    for(auto p : cg.mode_map) {
-      std::cerr << mode_name(p.second) << "[" << p.first << "] "; debugprint(p.first);
-    }
   }
 };
 
@@ -1828,7 +1815,6 @@ private:
       return;
     if(vd->type().isopt())
       return;
-    std::cerr << "%%%% Binding " << vd->id()->str() << std::endl;
     if(vd->type().isvar()) {
       // In whatever case, we're going to create something,
       // and dump it in a register.
@@ -1916,12 +1902,9 @@ private:
   }
 
   /// Visit assign item
-  void vAssignI(AssignI* ass) {
-    // std::cerr << "%%%% Assign: "; debugprint(ass); 
-  }
+  void vAssignI(AssignI* ass) {}
 
   void vConstraintI(ConstraintI* c) {
-    // std::cerr << "%%%% "; debugprint(c->e());
     // CG::eval(c->e(), BytecodeProc::ROOT, cg, root_frag);
     post_cond(cg, root_frag, CG::compile(c->e(), cg, root_frag));
   }
@@ -2467,7 +2450,6 @@ CG::Binding bind_error_g(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   GCLock lock;
-  std::cerr << "%%%% Evaluating sum" << std::endl;
   assert(call->n_args() == 1);
   Expression* e = call->arg(0);
   // Components of the sum may be partial.
@@ -2775,7 +2757,6 @@ CG::Binding bind_array1d(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG::Binding bind_array_union(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  std::cerr << "%%%% Evaluating array_union" << std::endl;
   assert(call->n_args() == 1);
   Expression* e = call->arg(0);
   // Components of the sum may be partial.
