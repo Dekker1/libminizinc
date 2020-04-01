@@ -507,6 +507,7 @@ CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs)
   GCLock lock;
   switch(op) {
     // Actual builtins
+    case BOT_EQUIV:
     case BOT_EQ: {
       auto fun = find_call_fun(cg, {"op_equals"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
       assert(ctx == fun.second);
