@@ -74,6 +74,15 @@ function var bool: op_not(var bool: x) ::promise_total =
   These builtins implement arithmetic operations.
 */
 
+/** @group builtins.arithmetic Return \a -x */
+function int: op_minus(int: x) = -x;
+/** @group builtins.arithmetic Return \a x - \a y */
+function var int: op_minus(var int: x) ::promise_total =
+  let {
+    var -ub(x)..-lb(x): y;
+    constraint int_lin_eq([1,-1], [x,y], 0);
+  } in y;
+
 /** @group builtins.arithmetic Return \a x - \a y */
 function int: op_minus(int: x, int: y) = x - y;
 /** @group builtins.arithmetic Return \a x - \a y */
