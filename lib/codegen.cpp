@@ -1552,9 +1552,7 @@ private:
     modes.use(c->e(), BytecodeProc::ROOT);
   }
   /// Visit assign item
-  void vAssignI(AssignI* ass) {
-    debugprint(ass); 
-  }
+  void vAssignI(AssignI* ass) {}
 
   void vFunctionI(FunctionI* f) {
     cg.register_function(f);
@@ -2034,7 +2032,6 @@ public:
       cg.pending_bodies.pop_back();
       
       FunctionI* fun(p.first);
-      debugprint(fun);
       Mode call_mode(p.second.first);
       Mode def_mode(p.second.second);
       annotate_total(fun);
@@ -2175,9 +2172,6 @@ void CG::run(CodeGen& cg, Model* m) {
 // For a non-Boolean value, place it in a register and collect its partiality.
 std::pair<int, CG_Cond::T> _bind(Expression* e, CodeGen& cg, CG_Builder& frag) {
   // Look up the mode we need to compile e in.
-  /*
-  debugprint(e);
-  */
   // FIXME: Figure out why some expressions don't have a mode attached.
   CG::Mode ctx(BytecodeProc::FUN);
   try {
@@ -3239,7 +3233,6 @@ CG::Binding CG::bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
     return CG::Binding(cg.env().lookup(x->v()).first, CG_Cond::ttt());
   } catch(const CG_Env<CodeGen::Binding>::NotFound& exn) {
-    debugprint(x);
     int g = cg.globals_env.at(x->v());
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(g), CG::r(r));
@@ -3962,7 +3955,6 @@ CG::Binding CG::bind(Comprehension* comp, Mode ctx, CodeGen& cg, CG_Builder& fra
 
 CG_Cond::T _compile(Expression* e, CodeGen& cg, CG_Builder& frag) {
   // Look up the mode we need to compile e in.
-  // debugprint(e);
   CG::Mode ctx(BytecodeProc::FUN);
   try {
     ctx = cg.mode_map.at(e);
@@ -4021,7 +4013,6 @@ CG_Cond::T CG::compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
     return CG_Cond::reg(cg.env().lookup(x->v()).first);
   } catch(const CG_Env<Binding>::NotFound& exn) {
-    // debugprint(x);
     int g = cg.globals_env.at(x->v());
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(g), CG::r(r));
