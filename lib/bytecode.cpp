@@ -91,7 +91,10 @@ namespace MiniZinc {
       os << ")";
       os << " domain: " << d->domain().toString() << "\n";
       if (!d->subscriptions().empty()) {
-        os << "   subscriptions: ";
+        for (unsigned int i=0; i<indent; i++) {
+          os << "  ";
+        }
+        os << "    subscriptions: ";
         for (auto& s : d->subscriptions()) {
           os << s.first << " ";
         }
