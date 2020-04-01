@@ -546,6 +546,7 @@ namespace MiniZinc {
 
   class Definition : public RefCountedObject {
     friend class Trail;
+    friend void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
   public:
     enum SubscriptionEvent { SEV_VAL, SEV_UNIFY, SEV_DOM, SEV };
     /// Event sets propagators can subscribe to: only value events, value+unification, or any change
