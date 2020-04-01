@@ -572,8 +572,13 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
       fun = find_call_fun(cg, {"int_lin_eq"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
-      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-      return CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k));
+      auto call(CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k)));
+      if (BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second)) {
+        return call;
+      }
+      fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      return CG_Cond::call(fun.first, fun.second, CG::r(CG::force(call, cg, frag)));
     }
     case BOT_LQ:
     {
@@ -590,8 +595,13 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
       fun = find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
-      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-      return CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k));
+      auto call(CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k)));
+      if (BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second)) {
+        return call;
+      }
+      fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      return CG_Cond::call(fun.first, fun.second, CG::r(CG::force(call, cg, frag)));
     }
     case BOT_LE:
     {
@@ -608,8 +618,13 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
       fun = find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
-      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-      return CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k));
+      auto call(CG_Cond::call(fun.first, fun.second, CG::r(c), CG::r(x), CG::r(k)));
+      if (BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second)) {
+        return call;
+      }
+      fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      return CG_Cond::call(fun.first, fun.second, CG::r(CG::force(call, cg, frag)));
     }
     case BOT_NQ:
       return ~binop_cond(cg, BOT_EQ, -ctx, r_lhs, r_rhs);
