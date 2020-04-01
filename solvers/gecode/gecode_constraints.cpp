@@ -40,7 +40,13 @@ namespace MiniZinc {
       assert(static_cast<BytecodeProc::Mode>(def->mode()) == BytecodeProc::RAW);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       assert(def->timestamp() != -1);
-      if(def->isBounded()) {
+      if (def->isFixed()) {
+        IntVar intVar(*gi._current_space, def->val().toInt(), def->val().toInt());
+        gi._current_space->iv.push_back(intVar);
+        gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
+        gi._current_space->iv_introduced.push_back(false);
+        gi._current_space->iv_defined.push_back(false);
+      } else if(def->isBounded()) {
         if (def->lb() >= 0 && def->ub() <= 1) {
           BoolVar boolVar(*gi._current_space, def->lb().toInt(), def->ub().toInt());
           gi._current_space->bv.push_back(boolVar);
