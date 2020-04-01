@@ -1779,13 +1779,23 @@ int locate_range(int l, int u, CodeGen& cg, CG_Builder& frag) {
 CG::Binding bind_domain(VarDecl* vd, CodeGen& cg, CG_Builder& frag) {
   if(vd->type().isbool()) {
     return CG::Binding(locate_range(0, 1, cg, frag), CG_Cond::ttt()); 
-  } else {
-    Expression* d(vd->ti()->domain());
-    assert(d); // Unbounded domains not yet supported.
+  }
+  if (Expression* d = vd->ti()->domain()) {
     CG::Binding b(CG::bind(d, cg, frag));
     // Ignoring partiality here.
     return b;
   }
+  int r(GET_REG(cg));
+  OPEN_VEC(cg, frag);
+  OPEN_OTHER(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(0, cg, frag)));
+  CLOSE_AGG(cg, frag);
+  OPEN_OTHER(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(1, cg, frag)));
+  CLOSE_AGG(cg, frag);
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+  return {r, CG_Cond::ttt()};
 }
 
 class Compile : public ItemVisitor {
