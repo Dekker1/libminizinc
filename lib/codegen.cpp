@@ -1505,6 +1505,16 @@ int CG::force(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
   return p->reg[cond.sign()].reg = _force_cond(cond, cg, frag);
 }
 
+int force_or_bind(Expression* e, std::vector<CG_Cond::T>& cond, CodeGen& cg, CG_Builder& frag) {
+  if(e->type().isbool()) {
+    return CG::force(CG::compile(e, cg, frag), cg, frag);
+  } else {
+    CG::Binding b(CG::bind(e, cg, frag));
+    if(b.second.get())
+      cond.push_back(b.second);
+    return b.first;
+  }
+}
 
 class EnvInit : public ItemVisitor {
 private:
@@ -3734,20 +3744,18 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if (b->type().isvar()) {
     OPEN_OTHER(cg, frag);
   }
-  Binding b_lhs(CG::bind(b->lhs(), cg, frag));
-  Binding b_rhs(CG::bind(b->rhs(), cg, frag));
-
   std::vector<CG_Cond::T> partial;
-  partial.push_back(b_lhs.second);
-  partial.push_back(b_rhs.second);
+  int r_lhs = force_or_bind(b->lhs(), partial, cg, frag);
+  int r_rhs = force_or_bind(b->rhs(), partial, cg, frag);
+
   int r;
   if(b->type().isvar()) {
-    call_binop(cg, frag, BytecodeProc::FUN, b->op(), b_lhs.first, b_rhs.first);
+    call_binop(cg, frag, BytecodeProc::FUN, b->op(), r_lhs, r_rhs);
     CLOSE_AGG(cg, frag);
     r = GET_REG(cg);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   } else {
-    r = bind_binop_par(cg, frag, b->op(), b_lhs.first, b_rhs.first);
+    r = bind_binop_par(cg, frag, b->op(), r_lhs, r_rhs);
   }
 
   if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
@@ -3767,10 +3775,10 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       GCLock lock;
       auto fun = find_call_fun(cg, {"op_equals"}, Type::varbool(), {Type::varint(), Type::varint()}, -ctx);
       assert(BytecodeProc::is_neg(-ctx) == BytecodeProc::is_neg(fun.second));
-      partial.push_back(~CG_Cond::call(fun.first, fun.second, CG::r(b_rhs.first), CG::r(r_zero)));
+      partial.push_back(~CG_Cond::call(fun.first, fun.second, CG::r(r_rhs), CG::r(r_zero)));
     }
   }
-  return CG::Binding(r, CG_Cond::forall(ctx, partial));
+  return {r, CG_Cond::forall(ctx, partial)};
 }
 
 CG::Binding CG::bind(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -4179,16 +4187,6 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
 }
 
-int force_or_bind(Expression* e, std::vector<CG_Cond::T>& cond, CodeGen& cg, CG_Builder& frag) {
-  if(e->type().isbool()) {
-    return CG::force(CG::compile(e, cg, frag), cg, frag);
-  } else {
-    CG::Binding b(CG::bind(e, cg, frag));
-    if(b.second.get())
-      cond.push_back(b.second);
-    return b.first;
-  }
-}
 CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> cond;
   if(b->type().ispar()) {
@@ -4222,12 +4220,9 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     case BOT_NQ: {
       // Potentially partial.
       // Converted into canonical form by binop_cond.
-      CG::Binding b_lhs(CG::bind(b->lhs(), cg, frag));
-      CG::Binding b_rhs(CG::bind(b->rhs(), cg, frag));
-      cond.push_back(b_lhs.second);
-      cond.push_back(b_rhs.second);
-      // cond.push_back(binop_cond(cg, b->op(), ctx, b_lhs.first, b_rhs.first));
-      cond.push_back(linear_cond(cg, frag, b->op(), ctx, b_lhs.first, b_rhs.first));
+      int r_lhs = force_or_bind(b->lhs(), cond, cg, frag);
+      int r_rhs = force_or_bind(b->rhs(), cond, cg, frag);
+      cond.push_back(linear_cond(cg, frag, b->op(), ctx, r_lhs, r_rhs));
       return CG_Cond::forall(ctx, cond);
     }
     break;
