@@ -4022,7 +4022,7 @@ CG_Cond::T CG::compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
 }
 
-CG_Cond::T compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+CG_Cond::T CG::compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // If the array elements are Boolean, we need to check for partiality
   // in the indices, and that the accesses are within-range.
   ASTExprVec<Expression> idx(a->idx());
@@ -4370,35 +4370,6 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     }
   }
   conj.push_back(CG::compile(let->in(), cg, frag));
-  return CG_Cond::forall(ctx, conj);
-}
-CG_Cond::T CG::compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  std::vector<CG_Cond::T> conj;
-
-  CG::Binding b_A(CG::bind(a, cg, frag));
-  int r_A(b_A.first);
-  conj.push_back(b_A.second);
-
-  std::vector<int> r_idx;
-  ASTExprVec<Expression> idx(a->idx());
-  Expression* A(a->v());
-  int sz(idx.size());
-  for(int ii = 0; ii < sz; ++ii) {
-    CG::Binding b_x(CG::bind(idx[ii], cg, frag)); 
-    r_idx.push_back(b_x.first);
-    conj.push_back(b_x.second);
-  }
-  assert(sz == 1);
-  if(idx[0]->type().ispar()) {
-    int r(GET_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_idx[0]), CG::r(r));
-    conj.push_back(CG_Cond::reg(r));
-  } else {
-    GCLock lock;
-    auto fun = find_call_fun(cg, {"element"}, Type::varbool(), {Type::varbool(1), Type::varint()}, ctx);
-    assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-    conj.push_back(CG_Cond::call(fun.first, fun.second, CG::r(r_idx[0]), CG::r(r_A)));
-  }
   return CG_Cond::forall(ctx, conj);
 }
 
