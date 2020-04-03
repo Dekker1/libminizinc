@@ -131,6 +131,24 @@ function float: op_float_division(float: x, float: y) = x / y;
 function var float: op_float_division(var float: x, var float: y) =
   if mzn_in_root_context(y) \/ lb(y) > 0.0 \/ ub(y) < 0.0 then fldiv_t(x,y) else
   let { constraint y != 0.0 } in fldiv_mt(x,y) endif;
+
+
+/** @group builtins.arithmetic Return maximum of \a x and \a y */
+function $T: max($T: x, $T: y) =
+  if x > y then
+    x
+  else
+    y
+  endif;
+
+/** @group builtins.arithmetic Return minimum of \a x and \a y */
+function $T: min($T: x, $T: y) =
+  if x < y then
+    x
+  else
+    y
+  endif;
+
 % ---------------
 /** @group flatzinc.set Constrains \a x \( \in \) \a S */
 function var bool: op_in(var int: x, var set of int: S) ::promise_total =

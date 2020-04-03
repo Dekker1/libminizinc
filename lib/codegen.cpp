@@ -2956,61 +2956,6 @@ CG::Binding bind_bool2int(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
 CG_Cond::T compile_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
 
-CG::Binding bind_max(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  if(call->type().ispar()) {
-    if(call->n_args() == 2) {
-      CG::Binding b_lhs(CG::bind(call->arg(0), cg, frag));
-      CG::Binding b_rhs(CG::bind(call->arg(1), cg, frag));
-      // Again, assuming this is total
-      int r(GET_REG(cg));
-      int l_r(GET_LABEL(cg));
-      int l_e(GET_LABEL(cg));
-      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(b_lhs.first), CG::r(b_rhs.first), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_r));
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(b_rhs.first), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_e));
-
-      PUSH_LABEL(frag, l_r);
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(b_lhs.first), CG::r(r));
-      PUSH_LABEL(frag, l_e);
-      return CG::Binding(r, CG_Cond::ttt());
-    } else {
-      assert(call->n_args() == 1); 
-      CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
-      int r(GET_REG(cg));
-      int r_i(GET_REG(cg));
-      int r_sz(GET_REG(cg)); 
-      int r_test(GET_REG(cg));
-      int r_elt(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_i));
-      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_A.first), CG::r(r_sz));
-      int l_fst(GET_LABEL(cg));
-      int l_hd(GET_LABEL(cg));
-      int l_tl(GET_LABEL(cg));
-      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-      PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_test), CG::l(l_fst));
-      PUSH_INSTR(frag, BytecodeStream::ABORT);
-      PUSH_LABEL(frag, l_fst);
-
-      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r));
-      
-      PUSH_LABEL(frag, l_hd);
-      PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
-      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_tl));
-      
-      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_elt));
-      PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r), CG::r(r_elt), CG::r(r_test));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_hd));
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_elt), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
-      PUSH_LABEL(frag, l_tl);
-      return CG::Binding(r, CG_Cond::ttt());
-    }
-  }
-  return bind_call(call, ctx, cg, frag);
-}
-
 CG::Binding bind_arg_max(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1); 
   CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
@@ -3047,61 +2992,6 @@ CG::Binding bind_arg_max(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
   PUSH_LABEL(frag, l_tl);
   return CG::Binding(r, CG_Cond::ttt());
-  return bind_call(call, ctx, cg, frag);
-}
-
-CG::Binding bind_min(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  if(call->type().ispar()) {
-    if(call->n_args() == 2) {
-      CG::Binding b_lhs(CG::bind(call->arg(0), cg, frag));
-      CG::Binding b_rhs(CG::bind(call->arg(1), cg, frag));
-      // Again, assuming this is total
-      int r(GET_REG(cg));
-      int l_r(GET_LABEL(cg));
-      int l_e(GET_LABEL(cg));
-      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(b_lhs.first), CG::r(b_rhs.first), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_r));
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(b_lhs.first), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_e));
-
-      PUSH_LABEL(frag, l_r);
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(b_rhs.first), CG::r(r));
-      PUSH_LABEL(frag, l_e);
-      return CG::Binding(r, CG_Cond::ttt());
-    } else {
-      assert(call->n_args() == 1); 
-      CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
-      int r(GET_REG(cg));
-      int r_i(GET_REG(cg));
-      int r_sz(GET_REG(cg)); 
-      int r_test(GET_REG(cg));
-      int r_elt(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_i));
-      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_A.first), CG::r(r_sz));
-      int l_fst(GET_LABEL(cg));
-      int l_hd(GET_LABEL(cg));
-      int l_tl(GET_LABEL(cg));
-      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-      PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_test), CG::l(l_fst));
-      PUSH_INSTR(frag, BytecodeStream::ABORT);
-      PUSH_LABEL(frag, l_fst);
-
-      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r));
-      
-      PUSH_LABEL(frag, l_hd);
-      PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
-      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_tl));
-      
-      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_elt));
-      PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_elt), CG::r(r), CG::r(r_test));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_hd));
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_elt), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
-      PUSH_LABEL(frag, l_tl);
-      return CG::Binding(r, CG_Cond::ttt());
-    }
-  }
   return bind_call(call, ctx, cg, frag);
 }
 
@@ -3223,9 +3113,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("ub_array", builtin_t { eval_error_b, bind_ub_array } ));
   tbl.insert(std::make_pair("set2array", builtin_t { eval_error_b, bind_set2array } ));
   tbl.insert(std::make_pair("dom_bounds_array", builtin_t { eval_error_b, bind_dom_bounds_array } ));
-  tbl.insert(std::make_pair("max", builtin_t { eval_error_b, bind_max } ));
   tbl.insert(std::make_pair("arg_max", builtin_t { eval_error_b, bind_arg_max } ));
-  tbl.insert(std::make_pair("min", builtin_t { eval_error_b, bind_min } ));
   tbl.insert(std::make_pair("card", builtin_t { eval_error_b, bind_card } ));
   tbl.insert(std::make_pair(c.ids.bool2int, builtin_t { eval_error_b, bind_bool2int } ));
   tbl.insert(std::make_pair("uniform", builtin_t { eval_error_b, bind_internal } ));
