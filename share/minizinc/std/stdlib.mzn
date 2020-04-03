@@ -580,8 +580,9 @@ function bool: '>='(opt int: x, opt int: y) = absent(x) \/ absent(y) \/ deopt(x)
 %   occur and the value of \a x is less than or equal to the value of \a y. */
 % function bool: '<='(opt int: x, opt int: y) = absent(x) \/ absent(y) \/ deopt(x) <= deopt(y);
 
-/** @group optiontypes.int Return minimum of elements in \a x that are not absent, or
-absent if all elements in \a x are absent. */
+% /** @group optiontypes.int Return minimum of elements in \a x that are not absent, or
+% absent if all elements in \a x are absent. */
+/*
 function var opt int: min(array[int] of var opt int: x) ::promise_total =
     let {
         var opt lb_array(x)..ub_array(x): m;
@@ -591,9 +592,11 @@ function var opt int: min(array[int] of var opt int: x) ::promise_total =
         constraint occurs(m) ->
             deopt(m) = min([if occurs(xi) then deopt(xi) else xmax endif | xi in x]);
     } in m;
+*/
 
-/** @group optiontypes.int Return maximum of elements in \a x that are not absent, or
-absent if all elements in \a x are absent. */
+% /** @group optiontypes.int Return maximum of elements in \a x that are not absent, or
+% absent if all elements in \a x are absent.
+/*
 function var opt int: max(array[int] of var opt int: x) ::promise_total =
     let {
         var opt lb_array(x)..ub_array(x): m;
@@ -603,6 +606,7 @@ function var opt int: max(array[int] of var opt int: x) ::promise_total =
         constraint occurs(m) ->
             deopt(m) = max([if occurs(xi) then deopt(xi) else xmin endif | xi in x]);
     } in m;
+*/
 
 /** @group optiontypes.int Weak addition. Return sum of \a x and \a y if both
 are present, otherwise return absent. */

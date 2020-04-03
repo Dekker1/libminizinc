@@ -278,18 +278,18 @@ function     float: product(array[$T] of     float: x);
 function var float: product(array[$T] of var float: x) =
   product_rec(array1d(x));
 
-/** @group builtins.arithmetic Return minimum of \a x and \a y */
-function     $T: min(    $T: x,     $T: y);
-/** @group builtins.arithmetic Return minimum of elements in array \a x */
-function     $T: min(array[$U] of     par $T: x);
-/** @group builtins.arithmetic Return maximum of \a x and \a y */
-function     $T: max(    $T: x,     $T: y);
-/** @group builtins.arithmetic Return maximum of elements in array \a x */
-function     $T: max(array[$U] of     $T: x);
-/** @group builtins.arithmetic Return minimum of elements in set \a x */
-function $$E: min(set of $$E: x);
-/** @group builtins.arithmetic Return maximum of elements in set \a x */
-function $$E: max(set of $$E: x);
+% /** @group builtins.arithmetic Return minimum of \a x and \a y */
+% function     $T: min(    $T: x,     $T: y);
+% /** @group builtins.arithmetic Return minimum of elements in array \a x */
+% function     $T: min(array[$U] of     par $T: x);
+% /** @group builtins.arithmetic Return maximum of \a x and \a y */
+% function     $T: max(    $T: x,     $T: y);
+% /** @group builtins.arithmetic Return maximum of elements in array \a x */
+% function     $T: max(array[$U] of     $T: x);
+% /** @group builtins.arithmetic Return minimum of elements in set \a x */
+% function $$E: min(set of $$E: x);
+% /** @group builtins.arithmetic Return maximum of elements in set \a x */
+% function $$E: max(set of $$E: x);
 
 /** @group builtins.arithmetic Return maximum of \a x and \a y */
 function var int: max(var int: x, var int: y) :: promise_total =

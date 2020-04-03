@@ -140,6 +140,15 @@ function $T: max($T: x, $T: y) =
   else
     y
   endif;
+/** @group builtins.arithmetic Return maximum of elements in set \a x */
+function int: max(set of int: x) =
+  let {
+    array[int] of int: nx = [i | i in x];
+  } in sort(nx)[length(x)];
+
+/** @group builtins.arithmetic Return maximum of elements in array \a x */
+function int: max(array[$U] of int: x) = sort(array1d(x))[1];
+function bool: max(array[$U] of bool: x) = sort(array1d(x))[1];
 
 /** @group builtins.arithmetic Return minimum of \a x and \a y */
 function $T: min($T: x, $T: y) =
@@ -148,6 +157,9 @@ function $T: min($T: x, $T: y) =
   else
     y
   endif;
+function int: min(set of int: x) = sort([i | i in x])[1];
+function int: min(array[$U] of int: x) = sort(array1d(x))[1];
+function int: min(array[$U] of bool: x) = sort(array1d(x))[1];
 
 % ---------------
 /** @group flatzinc.set Constrains \a x \( \in \) \a S */
