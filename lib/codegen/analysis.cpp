@@ -137,6 +137,9 @@ namespace MiniZinc {
     } else if(call.id() == "index_set" || call.id() == "length") {
       if(o == Def)
         update(call.arg(0), Def, m);
+    } else if(call.id() == "symmetry_breaking_constraint" || call.id() == "redundant_constraint") {
+      // No-op
+      update(call.arg(0), o, m);
     } else {
       // Propagate to the other functions.
       for(int ii = 0; ii < sz; ++ii) {

@@ -3172,6 +3172,11 @@ CG_Cond::T eval_has_bounds(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) 
   return CG_Cond::ttt();
 }
 
+template<int X>
+CG_Cond::T eval_argX_only(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  return CG::compile(call->arg(X-1), cg, frag);
+}
+
 builtin_table init_builtins(void) {
   builtin_table tbl;
   Constants& c(constants());
@@ -3222,6 +3227,8 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("is_fixed", builtin_t { eval_isfixed_b, bind_error_g } ));
   tbl.insert(std::make_pair("fix", builtin_t { eval_error_b, bind_fix } ));
   tbl.insert(std::make_pair("slice_Xd", builtin_t { eval_error_b, bind_internal} ));
+  tbl.insert(std::make_pair("symmetry_breaking_constraint", builtin_t { eval_argX_only<1>, bind_error_g} ));
+  tbl.insert(std::make_pair("redundant_constraint", builtin_t { eval_argX_only<1>, bind_error_g} ));
   return tbl;
 }
 builtin_table& builtins(void) {
