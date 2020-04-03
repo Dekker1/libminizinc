@@ -488,8 +488,19 @@ int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r
     case BOT_SUPERSET: {
       return bind_binop_par(cg, frag, BOT_SUBSET, r_rhs, r_lhs);
     }
-    // BOT_IN, BOT_SUBSET, BOT_SUPERSET, BOT_UNION, BOT_DIFF, BOT_SYMDIFF,
-    // BOT_INTERSECT,
+    case BOT_DIFF: {
+      int r(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    }
+    case BOT_SYMDIFF: {
+      int r(GET_REG(cg));
+      int r_tmp(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_rhs), CG::r(r_lhs), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::UNION, CG::r(r), CG::r(r_tmp), CG::r(r));
+      return r;
+    }
     default:
       TODO();
       return 0xdead;

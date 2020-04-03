@@ -1742,6 +1742,29 @@ namespace MiniZinc {
           DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
+        case BytecodeStream::DIFF:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int r3 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("DIFF R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ") R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
+          Val v1 = Val::follow_alias(frame->reg[r1], this);
+          Val v2 = Val::follow_alias(frame->reg[r2], this);
+          Val result_val;
+          Vec* s1 = v1.toVec();
+          Vec* s2 = v2.toVec();
+          VecSetRanges vsr1(s1);
+          VecSetRanges vsr2(s2);
+          Ranges::Diff<IntVal,VecSetRanges,VecSetRanges> diff_r(vsr1,vsr2);
+          std::vector<Val> result;
+          for (; diff_r(); ++diff_r) {
+            result.emplace_back(diff_r.min());
+            result.emplace_back(diff_r.max());
+          }
+          frame->reg.assign(this, r3, result_val);
+          DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
+        }
+          break;
         case BytecodeStream::INTERSECT_DOMAIN:
         {
           int r1 = frame->bs->reg(frame->pc);

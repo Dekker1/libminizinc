@@ -76,7 +76,8 @@ namespace MiniZinc {
       MAKE_SET, // R1 -> R2: turn a vector (of values) into a set
       INTERSECTION, // R1, R2 -> R3: put intersection of sets in R1 and R2 into R3
       UNION, // R1, R2 -> R3: put union of sets in R1 and R2 into R3
-      
+      DIFF, // R1, R2 -> R3: put difference of sets in R1 and R2 into R3
+
       INTERSECT_DOMAIN, // R1, R2 -> R3: Update domain of R1 with set R2, place result in R3
       
       OPEN_AGGREGATION, // i: Create a new aggregation context with symbol i
