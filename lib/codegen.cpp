@@ -76,6 +76,7 @@ const char* instr_names[] = {
       "MAKE_SET",
       "INTERSECTION",
       "UNION",
+      "DIFF",
 
       "INTERSECT_DOMAIN",
       

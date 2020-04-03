@@ -1142,6 +1142,11 @@ namespace MiniZinc {
           oss << "UNION R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
         }
           break;
+        case BytecodeStream::DIFF:
+        {
+          oss << "DIFF R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+        }
+          break;
         case BytecodeStream::INTERSECT_DOMAIN:
         {
           oss << "INTERSECT_DOMAIN R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
