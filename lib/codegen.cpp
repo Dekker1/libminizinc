@@ -145,6 +145,7 @@ void CodeGen::register_builtins(void) {
   register_builtin("floor", 1);
   register_builtin("ceil", 1);
   register_builtin("slice_Xd", 3);
+  register_builtin("sort", 1);
 }
 
 void OPEN_AGG(CodeGen& cg, CG_Builder& frag, AggregationCtx::Symbol ctx) {
@@ -3127,6 +3128,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("is_fixed", builtin_t { eval_isfixed_b, bind_error_g } ));
   tbl.insert(std::make_pair("fix", builtin_t { eval_error_b, bind_fix } ));
   tbl.insert(std::make_pair("slice_Xd", builtin_t { eval_error_b, bind_internal} ));
+  tbl.insert(std::make_pair("sort", builtin_t { eval_error_b, bind_internal} ));
   tbl.insert(std::make_pair("symmetry_breaking_constraint", builtin_t { eval_argX_only<1>, bind_error_g} ));
   tbl.insert(std::make_pair("redundant_constraint", builtin_t { eval_argX_only<1>, bind_error_g} ));
   return tbl;
