@@ -196,8 +196,11 @@ function bool: op_in(int: x, set of int: S) =
   The last entry in the \a c array is always the constant true, corresponding
   to the else case.
 */
-predicate if_then_else(array[int] of var bool: c, array[int] of int: x, var int: y) =
-    fzn_if_then_else_int(c, x, y);
+function var int: if_then_else(array[int] of var bool: c, array[int] of int: x) ::promise_total =
+  let {
+    var dom_array(x): y;
+    constraint fzn_if_then_else_int(c, x, y);
+  } in y;
 
 /** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
 
@@ -205,8 +208,11 @@ predicate if_then_else(array[int] of var bool: c, array[int] of int: x, var int:
   The last entry in the \a c array is always the constant true, corresponding
   to the else case.
 */
-predicate if_then_else(array[int] of var bool: c, array[int] of var int: x, var int: y) =
-    fzn_if_then_else_var_int(c, x, y);
+function var int: if_then_else(array[int] of var bool: c, array[int] of var int: x) ::promise_total =
+  let {
+    var dom_array(x): y;
+    constraint fzn_if_then_else_var_int(c, x, y);
+  } in y;
 
 /** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
 
@@ -214,8 +220,11 @@ predicate if_then_else(array[int] of var bool: c, array[int] of var int: x, var 
   The last entry in the \a c array is always the constant true, corresponding
   to the else case.
 */
-predicate if_then_else(array[int] of var bool: c, array[int] of bool: x, var bool: y) =
-    fzn_if_then_else_bool(c, x, y);
+function var bool: if_then_else(array[int] of var bool: c, array[int] of bool: x) ::promise_total =
+  let {
+    var bool: y;
+    constraint fzn_if_then_else_bool(c, x, y);
+  } in y;
 
 /** @group builtins.ifthenelse Conditional constraint \(\{\a c[i]\land\not\exists \a c[1..i-1]\ \rightarrow\ y=x[i] \}\)
 
@@ -223,8 +232,11 @@ predicate if_then_else(array[int] of var bool: c, array[int] of bool: x, var boo
   The last entry in the \a c array is always the constant true, corresponding
   to the else case.
 */
-predicate if_then_else(array[int] of var bool: c, array[int] of var bool: x, var bool: y) =
-    fzn_if_then_else_var_bool(c, x, y);
+function var bool: if_then_else(array[int] of var bool: c, array[int] of var bool: x) ::promise_total =
+  let {
+    var bool: y;
+    constraint fzn_if_then_else_var_bool(c, x, y);
+  } in y;
 
 /** @group builtins.ifthenelse Conditional partiality constraint
 
@@ -236,8 +248,11 @@ predicate if_then_else(array[int] of var bool: c, array[int] of var bool: x, var
   \p i is defined. Constrains that if \b is defined, then the selected case must be defined, and
   if the selected case is undefined, then \a b must be undefined.
 */
-predicate if_then_else_partiality(array[int] of var bool: c, array[int] of var bool: d, var bool: b) =
-    fzn_if_then_else_partiality(c, d, b);
+function var bool: if_then_else_partiality(array[int] of var bool: c, array[int] of var bool: d) ::promise_total =
+  let {
+    var bool: b;
+    constraint fzn_if_then_else_partiality(c, d, b);
+  } in b;
 
 
 % Include solver-specific redefinitions for any FlatZinc built-ins.

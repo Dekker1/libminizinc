@@ -4099,6 +4099,7 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       cg.env_pop();
     return CG_Cond::reg(r_ret);
   } else {
+    GCLock lock;
     // Collect conditions
     OPEN_VEC(cg, frag);
     for (int ii = 0; ii < sz; ++ii) {
@@ -4125,12 +4126,10 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     int r_then(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_then));
 
-    auto fun = find_call_fun(cg, {"if_then_else"}, Type::varbool(), {Type::varbool(1), Type::varbool(1), Type::varbool()}, ctx);
-    assert(ctx == fun.second);
+    auto fun = find_call_fun(cg, {"if_then_else"}, Type::varbool(), {Type::varbool(1), Type::varbool(1)}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
 
-    int r(GET_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_if), CG::r(r_then), CG::r(r));
-    return CG_Cond::reg(r);
+    return CG_Cond::call(fun.first, fun.second, CG::r(r_if), CG::r(r_then));
   }
 }
 
