@@ -1518,6 +1518,13 @@ int CG::force(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
   return p->reg[cond.sign()].reg = _force_cond(cond, cg, frag);
 }
 
+CG::Binding force_or_bind(Expression* e, CodeGen& cg, CG_Builder& frag) {
+  if(e->type().isbool()) {
+    return {CG::force(CG::compile(e, cg, frag), cg, frag), CG_Cond::ttt()};
+  }
+  return CG::bind(e, cg, frag);
+}
+
 int force_or_bind(Expression* e, std::vector<CG_Cond::T>& cond, CodeGen& cg, CG_Builder& frag) {
   if(e->type().isbool()) {
     return CG::force(CG::compile(e, cg, frag), cg, frag);
@@ -2984,8 +2991,7 @@ CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& f
 
 CG::Binding bind_bool2int(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
-  int r_e(CG::force(CG::compile(call->arg(0), cg, frag), cg, frag));
-  return CG::Binding(r_e, CG_Cond::ttt());
+  return force_or_bind(call->arg(0), cg, frag);
 }
 
 CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
