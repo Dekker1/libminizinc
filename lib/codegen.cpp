@@ -4065,25 +4065,38 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       cg.env_pop();
     return CG_Cond::reg(r_ret);
   } else {
-    // Put the conditions in registers, and compile the results.
-    std::vector<int> r_if;
-    std::vector<CG_Cond::T> c_then;
+    // Collect conditions
+    OPEN_VEC(cg, frag);
+    for (int ii = 0; ii < sz; ++ii) {
+      int r_if(CG::force(CG::compile(ite->e_if(ii), cg, frag), cg, frag));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_if));
+    }
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
+    CLOSE_AGG(cg, frag);
+    int r_if(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_if));
 
-    for(int ii = 0; ii < sz; ++ii) {
-      r_if.push_back(CG::force(CG::compile(ite->e_if(ii), cg, frag), cg, frag)); 
-      c_then.push_back(CG::compile(ite->e_then(ii), cg, frag));
+    // Collect results
+    OPEN_VEC(cg, frag);
+    for (int ii = 0; ii < sz; ++ii) {
+      int r_then(CG::force(CG::compile(ite->e_then(ii), cg, frag), cg, frag));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_then));
     }
-    TODO();
-    /*
+    {
+      int r_else(CG::force(CG::compile(ite->e_else(), cg, frag), cg, frag));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_else));
+    }
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
+    CLOSE_AGG(cg, frag);
+    int r_then(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_then));
+
+    auto fun = find_call_fun(cg, {"if_then_else"}, Type::varbool(), {Type::varbool(1), Type::varbool(1), Type::varbool()}, ctx);
+    assert(ctx == fun.second);
+
     int r(GET_REG(cg));
-    int l_exit(GET_LABEL(cg));
-    for(int ii = 0; ii < sz; ++ii) {
-      int l_cont(GET_LABEL(cg));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_if[ii]), CG::l(l_cont));
-      PUSH_INSTR(frag, BytecodeStream::MOV, 
-    }
-    */
-    return CG_Cond::ttt();
+    PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_if), CG::r(r_then), CG::r(r));
+    return CG_Cond::reg(r);
   }
 }
 
