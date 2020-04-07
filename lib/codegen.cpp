@@ -2911,7 +2911,7 @@ CG::Binding bind_ub_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_agg), CG::l(l_tl));
   // Initialize the accumulator
   PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_i), CG::r(r_agg));
-  PUSH_INSTR(frag, BytecodeStream::LB, CG::r(r_agg), CG::r(r_agg));
+  PUSH_INSTR(frag, BytecodeStream::UB, CG::r(r_agg), CG::r(r_agg));
   // Check if there's a next element.
   PUSH_LABEL(frag, l_hd);
   PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
