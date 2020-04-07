@@ -512,6 +512,8 @@ struct CG {
 
   static int locate_immi(int x, CodeGen& cg, CG_Builder& frag);
 
+  static int vec2array(std::vector<int> vec, CodeGen& cg, CG_Builder& frag);
+
   static Binding bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag);
   static Binding bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag);
   static Binding bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag);

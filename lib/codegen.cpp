@@ -4334,4 +4334,30 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG_Cond::forall(ctx, conj);
 }
 
+int CG::vec2array(std::vector<int> vec, CodeGen& cg, CG_Builder& frag) {
+  int sz(vec.size());
+  OPEN_VEC(cg, frag);
+  for (int ii = 0; ii < sz; ++ii) {
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(vec[ii]));
+  }
+  CLOSE_AGG(cg, frag);
+  int r_vec(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vec));
+
+  OPEN_VEC(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(sz, cg, frag)));
+  CLOSE_AGG(cg, frag);
+  int r_idx(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_idx));
+
+  OPEN_VEC(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_vec));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_idx));
+  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vec));
+
+  return r_vec;
+}
+
 };
