@@ -670,7 +670,7 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
       if (param->type().dim() > 0) {
         ss << "d" << param->type().dim();
       } else if (param->type().dim() < 0) {
-        ss << "d$";
+        ss << "dT";
       }
       if (param->type().isvar()) {
         ss << "v";
@@ -800,7 +800,7 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
       if (type.dim() > 0) {
         ss << "d" << type.dim();
       } else if (type.dim() < 0) {
-        ss << "d$";
+        ss << "dT";
       }
       if (type.is_set()) {
         ss << "s";
