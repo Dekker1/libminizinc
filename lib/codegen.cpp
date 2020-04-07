@@ -2928,6 +2928,39 @@ CG::Binding bind_ub_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG::Binding(r_agg, b_A.second);
 }
 
+CG::Binding bind_dom_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+  CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
+  int r_A(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
+  // Check for emptiness
+  int r_agg(GET_REG(cg));
+  int r_tmp(GET_REG(cg));
+  int r_i(GET_REG(cg));
+  int r_sz(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_A), CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_i));
+  int l_hd(GET_LABEL(cg));
+  int l_tl(GET_LABEL(cg));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_agg));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_agg), CG::l(l_tl));
+  // Initialize the accumulator
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_i), CG::r(r_agg));
+  PUSH_INSTR(frag, BytecodeStream::DOM, CG::r(r_agg), CG::r(r_agg));
+  // Check if there's a next element.
+  PUSH_LABEL(frag, l_hd);
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_tmp));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_tmp), CG::l(l_tl));
+  // Main loop body.
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_i), CG::r(r_tmp));
+  PUSH_INSTR(frag, BytecodeStream::DOM, CG::r(r_tmp), CG::r(r_tmp));
+  PUSH_INSTR(frag, BytecodeStream::UNION, CG::r(r_agg), CG::r(r_tmp), CG::r(r_agg));
+  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
+  PUSH_LABEL(frag, l_tl);
+  return {r_agg, b_A.second};
+}
+
 template<int X, int Y>
 CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
@@ -3113,6 +3146,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("dom", builtin_t { eval_error_b, bind_dom } ));
   tbl.insert(std::make_pair("lb_array", builtin_t { eval_error_b, bind_lb_array } ));
   tbl.insert(std::make_pair("ub_array", builtin_t { eval_error_b, bind_ub_array } ));
+  tbl.insert(std::make_pair("dom_array", builtin_t { eval_error_b, bind_dom_array } ));
   tbl.insert(std::make_pair("set2array", builtin_t { eval_error_b, bind_set2array } ));
   tbl.insert(std::make_pair("dom_bounds_array", builtin_t { eval_error_b, bind_dom_bounds_array } ));
   tbl.insert(std::make_pair("arg_max", builtin_t { eval_error_b, bind_arg_max } ));
