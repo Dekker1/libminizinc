@@ -482,10 +482,10 @@ namespace MiniZinc {
 
     class IntMax : public PrimitiveMap::Primitive {
     public:
-      IntMax(void) : PrimitiveMap::Primitive("int_max",PrimitiveMap::INT_MAX_,2) {}
+      IntMax(void) : PrimitiveMap::Primitive("int_max",PrimitiveMap::INT_MAX_,3) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = true;
-        for (int j = 0; j < 2; ++j) {
+        for (int j = 0; j < 3; ++j) {
           Val arg = Val::follow_alias(d->arg(j), &i);
           if (arg.isDef()) {
             arg.toDef()->subscribe(d, Definition::SES_ANY);
@@ -511,15 +511,28 @@ namespace MiniZinc {
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
         Val a = Val::follow_alias(d->arg(0), &i);
         Val b = Val::follow_alias(d->arg(1), &i);
+        Val c = Val::follow_alias(d->arg(2), &i);
 
         if ((a.isDef() && !a.toDef()->isBounded()) || (b.isDef() && !b.toDef()->isBounded())) {
           return PS_OK;
-        } else if (a.ub() <= b.lb()) {
-          d->alias(&i, b);
-          return PS_ENTAILED;
-        } else if (b.ub() <= a.lb()) {
-          d->alias(&i, a);
-          return PS_ENTAILED;
+        } else if (a.ub() <= b.lb() || a.ub() < c.lb() || a.lb() > c.ub()) {
+          if (c.isDef()) {
+            c.toDef()->alias(&i, b);
+            return PS_ENTAILED;
+          } else if(b.isDef()) {
+            return b.toDef()->setVal(&i, c()) ? PS_ENTAILED : PS_FAILED;
+          } else {
+            return b == c ? PS_ENTAILED : PS_FAILED;
+          }
+        } else if (b.ub() <= a.lb() || b.ub() < c.lb() || b.lb() > c.ub()) {
+          if (c.isDef()) {
+            c.toDef()->alias(&i, c);
+            return PS_ENTAILED;
+          } else if(a.isDef()) {
+            return a.toDef()->setVal(&i, c()) ? PS_ENTAILED : PS_FAILED;
+          } else {
+            return a == c ? PS_ENTAILED : PS_FAILED;
+          }
         }
 
         IntVal lb, ub;
@@ -530,7 +543,6 @@ namespace MiniZinc {
         } else {
           return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
         }
-        // TODO: Backwards Propagation
       }
     };
 
