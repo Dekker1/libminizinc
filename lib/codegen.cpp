@@ -35,7 +35,7 @@ struct builtin_t {
   std::function<CG::Binding(Call*, Mode, CodeGen&, CG_Builder&)> general;
 };
 
-typedef std::unordered_map<ASTString, builtin_t> builtin_table;
+typedef std::unordered_map<std::string, builtin_t> builtin_table;
 
 const char* instr_names[] = {
       "ADDI",
@@ -3122,10 +3122,10 @@ CG_Cond::T eval_argX_only(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 builtin_table init_builtins(void) {
   builtin_table tbl;
   Constants& c(constants());
-  tbl.insert(std::make_pair(c.ids.sum, builtin_t { eval_error_b, bind_sum } ));
-  tbl.insert(std::make_pair(c.ids.exists, builtin_t { eval_exists, bind_error_g } ));
-  tbl.insert(std::make_pair(c.ids.forall, builtin_t { eval_forall, bind_error_g } ));
-  tbl.insert(std::make_pair(c.ids.assert, builtin_t { eval_assert_b, bind_assert_g } ));
+  tbl.insert(std::make_pair(c.ids.sum.str(), builtin_t { eval_error_b, bind_sum } ));
+  tbl.insert(std::make_pair(c.ids.exists.str(), builtin_t { eval_exists, bind_error_g } ));
+  tbl.insert(std::make_pair(c.ids.forall.str(), builtin_t { eval_forall, bind_error_g } ));
+  tbl.insert(std::make_pair(c.ids.assert.str(), builtin_t { eval_assert_b, bind_assert_g } ));
   tbl.insert(std::make_pair("array1d", builtin_t { eval_error_b, bind_array1d } ));
   tbl.insert(std::make_pair("array2d", builtin_t { eval_error_b, bind_arrayXd<2> } ));
   tbl.insert(std::make_pair("array3d", builtin_t { eval_error_b, bind_arrayXd<3> } ));
@@ -3157,7 +3157,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("dom_bounds_array", builtin_t { eval_error_b, bind_dom_bounds_array } ));
   tbl.insert(std::make_pair("arg_max", builtin_t { eval_error_b, bind_arg_max } ));
   tbl.insert(std::make_pair("card", builtin_t { eval_error_b, bind_card } ));
-  tbl.insert(std::make_pair(c.ids.bool2int, builtin_t { eval_error_b, bind_bool2int } ));
+  tbl.insert(std::make_pair(c.ids.bool2int.str(), builtin_t { eval_error_b, bind_bool2int } ));
   tbl.insert(std::make_pair("uniform", builtin_t { eval_error_b, bind_internal } ));
   tbl.insert(std::make_pair("sol", builtin_t { eval_error_b, bind_internal } ));
   tbl.insert(std::make_pair("sort_by", builtin_t { eval_error_b, bind_internal } ));
