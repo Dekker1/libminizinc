@@ -2325,11 +2325,11 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
     // Bind the in-expression to a register.
     // assert(c->in(g)->type().ispar());
     Expression* in(c->in(g));
-    int r(CG::bind(in, cg, frag).first);
     // std::cout << "Binding R" << r << " to: "; debugprint(in);
     // Open the bindings.
     cg.env_push();
     if(in->type().is_set()) {
+      int r(CG::bind(in, cg, frag).first);
       assert(in->type().ispar());
       for(int d = 0; d < c->n_decls(g); ++d) {
         Forset* iter(new Forset(cg, r));
@@ -2342,7 +2342,10 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
         cg.env().bind(id, CodeGen::Binding(iter->val(), CG_Cond::ttt()));
       }
     } else {
-      assert(in->type().isboolarray() || in->type().isintarray());
+      assert(in->type().isboolarray() || in->type().isintarray() || in->type().isintsetarray());
+      int r(GET_REG(cg));
+      int r_arr(CG::bind(in, cg, frag).first);
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_arr), CG::r(bind_cst(1, cg, frag)), CG::r(r));
       for(int d = 0; d < c->n_decls(g); ++d) {
         Foreach* iter(new Foreach(cg, r));
         nesting.push_back(iter);
