@@ -1518,14 +1518,14 @@ int CG::force(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
   return p->reg[cond.sign()].reg = _force_cond(cond, cg, frag);
 }
 
-CG::Binding force_or_bind(Expression* e, CodeGen& cg, CG_Builder& frag) {
+CG::Binding CG::force_or_bind(Expression* e, CodeGen& cg, CG_Builder& frag) {
   if(e->type().isbool()) {
     return {CG::force(CG::compile(e, cg, frag), cg, frag), CG_Cond::ttt()};
   }
   return CG::bind(e, cg, frag);
 }
 
-int force_or_bind(Expression* e, std::vector<CG_Cond::T>& cond, CodeGen& cg, CG_Builder& frag) {
+int CG::force_or_bind(Expression* e, std::vector<CG_Cond::T>& cond, CodeGen& cg, CG_Builder& frag) {
   if(e->type().isbool()) {
     return CG::force(CG::compile(e, cg, frag), cg, frag);
   } else {
@@ -2991,7 +2991,7 @@ CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& f
 
 CG::Binding bind_bool2int(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
-  return force_or_bind(call->arg(0), cg, frag);
+  return CG::force_or_bind(call->arg(0), cg, frag);
 }
 
 CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
@@ -3617,8 +3617,8 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     OPEN_OTHER(cg, frag);
   }
   std::vector<CG_Cond::T> partial;
-  int r_lhs = force_or_bind(b->lhs(), partial, cg, frag);
-  int r_rhs = force_or_bind(b->rhs(), partial, cg, frag);
+  int r_lhs = CG::force_or_bind(b->lhs(), partial, cg, frag);
+  int r_rhs = CG::force_or_bind(b->rhs(), partial, cg, frag);
 
   int r;
   if(b->type().isvar()) {
@@ -4072,8 +4072,8 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> cond;
   if(b->type().ispar()) {
-    int r_lhs = force_or_bind(b->lhs(), cond, cg, frag);
-    int r_rhs = force_or_bind(b->rhs(), cond, cg, frag);
+    int r_lhs = CG::force_or_bind(b->lhs(), cond, cg, frag);
+    int r_rhs = CG::force_or_bind(b->rhs(), cond, cg, frag);
     std::vector<int> r_cond;
     for(CG_Cond::T c : cond)
       r_cond.push_back(CG::force(c, cg, frag));
@@ -4102,8 +4102,8 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     case BOT_NQ: {
       // Potentially partial.
       // Converted into canonical form by binop_cond.
-      int r_lhs = force_or_bind(b->lhs(), cond, cg, frag);
-      int r_rhs = force_or_bind(b->rhs(), cond, cg, frag);
+      int r_lhs = CG::force_or_bind(b->lhs(), cond, cg, frag);
+      int r_rhs = CG::force_or_bind(b->rhs(), cond, cg, frag);
       cond.push_back(linear_cond(cg, frag, b->op(), ctx, r_lhs, r_rhs));
       return CG_Cond::forall(ctx, cond);
     }
@@ -4221,10 +4221,9 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   for(Expression* e : bindings) {
     if (VarDecl* vd = e->dyn_cast<VarDecl>()) {
       // Bind the new definitions in context
-      // FIXME: Deal with Boolean declarations.
       int r_v;
       if(vd->e()) {
-        CG::Binding b_v(CG::bind(vd->e(), cg, frag));
+        CG::Binding b_v(CG::force_or_bind(vd->e(), cg, frag));
         r_v = b_v.first;
         conj.push_back(b_v.second);
       } else {

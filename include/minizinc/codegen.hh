@@ -507,6 +507,9 @@ struct CG {
   static CG_Cond::T compile(Expression* e, CodeGen& cg, CG_Builder& frag);
   // Reify a condion, putting it in a register.
   static int force(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag);
+  // Force compiled expression or Bind value depending on type
+  static Binding force_or_bind(Expression* e, CodeGen& cg, CG_Builder& frag);
+  static int force_or_bind(Expression* e, std::vector<CG_Cond::T>& cond, CodeGen& cg, CG_Builder& frag);
 
   static void run(CodeGen& cg, Model* m);
 
