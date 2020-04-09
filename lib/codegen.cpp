@@ -317,19 +317,37 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       return;
     case BOT_PLUSPLUS:
     {
+      int r_one(bind_cst(1, cg, frag));
+      int r_vlhs(GET_REG(cg));
+      int r_vrhs(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_lhs), CG::r(r_one), CG::r(r_vlhs));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_rhs), CG::r(r_one), CG::r(r_vrhs));
+
       OPEN_OTHER(cg, frag);
+
       OPEN_VEC(cg, frag);
+        Foreach iter_lhs(cg, r_vlhs);
+        iter_lhs.emit_pre(frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter_lhs.val()));
+        iter_lhs.emit_post(frag);
 
-      Foreach iter_lhs(cg, r_lhs);
-      iter_lhs.emit_pre(frag);
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter_lhs.val()));
-      iter_lhs.emit_post(frag);
+        Foreach iter_rhs(cg, r_vrhs);
+        iter_rhs.emit_pre(frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter_rhs.val()));
+        iter_rhs.emit_post(frag);
+      CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vlhs));
 
-      Foreach iter_rhs(cg, r_rhs);
-      iter_rhs.emit_pre(frag);
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter_rhs.val()));
-      iter_rhs.emit_post(frag);
+      OPEN_VEC(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_one));
+        PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_vlhs), CG::r(r_vrhs));
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_vrhs));
+      CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vrhs));
 
+      OPEN_VEC(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_vlhs));
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_vrhs));
       CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       return;
@@ -502,6 +520,44 @@ int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r
       PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_rhs), CG::r(r_lhs), CG::r(r_tmp));
       PUSH_INSTR(frag, BytecodeStream::UNION, CG::r(r), CG::r(r_tmp), CG::r(r));
       return r;
+    }
+    case BOT_PLUSPLUS:
+    {
+      int r_one(bind_cst(1, cg, frag));
+      int r_vlhs(GET_REG(cg));
+      int r_vrhs(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_lhs), CG::r(r_one), CG::r(r_vlhs));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_rhs), CG::r(r_one), CG::r(r_vrhs));
+
+      OPEN_OTHER(cg, frag);
+
+      OPEN_VEC(cg, frag);
+        Foreach iter_lhs(cg, r_vlhs);
+        iter_lhs.emit_pre(frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter_lhs.val()));
+        iter_lhs.emit_post(frag);
+
+        Foreach iter_rhs(cg, r_vrhs);
+        iter_rhs.emit_pre(frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(iter_rhs.val()));
+        iter_rhs.emit_post(frag);
+      CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vlhs));
+
+      OPEN_VEC(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_one));
+        PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_vlhs), CG::r(r_vrhs));
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_vrhs));
+      CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vrhs));
+
+      OPEN_VEC(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_vlhs));
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_vrhs));
+      CLOSE_AGG(cg, frag);
+      CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vlhs));
+      return r_vlhs;
     }
     default:
       TODO();
