@@ -1505,7 +1505,7 @@ int _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
     CG_Cond::C_Call* call(static_cast<CG_Cond::C_Call*>(p));
     int r;
     Mode m(call->m);
-    if(m != BytecodeProc::ROOT && m != BytecodeProc::ROOT_NEG) {
+    if(m.strength() != CG::Mode::Root) {
       OPEN_OTHER(cg, frag);
       Mode call_m(m.strength(), negated);
       PUSH_INSTR(frag, BytecodeStream::CALL, call_m, call->p, call->params);
@@ -4234,10 +4234,8 @@ CG_Cond::T compile_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     p_arg.push_back(CG_Cond::call(fun.first, fun.second, r_arg));
   } else {
     assert(call->type().isbool());
-    CG_Value ret = CG::r(CG::force(CG_Cond::call(fun.first, fun.second, r_arg), BytecodeProc::FUN, cg, frag));
-    fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
-    assert(fun.second == BytecodeProc::FUN);
-    p_arg.push_back(CG_Cond::call(fun.first, BytecodeProc::FUN, ret));
+    int ret = CG::force(CG_Cond::call(fun.first, fun.second, r_arg), BytecodeProc::FUN, cg, frag);
+    p_arg.push_back(ctx.is_neg() ? CG_Cond::reg(ret) : ~CG_Cond::reg(ret));
   }
   return CG_Cond::forall(ctx, p_arg);
 }
