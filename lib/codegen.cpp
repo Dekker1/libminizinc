@@ -3939,7 +3939,16 @@ CG_Cond::T CG::compile(Expression* e, CodeGen& cg, CG_Builder& frag) {
 
 CG_Cond::T CG::compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
-    return CG_Cond::reg(cg.env().lookup(x->v()).first);
+    CG::Binding b(cg.env().lookup(x->v()));
+    // Check if there is a complex condition
+    if (b.second.get()) {
+      // If so then the register is a placeholder and the condition holds the value
+      assert(b.first == 0xdeadbeef);
+      return b.second;
+    } else {
+      // Otherwise the value should be in the register
+      return CG_Cond::reg(b.first);
+    }
   } catch(const CG_Env<Binding>::NotFound& exn) {
     int g = cg.globals_env.at(x->v());
     int r(GET_REG(cg));
@@ -4259,12 +4268,19 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> partial;
   cg.env_push();
   for(Expression* e : bindings) {
-    if (VarDecl* vd = e->dyn_cast<VarDecl>()) {
+    if (auto vd = e->dyn_cast<VarDecl>()) {
       // Bind the new definitions in context
-      int r_v;
-      if(vd->e()) {
-        CG::Binding b_v(CG::force_or_bind(vd->e(), ctx, cg, frag));
-        r_v = b_v.first;
+      CodeGen::Binding to_bind(0xdeadbeef, CG_Cond::ttt());
+      if(vd->e() && vd->type().isbool()) {
+        CG_Cond::T cond = CG::compile(vd->e(), cg, frag);
+        if (!cond.get()) {
+          to_bind.first = bind_cst(cond.sign(), cg, frag);
+        } else {
+          to_bind.second = cond;
+        }
+      } else if(vd->e()) {
+        CG::Binding b_v(CG::bind(vd->e(), cg, frag));
+        to_bind.first = b_v.first;
         conj.push_back(b_v.second);
       } else {
         // Variable declaration. Assumes is total and nonempty.
@@ -4295,11 +4311,10 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
           }
           CLOSE_AGG(cg, frag);
         }
-        r_v = GET_REG(cg);
-        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_v));
+        to_bind.first = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(to_bind.first));
       }
-      // cg.env().bind(vd->id()->v(), Loc::reg(r_v));
-      cg.env().bind(vd->id()->v(), CodeGen::Binding(r_v, CG_Cond::ttt()));
+      cg.env().bind(vd->id()->v(), to_bind);
     } else {
       conj.push_back(CG::compile(e, cg, frag));
     }
