@@ -3779,20 +3779,27 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> partial;
   cg.env_push();
   for(Expression* e : bindings) {
-    if (VarDecl* vd = e->dyn_cast<VarDecl>()) {
+    if (auto vd = e->dyn_cast<VarDecl>()) {
       // Create the new name
-      int r_v;
-      if(vd->e()) {
+      CG::Binding to_bind(0xdeadbeef, CG_Cond::ttt());
+      if(vd->e() && vd->type().isbool()) {
+        CG_Cond::T cond = CG::compile(vd->e(), cg, frag);
+        if (!cond.get()) {
+          to_bind.first = bind_cst(cond.sign(), cg, frag);
+        } else {
+          to_bind.second = cond;
+        }
+      } else if(vd->e()) {
         // FIXME: Assuming domain isn't constraining.
         CG::Binding b_v(CG::bind(vd->e(), cg, frag));
-        r_v = b_v.first;
+        to_bind.first = b_v.first;
         partial.push_back(b_v.second);
         if(Expression* d = vd->ti()->domain()) {
           if(!vd->ti()->isarray()) {
             CG::Binding b_d = CG::bind(d, cg, frag); // Discarding any constraints on the set.
             partial.push_back(b_d.second);
             int r_dp = GET_REG(cg);
-            PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(r_v), CG::r(b_d.first), CG::r(r_dp));
+            PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(to_bind.first), CG::r(b_d.first), CG::r(r_dp));
           }
         }
       } else {
@@ -3827,10 +3834,10 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
           }
           CLOSE_AGG(cg, frag);
         }
-        r_v = GET_REG(cg);
-        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_v));
+        to_bind.first = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(to_bind.first));
       }
-      cg.env().bind(vd->id()->v(), CodeGen::Binding(r_v, CG_Cond::ttt()));
+      cg.env().bind(vd->id()->v(), to_bind);
     } else {
       // Must be a constraint
       partial.push_back(CG::compile(e, cg, frag));
@@ -3839,7 +3846,7 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   CG::Binding b_in(CG::bind(let->in(), cg, frag));
   partial.push_back(b_in.second);
   cg.env_pop();
-  return CG::Binding(b_in.first, CG_Cond::forall(ctx, partial));
+  return {b_in.first, CG_Cond::forall(ctx, partial)};
 }
 
 CG::Binding CG::bind(Comprehension* comp, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -4279,9 +4286,18 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
           to_bind.second = cond;
         }
       } else if(vd->e()) {
+        // FIXME: Assuming domain isn't constraining.
         CG::Binding b_v(CG::bind(vd->e(), cg, frag));
         to_bind.first = b_v.first;
         conj.push_back(b_v.second);
+        if(Expression* d = vd->ti()->domain()) {
+          if(!vd->ti()->isarray()) {
+            CG::Binding b_d = CG::bind(d, cg, frag); // Discarding any constraints on the set.
+            partial.push_back(b_d.second);
+            int r_dp = GET_REG(cg);
+            PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(to_bind.first), CG::r(b_d.first), CG::r(r_dp));
+          }
+        }
       } else {
         // Variable declaration. Assumes is total and nonempty.
         CG::Binding b_d(bind_domain(vd, cg, frag));
