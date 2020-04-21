@@ -4335,6 +4335,11 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       conj.push_back(CG::compile(e, cg, frag));
     }
   }
+  if (let->ann().contains(constants().ann.promise_total)) {
+    int r = CG::force(CG_Cond::forall(ctx, conj), BytecodeProc::ROOT, cg, frag);
+    conj.clear();
+    conj.push_back(CG_Cond::reg(r));
+  }
   conj.push_back(CG::compile(let->in(), cg, frag));
   return CG_Cond::forall(ctx, conj);
 }

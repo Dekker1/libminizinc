@@ -25,7 +25,8 @@ namespace MiniZinc {
   static void annotate_total(FunctionI* func) {
     class AnnotateTotal : public EVisitor {
     public:
-      void vLet(const Let& let) {
+      void vLet(Let& let) {
+        let.addAnnotation(constants().ann.promise_total);
         ASTExprVec<Expression> bindings(let.let());
         for (auto expr : bindings) {
           if (expr->eid() != Expression::E_VARDECL) {
