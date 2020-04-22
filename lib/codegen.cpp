@@ -3306,7 +3306,7 @@ CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
 CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // Build up the array.
-  std::vector<int> r_vec;
+  std::vector<std::pair<IntLit*, int>> r_vec;
   std::vector<CG_Cond::T> p_vec;
 
   int sz(a->size());
@@ -3315,31 +3315,42 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       CG_Cond::T c(CG::compile((*a)[ii], cg, frag));
       if(!c.get()) {
         if(!c.sign()) {
-          r_vec.push_back(bind_cst(1, cg, frag));
+          r_vec.emplace_back(nullptr, bind_cst(1, cg, frag));
         } else {
-          r_vec.push_back(bind_cst(0, cg, frag));
+          r_vec.emplace_back(nullptr, bind_cst(0, cg, frag));
         }
       } else {
-        r_vec.push_back(CG::force(c, ctx, cg, frag));
+        r_vec.emplace_back(nullptr, CG::force(c, ctx, cg, frag));
       }
+    } else if(auto il = (*a)[ii]->dyn_cast<IntLit>()) {
+      // Avoid lookup cost when constructing large array literals
+      r_vec.emplace_back(il, 0xdeadbeef);
     } else {
       Binding b_ii(CG::bind((*a)[ii], cg, frag));
-      r_vec.push_back(b_ii.first);
+      r_vec.emplace_back(nullptr, b_ii.first);
       p_vec.push_back(b_ii.second);
     }
   }
 
 //  Build Array
+  int r(GET_REG(cg));
   OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
-  for(int r_c : r_vec)
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+  for(auto r_c : r_vec) {
+    if (r_c.first) {
+      assert(r_c.first->v().isFinite());
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(r_c.first->v().toInt()), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+    } else {
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c.second));
+    }
+  }
   CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
-  int rA(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rA));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
 
 //  Build index sets
+  int rI(GET_REG(cg));
   OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   for (int ii = 0; ii < a->dims(); ++ii) {
@@ -3348,19 +3359,18 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
   CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
-  int rI(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rI));
 
 // Combine array and index sets
   OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rA));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
   CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rA));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
 
-  return {rA, CG_Cond::forall(ctx, p_vec)};
+  return {r, CG_Cond::forall(ctx, p_vec)};
 }
 
 CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
