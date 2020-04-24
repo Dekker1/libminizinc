@@ -137,6 +137,8 @@ void CodeGen::register_builtins(void) {
   // Constants
   register_builtin("absent", 1);
   register_builtin("infinity", 1);
+  register_builtin("boolean_domain", 0);
+  register_builtin("infinite_domain", 0);
 
   // Interpreter Built-ins
   register_builtin("uniform", 2);
@@ -1846,8 +1848,18 @@ void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
 
 int locate_range(int l, int u, CodeGen& cg, CG_Builder& frag) {
   CG::Binding b;
-  if(cg.env().cache_lookup_range(l, u, b))
+  if(cg.env().cache_lookup_range(l, u, b)) {
     return b.first;
+  }
+  if (l == 0 && u == 1) {
+    OPEN_OTHER(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("boolean_domain"));
+    CLOSE_AGG(cg, frag);
+    int r = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+    cg.env().cache_store_range(l, u, std::make_pair(r, CG_Cond::ttt()));
+    return r;
+  }
 
   OPEN_VEC(cg, frag); 
   int r = GET_REG(cg);
@@ -1871,13 +1883,8 @@ CG::Binding bind_domain(VarDecl* vd, CodeGen& cg, CG_Builder& frag) {
     return CG::bind(d, cg, frag);
   }
   int r(GET_REG(cg));
-  OPEN_VEC(cg, frag);
   OPEN_OTHER(cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(0, cg, frag)));
-  CLOSE_AGG(cg, frag);
-  OPEN_OTHER(cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(1, cg, frag)));
-  CLOSE_AGG(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinite_domain"));
   CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   return {r, CG_Cond::ttt()};

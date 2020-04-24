@@ -35,6 +35,8 @@ namespace MiniZinc {
       SORT_BY,
       INT_MAX_,
       INFINITY_,
+      INFINITE_DOMAIN,
+      BOOLEAN_DOMAIN,
       SLICE_XD,
       MAX_ID=SLICE_XD,
     };
@@ -586,7 +588,24 @@ namespace MiniZinc {
         }
       };
     };
-  }
+
+    class InfiniteDomain : public PrimitiveMap::Primitive {
+    public:
+      InfiniteDomain() : PrimitiveMap::Primitive("infinite_domain",PrimitiveMap::INFINITE_DOMAIN, 0) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
+        assert(args.size()==0);
+        i.pushAgg(i.infinite_domain(), -1);
+      };
+    };
+
+    class BooleanDomain : public PrimitiveMap::Primitive {
+    public:
+      BooleanDomain() : PrimitiveMap::Primitive("boolean_domain",PrimitiveMap::BOOLEAN_DOMAIN, 0) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
+        assert(args.size()==0);
+        i.pushAgg(i.boolean_domain(), -1);
+      };
+    };
 
   class SliceXd : public PrimitiveMap::Primitive {
   public:
@@ -646,7 +665,7 @@ namespace MiniZinc {
       i.pushAgg(Val(nv), -1);
     };
   };
-
+}
 }
 
 #endif
