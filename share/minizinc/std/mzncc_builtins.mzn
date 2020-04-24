@@ -65,7 +65,7 @@ function bool: op_not(bool: x) = not x;
 function var bool: op_not(var bool: x) ::promise_total =
   let {
     var bool: y;
-    constraint bool_clause([], [x,y]) /\ bool_clause([x,y], []);
+    constraint bool_not(x, y);
   } in y;
 
 /***

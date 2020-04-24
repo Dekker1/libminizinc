@@ -107,14 +107,18 @@ namespace MiniZinc {
 
     class BoolNot : public PrimitiveMap::Primitive {
     public:
-      BoolNot(void) : PrimitiveMap::Primitive("bool_not",PrimitiveMap::BOOLNOT,1) {}
+      BoolNot(void) : PrimitiveMap::Primitive("bool_not",PrimitiveMap::BOOLNOT,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        Val arg = Val::follow_alias(d->arg(0), &i);
-        if (arg.isDef() && !arg.toDef()->isFixed()) {
-          arg.toDef()->subscribe(d, Definition::SES_VAL);
-          return PS_OK;
-        } else {
+        if (d->arg(0).isDef()) {
+          d->arg(0).toDef()->subscribe(d, Definition::SES_VAL);
+        }
+        if (d->arg(1).isDef()) {
+          d->arg(1).toDef()->subscribe(d, Definition::SES_VAL);
+        }
+        if (d->arg(0).isFixed() || d->arg(1).isFixed()) {
           return propagate(i,d);
+        } else {
+          return PS_OK;
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
@@ -193,15 +197,20 @@ namespace MiniZinc {
 
     class Forall : public PrimitiveMap::Primitive {
     public:
-      Forall(void) : PrimitiveMap::Primitive("forall",PrimitiveMap::FORALL,1) {}
+      Forall(void) : PrimitiveMap::Primitive("array_bool_and",PrimitiveMap::FORALL,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = false;
-        for (unsigned int i=0; i<d->arg(0).size(); i++) {
-          if (d->arg(0)[i].isDef()) {
-            d->arg(0)[i].toDef()->subscribe(d, Definition::SES_VAL);
+        for (unsigned int j=0; j<d->arg(0)[0].size(); j++) {
+          if (d->arg(0)[0][j].isDef()) {
+            d->arg(0)[0][j].toDef()->subscribe(d, Definition::SES_VAL);
           } else {
             propImmediately = true;
           }
+        }
+        if (d->arg(1).isDef()) {
+          d->arg(1).toDef()->subscribe(d, Definition::SES_VAL);
+        } else {
+          propImmediately = true;
         }
         if (propImmediately) {
           return propagate(i,d);
@@ -221,19 +230,21 @@ namespace MiniZinc {
 
     class Exists : public PrimitiveMap::Primitive {
     public:
-      Exists(void) : PrimitiveMap::Primitive("exists",PrimitiveMap::EXISTS,1) {}
+      Exists(void) : PrimitiveMap::Primitive("array_bool_or",PrimitiveMap::EXISTS,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = false;
-        for (int j = 0; j < Val::follow_alias(d->arg(0), &i).size(); ++j) {
-          Val arg = Val::follow_alias(d->arg(0)[j], &i);
-          if (arg.isDef()) {
-            arg.toDef()->subscribe(d, Definition::SES_ANY);
-            if (arg.toDef()->isFixed()) {
-              propImmediately = true;
-            }
+        for (int j = 0; j < d->arg(0)[0].size(); ++j) {
+          if (d->arg(0)[0][j].isDef()) {
+            d->arg(0)[0][j].toDef()->subscribe(d, Definition::SES_VAL);
+          } else {
+            propImmediately = true;
           }
         }
-        propImmediately = propImmediately || Val::follow_alias(d->arg(0), &i).size() <= 1;
+        if (d->arg(1).isDef()) {
+          d->arg(1).toDef()->subscribe(d, Definition::SES_VAL);
+        } else {
+          propImmediately = true;
+        }
         if (propImmediately) {
           return propagate(i,d);
         } else {
@@ -241,23 +252,14 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (int j = 0; j < Val::follow_alias(d->arg(0), &i).size(); ++j) {
-          Val arg = Val::follow_alias(d->arg(0)[j], &i);
+        for (int j = 0; j < d->arg(0)[0].size(); ++j) {
+          Val arg = Val::follow_alias(d->arg(0)[0][j], &i);
           if (arg.isDef()) {
             arg.toDef()->unsubscribe(d);
           }
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        int size = Val::follow_alias(d->arg(0), &i).size();
-        if (size == 0) {
-          return PS_FAILED;
-        } else if (size == 1) {
-          Val arg = Val::follow_alias(d->arg(0)[0], &i);
-          d->alias(&i, arg);
-        }
-
-        // TODO: More propagation
         return PS_OK;
       }
     };

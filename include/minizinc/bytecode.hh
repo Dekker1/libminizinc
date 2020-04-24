@@ -350,6 +350,7 @@ namespace MiniZinc {
     }
     IntVal lb() const;
     IntVal ub() const;
+    bool isFixed() const;
   };
   
   class Vec : public RefCountedObject {
