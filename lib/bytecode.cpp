@@ -1824,6 +1824,7 @@ namespace MiniZinc {
         {
           DBG_INTERPRETER("RET\n");
           assert(!_stack.empty());
+execute_ret:
           if (_stack.size()==1) {
             // Always leave final frame on the stack
             return;
@@ -2002,10 +2003,54 @@ namespace MiniZinc {
               break;
             }
           }
-          // Replace frame with new procedure
-          frame->bs = &_procs[code].mode[mode];
-          frame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
-          frame->pc = 0;
+          if (_procs[code].mode[mode].size() == 0 || _procs[code].delay) {
+            DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
+            // this is a FlatZinc builtin
+            int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
+            Val dom;
+            switch (mode) {
+              case BytecodeProc::ROOT:
+                dom = Val(IntVal(1));
+                break;
+              case BytecodeProc::ROOT_NEG:
+                dom = Val(IntVal(0));
+                break;
+              case BytecodeProc::IMP:
+              case BytecodeProc::IMP_NEG:
+                dom = boolean_domain();
+                break;
+              default:
+                dom = infinite_domain();
+                break;
+            }
+            Definition* def = Definition::a(this,dom,false,code,mode,args,ident);
+            for (const Val& arg : args) {
+              if (arg.isDef()) {
+                Definition* argDef = arg.toDef();
+                if (!argDef->attached()) {
+                  def->defs(this, argDef);
+                }
+              }
+            }
+            pushDef(def);
+            if (ident >= 0) {
+              pushAgg(Val(def), -1);
+            }
+            if (cse_suited) {
+              Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
+              cse_insert(code, cse_key, mode, v);
+            }
+            if (_procs[code].delay) {
+              def->addWRef(this);
+              delayed_calls.push_back(def);
+            }
+            goto execute_ret;
+          } else {
+            // Replace frame with new procedure
+            frame->bs = &_procs[code].mode[mode];
+            frame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
+            frame->pc = 0;
+          }
         }
           break;
         case BytecodeStream::TRACE:
