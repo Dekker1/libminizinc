@@ -31,6 +31,7 @@ namespace MiniZinc {
       INT_LIN_EQ,
       UNIFORM,
       SOL,
+      SORT,
       SORT_BY,
       INT_MAX_,
       INFINITY_,
@@ -447,6 +448,29 @@ namespace MiniZinc {
         Val sol(it->second);
 
         i.pushAgg(sol, -1);
+      };
+    };
+
+    class Sort : public PrimitiveMap::Primitive {
+    public:
+      Sort() : PrimitiveMap::Primitive("sort",PrimitiveMap::SORT, 1) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
+        assert(args.size()==1);
+
+        Val al = args[0][0];
+        std::vector<int> ai(al.size());
+        for (int j=0; j < al.size(); j++) {
+          ai[j] = al[j]().toInt();
+        }
+        std::stable_sort(ai.begin(), ai.end());
+
+        std::vector<Val> sorted(al.size());
+        for (int j=0; j < al.size(); j++) {
+          sorted[j] = Val(ai[j]);
+        }
+        Vec* al_sorted = Vec::allocate_array(&i, i.newIdent(), sorted);
+
+        i.pushAgg(Val(al_sorted), -1);
       };
     };
 
