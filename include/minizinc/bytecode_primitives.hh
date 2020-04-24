@@ -480,8 +480,8 @@ namespace MiniZinc {
       virtual void execute(Interpreter& i, const std::vector<Val>& args) {
         assert(args.size()==2);
 
-        Val al = args[0];
-        Val order_e = args[1];
+        Val al = args[0][0];
+        Val order_e = args[1][0];
         std::vector<IntVal> order(order_e.size());
         std::vector<int> a(order_e.size());
         for (int j=0; j < order.size(); j++) {
@@ -500,7 +500,7 @@ namespace MiniZinc {
         for (int j = sorted.size(); j--;) {
           sorted[j] = al[a[j]];
         }
-        Vec* al_sorted = Vec::a(&i, i.newIdent(), sorted);
+        Vec* al_sorted = Vec::allocate_array(&i, i.newIdent(), sorted);
 
         i.pushAgg(Val(al_sorted), -1);
       };

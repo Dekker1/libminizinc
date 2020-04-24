@@ -25,13 +25,14 @@ namespace MiniZinc {
     IntLinEq int_lin_eq;
     Uniform uniform;
     Sol sol;
+    Sort sort;
     SortBy sortby;
     IntMax intmax;
     Infinity infinity;
     SliceXd slice_xd;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &int_lin_eq, &uniform, &sol, &sortby, &intmax, &infinity, &slice_xd,
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &intsum, &inttimes, &int_lin_eq, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &slice_xd,
     };
   }
   
