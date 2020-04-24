@@ -1927,8 +1927,10 @@ private:
         post_cond(cg, root_frag, b_d.second);
         int r_d = b_d.first;
 
+        r_var = GET_REG(cg);
         if(vd->ti()->isarray()) {
           // Open nested iterators
+          int rTMP(GET_REG(cg));
           std::vector<int> r_regs;
           for(Expression* r : vd->ti()->ranges()) {
             Expression* dim(r->template cast<TypeInst>()->domain());
@@ -1948,10 +1950,23 @@ private:
             nesting[r_i].emit_post(root_frag);
           }
           CLOSE_AGG(cg, root_frag);
+          PUSH_INSTR(root_frag, BytecodeStream::POP, CG::r(r_var));
+          OPEN_VEC(cg, root_frag);
+          for(int r_r : r_regs) {
+            PUSH_INSTR(root_frag, BytecodeStream::GET_VEC, CG::r(r_r), CG::r(bind_cst(1, cg, root_frag)), CG::r(rTMP));
+            PUSH_INSTR(root_frag, BytecodeStream::PUSH, CG::r(rTMP));
+            PUSH_INSTR(root_frag, BytecodeStream::GET_VEC, CG::r(r_r), CG::r(bind_cst(2, cg, root_frag)), CG::r(rTMP));
+            PUSH_INSTR(root_frag, BytecodeStream::PUSH, CG::r(rTMP));
+          }
+          CLOSE_AGG(cg, root_frag);
+          PUSH_INSTR(root_frag, BytecodeStream::POP, CG::r(rTMP));
+          OPEN_VEC(cg, root_frag);
+          PUSH_INSTR(root_frag, BytecodeStream::PUSH, CG::r(r_var));
+          PUSH_INSTR(root_frag, BytecodeStream::PUSH, CG::r(rTMP));
+          CLOSE_AGG(cg, root_frag);
         } else {
           PUSH_INSTR(root_frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(r_d));
         }
-        r_var = GET_REG(cg);
         PUSH_INSTR(root_frag, BytecodeStream::POP, CG::r(r_var));
       }
       // Now copy it into a global, and add it to the env.
@@ -3813,6 +3828,7 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         }
       } else {
         // Variable declaration. Assumes is total and nonempty.
+        to_bind.first = GET_REG(cg);
         CG::Binding b_d(bind_domain(vd, cg, frag));
         int r_d = b_d.first; // Ignoring constraints introduced by domain.
         partial.push_back(b_d.second);
@@ -3822,6 +3838,7 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
           CLOSE_AGG(cg, frag);
         } else {
           // Open nested iterators
+          int rTMP(GET_REG(cg));
           std::vector<int> r_regs;
           for(Expression* r : vd->ti()->ranges()) {
             Expression* dim(r->template cast<TypeInst>()->domain());
@@ -3842,8 +3859,21 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
             nesting[r_i].emit_post(frag);
           }
           CLOSE_AGG(cg, frag);
+          PUSH_INSTR(frag, BytecodeStream::POP, CG::r(to_bind.first));
+          OPEN_VEC(cg, frag);
+          for(int r_r : r_regs) {
+            PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_r), CG::r(bind_cst(1, cg, frag)), CG::r(rTMP));
+            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rTMP));
+            PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_r), CG::r(bind_cst(2, cg, frag)), CG::r(rTMP));
+            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rTMP));
+          }
+          CLOSE_AGG(cg, frag);
+          PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rTMP));
+          OPEN_VEC(cg, frag);
+            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(to_bind.first));
+            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rTMP));
+          CLOSE_AGG(cg, frag);
         }
-        to_bind.first = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(to_bind.first));
       }
       cg.env().bind(vd->id()->v(), to_bind);
@@ -4310,12 +4340,14 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       } else {
         // Variable declaration. Assumes is total and nonempty.
         CG::Binding b_d(bind_domain(vd, cg, frag));
+        to_bind.first = GET_REG(cg);
         if(!vd->ti()->isarray()) {
           conj.push_back(b_d.second);
           OPEN_OTHER(cg, frag);
           PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::RAW, cg.find_builtin("mk_intvar"), CG::r(b_d.first));
           CLOSE_AGG(cg, frag);
         } else {
+          int rTMP(GET_REG(cg));
           std::vector<int> r_regs;
           for(Expression* r : vd->ti()->ranges()) {
             Expression* dim(r->template cast<TypeInst>()->domain());
@@ -4335,8 +4367,21 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
             nesting[r_i].emit_post(frag);
           }
           CLOSE_AGG(cg, frag);
+          PUSH_INSTR(frag, BytecodeStream::POP, CG::r(to_bind.first));
+          OPEN_VEC(cg, frag);
+          for(int r_r : r_regs) {
+            PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_r), CG::r(bind_cst(1, cg, frag)), CG::r(rTMP));
+            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rTMP));
+            PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_r), CG::r(bind_cst(2, cg, frag)), CG::r(rTMP));
+            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rTMP));
+          }
+          CLOSE_AGG(cg, frag);
+          PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rTMP));
+          OPEN_VEC(cg, frag);
+          PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(to_bind.first));
+          PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rTMP));
+          CLOSE_AGG(cg, frag);
         }
-        to_bind.first = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(to_bind.first));
       }
       cg.env().bind(vd->id()->v(), to_bind);
