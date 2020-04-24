@@ -849,6 +849,15 @@ namespace MiniZinc {
     }
   }
 
+  bool Val::isFixed() const {
+    if (isInt()) {
+      return true;
+    } else {
+      assert(isDef());
+      return toDef()->isFixed();
+    }
+  }
+
   CSETable::Key::Key(const std::vector<Val> &vec) {
     _size = vec.size();
     // TODO: Should CSEKeys compare arrays with the same content again?
@@ -1428,8 +1437,9 @@ namespace MiniZinc {
         {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("MOV R" << r1 << " R" << r2 << "\n");
+          DBG_INTERPRETER("MOV R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" );
           frame->reg.cp(this, r1,r2);
+          DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")"  << "\n");
         }
           break;
         case BytecodeStream::JMP:
@@ -2141,16 +2151,28 @@ namespace MiniZinc {
                   pushAgg(IntVal(!isFalse),-2);
                 } else if (_agg.size()==2) {
                   // Push into root context
-                  Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::FORALL,BytecodeProc::ROOT,
-                                                {Val(Vec::a(this,newIdent(),args))},-1);
-                  if (defs) {
-                    d->appendBefore(this, defs);
-                  } else {
-                    defs = d;
+                  for (Val v : args) {
+                    auto succes = v.toDef()->setVal(this, 1);
+                    //FIXME: Deal with unsuccessful setVal
+                    assert(succes);
                   }
+
+                  // Why do we need a definition? If this is in ROOT, then all arguments should be true
+                  /* Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::FORALL,BytecodeProc::ROOT, */
+                  /*                               {Val(Vec::a(this,newIdent(),args))},-1); */
+                  /* if (defs) { */
+                  /*   d->appendBefore(this, defs); */
+                  /* } else { */
+                  /*   defs = d; */
+                  /* } */
+                } else if (args.size() == 1) {
+                  pushAgg(args[0], -2);
                 } else {
-                  result = Definition::a(this,boolean_domain(),false,PrimitiveMap::FORALL,BytecodeProc::FUN,
-                                         {Val(Vec::a(this,newIdent(),args))},newIdent());
+                  Vec* arr = Vec::allocate_array(this, newIdent(), args);
+                  result = Definition::a(this,infinite_domain(),false,PrimitiveMap::MK_INTVAR,BytecodeProc::RAW,{boolean_domain()},newIdent());
+                  auto ndefs = Definition::a(this,Val(1),false,PrimitiveMap::FORALL,BytecodeProc::ROOT,{Val(arr), Val(result)},newIdent());
+                  result->defs(this, ndefs);
+
                   pushAgg(Val(result),-2);
                 }
               }
@@ -2165,10 +2187,12 @@ namespace MiniZinc {
                 bool isTrue = false;
                 for (int i=0; i<_agg.back().size(); i++) {
                   const Val& v = _agg.back()[i];
-                  if (v.isInt() && v()!=0) {
-                    // Disjunction is constant true
-                    isTrue = true;
-                    break;
+                  if (v.isInt()) {
+                    if(v()!=0) {
+                      // Disjunction is constant true
+                      isTrue = true;
+                      break;
+                    }
                   } else {
                     args.push_back(v);
                   }
@@ -2178,16 +2202,23 @@ namespace MiniZinc {
                   pushAgg(IntVal(isTrue),-2);
                 } else if (_agg.size()==2) {
                   // Push into root context
-                  Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::EXISTS,BytecodeProc::ROOT,
-                                                {Val(Vec::a(this,newIdent(),args))},-1);
+                  Vec* arr = Vec::allocate_array(this, newIdent(), args);
+                  Vec* empty = Vec::allocate_array(this, newIdent(), {});
+                  Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::CLAUSE,BytecodeProc::ROOT,
+                                                {Val(arr), Val(empty)},-1);
                   if (defs) {
                     d->appendBefore(this, defs);
                   } else {
                     defs = d;
                   }
+                } else if (args.size() == 1) {
+                  pushAgg(args[0],-2);
                 } else {
-                  result = Definition::a(this,boolean_domain(),false,PrimitiveMap::EXISTS,BytecodeProc::FUN,
-                                         {Val(Vec::a(this,newIdent(),args))},newIdent());
+                  Vec* arr = Vec::allocate_array(this, newIdent(), args);
+                  result = Definition::a(this,infinite_domain(),false,PrimitiveMap::MK_INTVAR,BytecodeProc::RAW,{boolean_domain()},newIdent());
+                  auto ndefs = Definition::a(this,Val(1),false,PrimitiveMap::EXISTS,BytecodeProc::ROOT,{Val(arr), Val(result)},newIdent());
+                  result->defs(this, ndefs);
+
                   pushAgg(Val(result),-2);
                 }
               }
