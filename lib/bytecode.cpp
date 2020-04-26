@@ -2107,7 +2107,12 @@ execute_ret:
               frame->pc = frame->bs->size()-1;
             }
           } else {
-            v1.toDef()->domain(this, std::vector<Val>({IntVal(1),IntVal(1)}), true);
+            bool success = v1.toDef()->setVal(this, 1);
+            if (!success) {
+              _status = INCONSISTENT;
+              // Invariant: Last instruction in the frame is always an ABORT instruction
+              frame->pc = frame->bs->size()-1;
+            }
           }
         }
           break;
