@@ -2436,6 +2436,7 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       */
     default:
       {
+        int r(GET_REG(cg));
         OPEN_OTHER(cg, frag);
         CG::Binding b_param(CG::bind(param, cg, frag));
         int r_A(b_param.first);
@@ -2451,10 +2452,10 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         for(int r_c : p_A) {
           PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
         }
-        FOREACH(RETN()(r_A), PUSH())(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(1, cg, frag)), CG::r(r));
+        FOREACH(RETN()(r), PUSH())(cg, frag);
         CLOSE_AGG(cg, frag);
         CLOSE_AGG(cg, frag);
-        int r(GET_REG(cg));
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
         return CG_Cond::reg(r);
       }
