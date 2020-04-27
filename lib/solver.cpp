@@ -675,7 +675,9 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   }
   if (verbose) {
     std::cerr << "Status: " << Interpreter::status_to_string[interpreter->status()] << std::endl;
-    interpreter->dumpState(std::cerr);
+    if (interpreter->status() == Interpreter::ROGER) {
+      interpreter->dumpState(std::cerr);
+    }
     std::cerr << "----------------" << std::endl;
   }
   switch (interpreter->status()) {
