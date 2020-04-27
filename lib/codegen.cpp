@@ -2490,16 +2490,17 @@ CG_Cond::T eval_exists(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       */
     default:
       {
+        int r(GET_REG(cg));
         // Otherwise, get the result into a register...
         CG::Binding b_A(CG::bind(param, cg, frag));
         int r_A(b_A.first);
         // and push every element.
         OPEN_OTHER(cg, frag);
         OPEN_OR(cg, frag);
-        FOREACH(RETN()(r_A), PUSH())(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(bind_cst(1, cg, frag)), CG::r(r));
+        FOREACH(RETN()(r), PUSH())(cg, frag);
         CLOSE_AGG(cg, frag);
         CLOSE_AGG(cg, frag);
-        int r(GET_REG(cg));
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
         return CG_Cond::forall(ctx, b_A.second, CG_Cond::reg(r));
       }
