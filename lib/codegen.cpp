@@ -2102,12 +2102,14 @@ private:
     }
     
     // Now compile the result. 
+    OPEN_OTHER(cg, frag);
     CG_Cond::T cond(CG::compile(e, cg, frag));
     if(m == BytecodeProc::ROOT) {
       post_cond(cg, frag, cond);
     } else {
       aggregate_cond(cg, frag, m.is_neg() ? ~cond : cond);
     }
+    CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::RET);
 
     cg.current_reg_count = saved_regs;
@@ -3358,7 +3360,6 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
 //  Build Array
   int r(GET_REG(cg));
-  OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
   for(auto r_c : r_vec) {
     if (r_c.first) {
@@ -3370,27 +3371,27 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     }
   }
   CLOSE_AGG(cg, frag);
-  CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
 
 //  Build index sets
-  int rI(GET_REG(cg));
-  OPEN_OTHER(cg, frag);
-  OPEN_VEC(cg, frag);
-  for (int ii = 0; ii < a->dims(); ++ii) {
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(a->min(ii), cg, frag)));
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(a->max(ii), cg, frag)));
+  int rI;
+  if ( a->dims() == 1) {
+    rI = (locate_range(a->min(0), a->max(0), cg, frag));
+  } else {
+    rI = GET_REG(cg);
+    OPEN_VEC(cg, frag);
+    for (int ii = 0; ii < a->dims(); ++ii) {
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(a->min(ii), cg, frag)));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(a->max(ii), cg, frag)));
+    }
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rI));
   }
-  CLOSE_AGG(cg, frag);
-  CLOSE_AGG(cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(rI));
 
 // Combine array and index sets
-  OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
-  CLOSE_AGG(cg, frag);
   CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
 
