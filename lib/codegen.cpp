@@ -3054,8 +3054,8 @@ template<int X, int Y>
 CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   int r(GET_REG(cg));
-  OPEN_OTHER(cg, frag);
   CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
+  OPEN_OTHER(cg, frag);
   {
     OPEN_VEC(cg, frag);
     int r_tmp(GET_REG(cg));
@@ -3147,22 +3147,23 @@ CG::Binding bind_card(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_i), CG::r(r_sz), CG::r(r_e));
   PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_e), CG::l(l_hd));
   PUSH_LABEL(frag, l_tl);
-  return CG::Binding(r, CG_Cond::ttt());
+  return CG::Binding(r, b_A.second);
 }
 
 CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::string name = call->decl()->id().str();
   CG_ProcID proc = cg.find_builtin(name);
   int r_res(GET_REG(cg));
-  OPEN_OTHER(cg, frag);
 
   std::vector<CG_Value> r_args(call->n_args());
+  std::vector<CG_Cond::T> p_args(call->n_args());
   for (int i = 0; i < call->n_args(); ++i) {
     CG::Binding b_arg(CG::bind(call->arg(i), cg, frag));
     r_args[i] = CG::r(b_arg.first);
-    // TODO: What about the CG_Cond (how do they aggregate for builtin calls?)
+    p_args[i] = b_arg.second;
   }
 
+  OPEN_OTHER(cg, frag);
   // Push BUILTIN instruction with the correct id
   PUSH_INSTR(frag, BytecodeStream::BUILTIN, proc);
   // Append instruction with register arguments
@@ -3172,7 +3173,7 @@ CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_res));
 
-  return {r_res, CG_Cond::ttt()};
+  return {r_res, CG_Cond::forall(ctx, p_args)};
 }
 
 CG_Cond::T eval_context_is_root(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -3701,15 +3702,13 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  if (b->type().isvar()) {
-    OPEN_OTHER(cg, frag);
-  }
   std::vector<CG_Cond::T> partial;
   int r_lhs = CG::force_or_bind(b->lhs(), ctx, partial, cg, frag);
   int r_rhs = CG::force_or_bind(b->rhs(), ctx, partial, cg, frag);
 
   int r;
   if(b->type().isvar()) {
+    OPEN_OTHER(cg, frag);
     call_binop(cg, frag, BytecodeProc::FUN, b->op(), r_lhs, r_rhs);
     CLOSE_AGG(cg, frag);
     r = GET_REG(cg);
@@ -3749,13 +3748,11 @@ CG::Binding CG::bind(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     case UOT_PLUS:
       return CG::bind(u->e(), cg, frag);
     case UOT_MINUS: {
-      if (u->type().isvar()) {
-        OPEN_OTHER(cg, frag);
-      }
       Binding b_e(CG::bind(u->e(), cg, frag));
       int r;
       if(u->type().isvar()) {
         GCLock lock;
+        OPEN_OTHER(cg, frag);
         auto fun = find_call_fun(cg, {"op_minus"}, Type::varint(), {Type::varint()}, BytecodeProc::FUN);
         assert(fun.second == BytecodeProc::FUN);
         PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(b_e.first));
@@ -3774,21 +3771,21 @@ CG::Binding CG::bind(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
 CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // Collects the partiality of the arguments
-  std::vector<CG_Cond::T> p_arg;
-
-  OPEN_OTHER(cg, frag);
   int sz = call->n_args();
   std::vector<CG_Value> r_arg(sz);
+  std::vector<CG_Cond::T> p_arg(sz);
   for(int ii = 0; ii < sz; ++ii) {
     CG::Binding r_bind(CG::force_or_bind(call->arg(ii), BytecodeProc::FUN, cg, frag));
     r_arg[ii] = CG::r(r_bind.first);
-    p_arg.push_back(r_bind.second);
+    p_arg[ii] = r_bind.second;
   }
 
+  OPEN_OTHER(cg, frag);
   // Bind the value part.
   auto fun = find_call_fun(cg, call, BytecodeProc::ROOT);
   PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, r_arg);
   CLOSE_AGG(cg, frag);
+
   int r_ret(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
 
