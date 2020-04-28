@@ -1612,10 +1612,7 @@ private:
       if(vd->type().ispar()) {
         if(!vd->e()) {
           // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
-          cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
-          std::cout << "%% " << vd->id()->v() << " ~> " << cg.num_globals << std::endl;
-          // FIXME
-          ++cg.num_globals;
+          int g = cg.add_global(vd->id()->v(), true);
         }
       } else {
         // If it's a var with a body, feed it into the mode analyser.
@@ -1739,6 +1736,11 @@ void show_frag(O& out, CodeGen& cg, std::vector<CG_Instr>& frag) {
 
 template<class O>
 void show(O& out, CodeGen& cg) {
+  for (auto g : cg.globals_env ) {
+    if (g.second.second) {
+      out << "GLOBAL " << g.second.first << " " << g.first << std::endl;
+    }
+  }
   for(auto b : cg._builtins) {
     out << ":" << b.first << ": " << b.second << std::endl;
   }
@@ -1977,10 +1979,8 @@ private:
         PUSH_INSTR(root_frag, BytecodeStream::POP, CG::r(r_var));
       }
       // Now copy it into a global, and add it to the env.
-      PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r_var), CG::g(cg.num_globals));
-      std::cout << "%% " << vd->id()->v() << cg.num_globals << std::endl;
-      cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
-      ++cg.num_globals;
+      int g = cg.add_global(vd->id()->v(), false);
+      PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r_var), CG::g(g));
 
       // Since it's still in a register, add it to the current env as well.
       cg.env().bind(vd->id()->str(), CG::Binding(r_var, CG_Cond::ttt()));
@@ -1998,10 +1998,8 @@ private:
           post_cond(cg, root_frag, b_d.second);
           r = b_d.first;
         }
-        PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r), CG::g(cg.num_globals));
-        cg.globals_env.insert(std::make_pair(vd->id()->v(), cg.num_globals));
-
-        ++cg.num_globals;
+        int g = cg.add_global(vd->id()->v(), false);
+        PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r), CG::g(g));
 
         cg.env().bind(vd->id()->str(), CG::Binding(r, CG_Cond::ttt()));
       }
@@ -2120,7 +2118,6 @@ private:
   CodeGen& cg;
   CG_Builder root_frag;
 
-  int globals_count;
   // int bool_dom;
 public:
   static void run(CodeGen& cg, Model* m) {
@@ -2164,7 +2161,7 @@ public:
             args
           );
           call.type(Type::varbool());
-          Let let(Location().introduce(), {&new_var}, &call);
+          Let let(Location().introduce(), {&new_var, &call}, new_var.id());
           let.type(Type::varbool());
           let.addAnnotation(constants().ann.promise_total);
           c.compile_pred(frag, fun->params(), call_mode, &let);
@@ -3267,7 +3264,7 @@ CG::Binding CG::bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
     return CG::Binding(cg.env().lookup(x->v()).first, CG_Cond::ttt());
   } catch(const CG_Env<CodeGen::Binding>::NotFound& exn) {
-    int g = cg.globals_env.at(x->v());
+    int g = cg.find_global(x->v());
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(g), CG::r(r));
     return CG::Binding(r, CG_Cond::ttt());
@@ -4003,7 +4000,7 @@ CG_Cond::T CG::compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       return CG_Cond::reg(b.first);
     }
   } catch(const CG_Env<Binding>::NotFound& exn) {
-    int g = cg.globals_env.at(x->v());
+    int g = cg.find_global(x->v());
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(g), CG::r(r));
     return CG_Cond::reg(r);

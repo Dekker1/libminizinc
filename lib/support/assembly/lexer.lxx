@@ -32,6 +32,7 @@ using namespace MiniZinc;
 ":"         { return MZA_COLON; }
 [dD]        { return MZA_DELAY; }
 
+"GLOBAL"    { return MZA_GLOBAL; }
 
 "ADDI"      { mza_yylval.bValue = BytecodeStream::ADDI; return MZA_ADDI; }
 "SUBI"      { mza_yylval.bValue = BytecodeStream::SUBI; return MZA_SUBI; }

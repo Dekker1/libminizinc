@@ -26,19 +26,13 @@ using namespace MiniZinc;
 
 int main(int argc, const char** argv) {
   
-  if (argc < 2) {
-    std::cerr << "Usage: mznasm [-v] <ASMFILE>\n";
-    return 1;
-  }
-
-  std::string filename = argv[argc-1];
   std::vector<std::string> args;
-  for (int i = 1; i < argc-1; ++i) {
+  for (int i = 1; i < argc; ++i) {
     args.emplace_back(argv[i]);
   }
 
   try {
-    MznSolver slv(filename, "gecode_presolver", args);
+    MznSolver slv(args);
     auto result = slv.run();
     std::cout << result.second;
   } catch (Error& e) {

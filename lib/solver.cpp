@@ -150,9 +150,9 @@ void SolverFactory::destroySI(SolverInstanceBase * pSI) {
   sistorage.erase(it);
 }
 
-MznSolver::MznSolver(const std::string& file, const std::string& solver, std::vector<std::string> args0)
-  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()), file(file), solver_str(solver) {
-  std::vector<std::string> args = {executable_name, "--solver", solver_str};
+MznSolver::MznSolver(std::vector<std::string> args0)
+  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()) {
+  std::vector<std::string> args = {executable_name};
   args.insert(args.end(), args0.begin(), args0.end());
   switch (processOptions(args)) {
     case OPTION_FINISH:
@@ -614,10 +614,21 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
       // } else if ((!isMznMzn || is_mzn2fzn) && flt.processOption(i, argv)) {
       } else if (sf != NULL && sf->processOption(si_opt, i, argv)) {
       } else {
-        std::string executable_name(argv[0]);
-        executable_name = executable_name.substr(executable_name.find_last_of("/\\") + 1);
-        log << executable_name << ": Unrecognized option or bad format `" << argv[i] << "'" << endl;
-        return OPTION_ERROR;
+        size_t last_dot = argv[i].find_last_of('.');
+        if (last_dot != string::npos) {
+          std::string extension = argv[i].substr(last_dot,string::npos);
+          if (extension == ".uzn" || extension == ".mza") {
+            assert(file == "");
+            file = argv[i];
+          } else if (extension == ".dzn") {
+            data_files.push_back(argv[i]);
+          }
+        } else {
+          std::string executable_name(argv[0]);
+          executable_name = executable_name.substr(executable_name.find_last_of("/\\") + 1);
+          log << executable_name << ": Unrecognized option or bad format `" << argv[i] << "'" << endl;
+          return OPTION_ERROR;
+        }
       }
     }
     return OPTION_OK;
@@ -640,13 +651,17 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
 
 void MznSolver::flatten(const std::string& filename, const std::string& modelName)
 {
+  if (!FileUtils::file_exists(filename)) {
+    std::cerr << "Error: cannot open assembly file '" << filename << "'." << std::endl;
+    return;
+  }
   bool verbose = flag_compiler_verbose;
   Timer tm01;
   std::ifstream t(filename, std::ifstream::in);
   std::string str((std::istreambuf_iterator<char>(t)),
                   std::istreambuf_iterator<char>());
   // Parse assembly file
-  bs = parse_mza(str);
+  std::tie(bs, globals) = parse_mza(str);
   if (verbose) {
     std::cerr << "Disassembled code:\n";
     for (auto& b : bs) {
@@ -664,7 +679,106 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   }
   // The main procedure is the last one in the file
   BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT]);
-  interpreter =  new Interpreter(bs, frame);
+  interpreter = new Interpreter(bs, frame);
+  // Parse and add data
+  if (!data_files.empty()) {
+    Env env(new Model);
+    Model* m = parseData(env, env.model(), data_files, {}, true, false, verbose, std::cerr);
+    debugprint(m);
+    for (auto it : *m) {
+      if (auto ai = it->dyn_cast<AssignI>()) {
+        auto glob = globals.find(ai->id().str());
+        if (glob != globals.end()) {
+          Expression* expr = ai->e();
+          Val v;
+          switch (expr->eid()) {
+            case Expression::E_INTLIT:
+            {
+              IntVal iv(eval_int(env.envi(), expr));
+              v = Val(iv);
+            }
+            break;
+            case Expression::E_BOOLLIT:
+            {
+              bool b(eval_bool(env.envi(), expr));
+              v = Val(b);
+            }
+            break;
+            case Expression::E_ARRAYLIT:
+            {
+              ArrayLit* al = eval_array_lit(env.envi(), expr);
+              std:vector<Val> content(al->size());
+              for (size_t i = 0; i < al->size(); ++i) {
+                if ((*al)[i]->eid() == Expression::E_BOOLLIT) {
+                  bool b(eval_bool(env.envi(), (*al)[i]));
+                  content[i] = Val(b);
+                } else if ((*al)[i]->eid() == Expression::E_SETLIT) {
+                  IntSetVal* sl = eval_intset(env.envi(), expr); 
+                  std::vector<Val> ranges(sl->size()*2);
+                  for (size_t i = 0; i < sl->size(); ++i) {
+                    ranges[i*2] = Val(sl->min(i));
+                    ranges[i*2+1] = Val(sl->max(i));
+                  }
+                  v = Val(Vec::a(interpreter, interpreter->newIdent(), ranges));
+                } else {
+                  assert((*al)[i]->eid() == Expression::E_INTLIT);
+                  IntVal iv(eval_int(env.envi(), (*al)[i]));
+                  content[i] = Val(iv);
+                } 
+
+              }
+              Vec* vc = Vec::a(interpreter, interpreter->newIdent(), content);
+
+              std::vector<Val> idxs(al->dims()*2);
+              for (size_t i = 0; i < al->dims(); ++i) {
+                idxs[i*2] = Val(al->min(i));
+                idxs[i*2+1] = Val(al->max(i));
+              }
+              Vec* vi = Vec::a(interpreter, interpreter->newIdent(), idxs);
+
+              v = Val(Vec::a(interpreter, interpreter->newIdent(), {Val(vc), Val(vi)}));
+            }
+            break;
+            case Expression::E_SETLIT:
+            {
+              //TODO: Might not be int
+              IntSetVal* sl = eval_intset(env.envi(), expr); 
+              std::vector<Val> ranges(sl->size()*2);
+              for (size_t i = 0; i < sl->size(); ++i) {
+                ranges[i*2] = Val(sl->min(i));
+                ranges[i*2+1] = Val(sl->max(i));
+              }
+              v = Val(Vec::a(interpreter, interpreter->newIdent(), ranges));
+            }
+            break;
+            default:
+            {
+              interpreter_status = SolverInstance::ERROR;
+              std::cerr << "Error: Unable to use data expression: " << expr << std::endl;
+              return;
+            }
+          }
+          interpreter->globals.assign(interpreter, glob->second, v);
+          globals.erase(glob);
+        } else {
+          std::cerr << "Warning: Unused data in data file: " << ai << std::endl;
+        }
+      } else {
+        interpreter_status = SolverInstance::ERROR;
+        std::cerr << "Error: Non Assignment item in data file: " << it << std::endl;
+        return;
+      }
+    }
+  }
+  if (!globals.empty()) {
+    interpreter_status = SolverInstance::ERROR;
+    std::cerr << "Error: Missing the following data: " << std::endl;
+    for (auto g : globals) {
+      std::cerr << " - " << g.first << std::endl;
+    }
+    return;
+  }
+  // Start interpreter
   if (verbose) {
     std::cerr << "Run:\n";
   }

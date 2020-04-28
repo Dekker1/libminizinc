@@ -21,7 +21,7 @@ using namespace MiniZinc;
 
 class Instance{
 public:
-  Instance(std::string file, std::string solver) : slv(file, solver) {};
+  Instance(std::string file, std::string solver) : slv({"--solver", solver, file}) {};
 
   MznSolver slv;
   std::string result;

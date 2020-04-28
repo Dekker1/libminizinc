@@ -819,8 +819,19 @@ struct CodeGen {
   inline CG_Env<Binding>& env(void) { return *current_env; }
 
   CG_Env<Binding>* current_env; // Where are things in scope?
-  ASTStringMap<int>::t globals_env;
+  // Id -> <Register, input?>
+  ASTStringMap<std::pair<int,bool>>::t globals_env;
   int num_globals;
+
+  int add_global(ASTString str, bool input=false) {
+    globals_env.insert(std::make_pair(str, std::make_pair(num_globals, input)));
+    return num_globals++;
+  }
+
+  int find_global(ASTString str) {
+    auto pair = globals_env.at(str);
+    return pair.first;
+  }
 
   std::vector<unsigned int> reg_trail;
   unsigned int current_reg_count; // How many registers have been used?

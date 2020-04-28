@@ -32,6 +32,7 @@ struct ProcPatch {
 typedef struct MZAContext {
   std::vector<BytecodeProc>& procs;
   std::unordered_map<std::string, int>& proc_map;
+  std::unordered_map<std::string, int>& globals;
   std::vector<ProcPatch> to_patch;
   BytecodeStream proc_body;
   std::unordered_map<std::string, int> labels;
@@ -59,6 +60,8 @@ void yyerror(MZAContext& ctx, const char* s);
 
 %token MZA_COLON ":"
 %token MZA_DELAY "D"
+
+%token MZA_GLOBAL "GLOBAL"
 
 %token<bValue> MZA_ADDI
 %token<bValue> MZA_SUBI
@@ -123,9 +126,24 @@ void yyerror(MZAContext& ctx, const char* s);
 %type<sValue> label
 %type<liValue> registers
 
-%start procedures
+%start program
 
 %%
+
+program:
+  globals procedures
+
+globals:
+  /* empty */
+  | globals global
+
+global:
+  MZA_GLOBAL MZA_INT MZA_ID
+  {
+    auto pair = ctx.globals.emplace($3, $2);
+    assert(pair.second);
+  }
+
 
 procedures:
   /* empty */
@@ -389,9 +407,10 @@ void yyerror(MZAContext& ctx, const char* s) {
   throw std::runtime_error("Cannot parse MiniZinc assembly: " + std::string(s));
 }
 
-std::vector<BytecodeProc> parse_mza(const std::string& assembly_str) {
+std::pair<std::vector<BytecodeProc>,std::unordered_map<std::string, int>> parse_mza(const std::string& assembly_str) {
   std::vector<BytecodeProc> procs;
   std::unordered_map<std::string, int> proc_map;
+  std::unordered_map<std::string, int> globals;
   // Initialise first slots with
   for (PrimitiveMap::Primitive* p : primitiveMap()) {
     BytecodeProc bcp;
@@ -402,7 +421,7 @@ std::vector<BytecodeProc> parse_mza(const std::string& assembly_str) {
     proc_map.emplace(bcp.name, p->ident());
   }
   mza_yy_scan_string(assembly_str.c_str());
-  MZAContext ctx = MZAContext{procs, proc_map};
+  MZAContext ctx = MZAContext{procs, proc_map, globals};
   int err = yyparse(ctx);
   if (err != 0) {
     throw std::runtime_error("Cannot parse MiniZinc assembly: " + std::to_string(err));
@@ -421,5 +440,5 @@ std::vector<BytecodeProc> parse_mza(const std::string& assembly_str) {
       procs[code].mode[mode].patchAddress(patch.first, proc_map[patch.second.first]);
     }
   }
-  return procs;
+  return {procs, globals};
 }

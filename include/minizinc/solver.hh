@@ -118,6 +118,8 @@ namespace MiniZinc {
     SolverConfigs solver_configs;
     Definition* output = nullptr;
     std::vector<BytecodeProc> bs;
+    std::unordered_map<std::string, int> globals;
+    std::vector<std::string> data_files;
     SolverInstanceBase* si=0;
     SolverInstanceBase::Options* si_opt=0;
     SolverFactory* sf=0;
@@ -147,7 +149,7 @@ namespace MiniZinc {
     int flag_overall_time_limit=0;
 
   public:
-    MznSolver(const std::string& file, const std::string& solver, std::vector<std::string> args = {});
+    MznSolver(std::vector<std::string> args = {});
     ~MznSolver();
     
     std::pair<SolverInstance::Status, std::string> run();
