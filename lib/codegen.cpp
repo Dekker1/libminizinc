@@ -2157,6 +2157,8 @@ public:
           }
           TypeInst var_bool(Location().introduce(), Type::varbool());
           VarDecl new_var(Location().introduce(), &var_bool, "b");
+          Id new_id(Location().introduce(), "b", &new_var);
+          new_id.type(Type::varbool());
           args.emplace_back(new_var.id());
           Call call(
             Location().introduce(),
@@ -2164,7 +2166,7 @@ public:
             args
           );
           call.type(Type::varbool());
-          Let let(Location().introduce(), {&new_var}, &call);
+          Let let(Location().introduce(), {&new_var, &call}, &new_id);
           let.type(Type::varbool());
           let.addAnnotation(constants().ann.promise_total);
           c.compile_pred(frag, fun->params(), call_mode, &let);
@@ -4315,12 +4317,11 @@ CG_Cond::T CG::compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return compile_call(call, ctx, cg, frag);
 }
 
-CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  std::vector<CG_Cond::T> conj; 
+void eval_let_body(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag,
+  std::vector<CG_Cond::T>& conj) {
   ASTExprVec<Expression> bindings(let->let());
   std::vector<CG_Cond::T> partial;
-  cg.env_push();
-  for(Expression* e : bindings) {
+   for(Expression* e : bindings) {
     if (auto vd = e->dyn_cast<VarDecl>()) {
       // Bind the new definitions in context
       CodeGen::Binding to_bind(0xdeadbeef, CG_Cond::ttt());
@@ -4396,12 +4397,30 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       conj.push_back(CG::compile(e, cg, frag));
     }
   }
+}
+
+CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  std::vector<CG_Cond::T> conj; 
+  // ASTExprVec<Expression> bindings(let->let());
+  // std::vector<CG_Cond::T> partial;
+  cg.env_push();
+
   if (let->ann().contains(constants().ann.promise_total)) {
-    int r = CG::force(CG_Cond::forall(ctx, conj), BytecodeProc::ROOT, cg, frag);
+    OPEN_OTHER(cg, frag);
+    eval_let_body(let, BytecodeProc::ROOT, cg, frag, conj);
+    // int r = CG::force(CG_Cond::forall(ctx, conj), BytecodeProc::ROOT, cg, frag);
+    post_cond(cg, frag, CG_Cond::forall(BytecodeProc::ROOT, conj));
+    int r = CG::force(CG::compile(let->in(), cg, frag), ctx, cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+    CLOSE_AGG(cg, frag); 
+    r = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     conj.clear();
     conj.push_back(CG_Cond::reg(r));
+  } else {
+    eval_let_body(let, BytecodeProc::ROOT, cg, frag, conj);
+    conj.push_back(CG::compile(let->in(), cg, frag));
   }
-  conj.push_back(CG::compile(let->in(), cg, frag));
   return CG_Cond::forall(ctx, conj);
 }
 
