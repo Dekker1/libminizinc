@@ -88,6 +88,13 @@ namespace MiniZinc {
       update(b.rhs(), o, m_c);
       break;
     }
+    case BOT_EQ:
+    case BOT_NQ: {
+      CG::Mode m_l = b.lhs()->type().isbool() ? CG::Mode(BytecodeProc::FUN) : +m;
+      CG::Mode m_r = b.rhs()->type().isbool() ? CG::Mode(BytecodeProc::FUN) : +m;
+      update(b.lhs(), o, m_l);
+      update(b.rhs(), o, m_r);
+    }
     case BOT_EQUIV:
     case BOT_XOR:
       update(b.lhs(), o, BytecodeProc::FUN);
