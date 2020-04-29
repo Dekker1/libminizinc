@@ -2113,6 +2113,7 @@ execute_ret:
               // Invariant: Last instruction in the frame is always an ABORT instruction
               frame->pc = frame->bs->size()-1;
             }
+            v1.toDef()->addRef(this);
           }
         }
           break;
