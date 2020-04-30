@@ -811,7 +811,7 @@ namespace MiniZinc {
         assert(nval.toDef()->size() > 0);
         nval = nval.toDef()->arg(0);
       }
-      if (interpreter && !interpreter->trail.is_trailed()) {
+      if (interpreter && !interpreter->trail.is_trailed(v.toDef())) {
         Val& mut_v = const_cast<Val&>(v);
         mut_v.destroy(interpreter);
         mut_v._v = nval._v;
