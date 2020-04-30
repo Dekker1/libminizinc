@@ -198,7 +198,11 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
   switch(op) {
     // Actual builtins
     case BOT_EQ: {
-      auto fun = find_call_fun(cg, {"op_equals"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
+      ASTString ident = {"op_equals"};
+      if (ctx == BytecodeProc::ROOT) {
+        ident = { "int_eq" };
+      }
+      auto fun = find_call_fun(cg, ident, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
       assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
       PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
@@ -580,7 +584,11 @@ CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs)
     // Actual builtins
     case BOT_EQUIV:
     case BOT_EQ: {
-      auto fun = find_call_fun(cg, {"op_equals"}, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
+      ASTString ident = {"op_equals"};
+      if (ctx == BytecodeProc::ROOT) {
+        ident = { "int_eq" };
+      }
+      auto fun = find_call_fun(cg, ident, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
       assert(ctx == fun.second);
       return CG_Cond::call(fun.first, ctx, CG::r(r_lhs), CG::r(r_rhs));
     }
