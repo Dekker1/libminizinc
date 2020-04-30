@@ -23,9 +23,9 @@
 #include <streambuf>
 #include <minizinc/eval_par.hh>
 
-//#define DBG_INTERPRETER(msg) std::cerr << msg
-#define DBG_INTERPRETER(msg) do {} while(0)
-#define DBG_TRIM_OUTPUT true
+#define DBG_INTERPRETER(msg) std::cerr << msg
+//#define DBG_INTERPRETER(msg) do {} while(0)
+#define DBG_TRIM_OUTPUT false
 
 namespace MiniZinc {
 
@@ -367,28 +367,15 @@ namespace MiniZinc {
     if (_defs) {
       Definition* cur = _defs->next();
       while (cur != _defs) {
-        if (cur->_ref_count > 0) {
-          // Promote cur to parent level
-          cur->unlink(interpreter);
-          cur->insertBefore(interpreter, this->next());
-        } else {
-          cur->destroy(interpreter);
-          if(cur->_weak_ref_count > 0) {
-            // Cut cur: it is kept alive for a CSE entry
-            cur->unlink(interpreter);
-          } else if (!interpreter->trail.is_trailed(this)) {
-            // Free cur: it will not be used again
-            ::free(cur);
-          }
-        }
-        cur = cur->next();
+        Definition* nxt = cur->next();
+        cur->unlink(interpreter);
+        cur->insertBefore(interpreter, this->next());
+        cur = nxt;
       }
-      if (_defs->next() == _defs) {
-        if (!interpreter->trail.trail_ptr(this, &_defs)) {
-          ::free(_defs);
-        }
-        _defs = nullptr;
+      if (!interpreter->trail.trail_ptr(this, &_defs)) {
+        ::free(_defs);
       }
+      _defs = nullptr;
     }
     assert(_defs == nullptr || interpreter->trail.is_trailed(this));
 
