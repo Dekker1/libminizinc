@@ -608,6 +608,7 @@ namespace MiniZinc {
     bool setVal(Interpreter* interpreter, IntVal i);
     /// Intersect current domain with given domain
     bool intersectDom(Interpreter* interpreter, const std::vector<Val>& dom);
+    bool intersectDom(Interpreter* interpreter, Val dom);
     /// Set domain to \a newDomain, schedule propagators
     void domain(Interpreter* interpreter, const Val& newDomain, bool binding);
     /// Set domain to \a newDomain, schedule propagators

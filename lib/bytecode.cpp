@@ -628,6 +628,19 @@ namespace MiniZinc {
     return !result.empty();
   }
 
+  bool Definition::intersectDom(Interpreter* interpreter, Val dom) {
+    assert(!dom.isDef());
+    if (dom.isInt()) {
+      return setVal(interpreter, dom());
+    }
+    // TODO: Allocation is not really necessary;
+    std::vector<Val> vdom(dom.size());
+    for (int i = 0; i < dom.size(); ++i) {
+      vdom[i] = dom[i];
+    }
+    return intersectDom(interpreter, vdom);
+  }
+
   std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v) {
     std::vector<Val> coeffs = {Val(1)};
     std::vector<Val> vars = {v};

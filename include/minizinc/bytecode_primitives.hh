@@ -26,6 +26,7 @@ namespace MiniZinc {
       CLAUSE,
       FORALL,
       EXISTS,
+      INT_EQ,
       INT_SUM,
       INT_TIMES,
       INT_LIN_EQ,
@@ -264,6 +265,38 @@ namespace MiniZinc {
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
         return PS_OK;
+      }
+    };
+
+    class IntEq : public PrimitiveMap::Primitive {
+    public:
+      IntEq(void) : PrimitiveMap::Primitive("int_eq", PrimitiveMap::INT_EQ, 2) {}
+      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
+        Val x(d->arg(0));
+        Val y(d->arg(1));
+        if (x.isInt() && y.isInt()) {
+          return d->arg(0)() == d->arg(1)() ? PS_ENTAILED : PS_FAILED;
+        }
+        if (!y.isDef()) {
+          std::swap(x, y);
+        }
+        assert(y.isDef());
+        assert(y.toDef()->pred() == PrimitiveMap::MK_INTVAR);
+        if (x.isInt()) {
+          return y.toDef()->setVal(&i, x()) ? PS_ENTAILED : PS_FAILED;
+        }
+        assert(x.toDef()->pred() == PrimitiveMap::MK_INTVAR);
+        bool success = y.toDef()->intersectDom(&i, x.toDef()->domain());
+        if (!success) {
+          return PS_FAILED;
+        }
+        y.toDef()->alias(&i, x);
+        return PS_ENTAILED;
+      }
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {}
+      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
+        assert(false);
+        throw Error("internal error");
       }
     };
 
