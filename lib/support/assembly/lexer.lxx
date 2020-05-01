@@ -10,106 +10,107 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 %option noyywrap
+%option bison-bridge bison-locations
 
 %option prefix="mza_yy"
 
 %{
 #include <cstdlib>
-
-#define YY_DECL int yylex()
-
 #include <minizinc/support/mza_parser.hh>
+
 using namespace MiniZinc;
 
+#define YY_USER_ACTION { yylloc->first_line = yylineno; }
 %}
 
 %%
 
-[ \t\n]     { /* ignore white space */ }
+\n { yylineno++; }
+[ \t]     { /* ignore white space */ }
 %[^\xa]*    { /* ignore comments */ }
-"-"?[0-9]+      { mza_yylval.iValue = std::atoi(mza_yytext); return MZA_INT; }
-[Rr][0-9]+  { mza_yylval.iValue = std::atoi(mza_yytext+1); return MZA_REG; }
+"-"?[0-9]+      { yylval->iValue = std::atoi(yytext); return MZA_INT; }
+[Rr][0-9]+  { yylval->iValue = std::atoi(yytext+1); return MZA_REG; }
 ":"         { return MZA_COLON; }
 [dD]        { return MZA_DELAY; }
 
 "GLOBAL"    { return MZA_GLOBAL; }
 
-"ADDI"      { mza_yylval.bValue = BytecodeStream::ADDI; return MZA_ADDI; }
-"SUBI"      { mza_yylval.bValue = BytecodeStream::SUBI; return MZA_SUBI; }
-"MULI"      { mza_yylval.bValue = BytecodeStream::MULI; return MZA_MULI; }
-"DIVI"      { mza_yylval.bValue = BytecodeStream::DIVI; return MZA_DIVI; }
-"MODI"      { mza_yylval.bValue = BytecodeStream::MODI; return MZA_MODI; }
-"INCI"      { mza_yylval.bValue = BytecodeStream::INCI; return MZA_INCI; }
-"DECI"      { mza_yylval.bValue = BytecodeStream::DECI; return MZA_DECI; }
+"ADDI"      { yylval->bValue = BytecodeStream::ADDI; return MZA_ADDI; }
+"SUBI"      { yylval->bValue = BytecodeStream::SUBI; return MZA_SUBI; }
+"MULI"      { yylval->bValue = BytecodeStream::MULI; return MZA_MULI; }
+"DIVI"      { yylval->bValue = BytecodeStream::DIVI; return MZA_DIVI; }
+"MODI"      { yylval->bValue = BytecodeStream::MODI; return MZA_MODI; }
+"INCI"      { yylval->bValue = BytecodeStream::INCI; return MZA_INCI; }
+"DECI"      { yylval->bValue = BytecodeStream::DECI; return MZA_DECI; }
 
-"IMMI"      { mza_yylval.bValue = BytecodeStream::IMMI; return MZA_IMMI; }
-"LOAD_GLOBAL" { mza_yylval.bValue = BytecodeStream::LOAD_GLOBAL; return MZA_LOAD_GLOBAL; }
-"STORE_GLOBAL" { mza_yylval.bValue = BytecodeStream::STORE_GLOBAL; return MZA_STORE_GLOBAL; }
-"MOV"       { mza_yylval.bValue = BytecodeStream::MOV; return MZA_MOV; }
+"IMMI"      { yylval->bValue = BytecodeStream::IMMI; return MZA_IMMI; }
+"LOAD_GLOBAL" { yylval->bValue = BytecodeStream::LOAD_GLOBAL; return MZA_LOAD_GLOBAL; }
+"STORE_GLOBAL" { yylval->bValue = BytecodeStream::STORE_GLOBAL; return MZA_STORE_GLOBAL; }
+"MOV"       { yylval->bValue = BytecodeStream::MOV; return MZA_MOV; }
 
-"JMP"       { mza_yylval.bValue = BytecodeStream::JMP; return MZA_JMP; }
-"JMPIF"     { mza_yylval.bValue = BytecodeStream::JMPIF; return MZA_JMPIF; }
-"JMPIFNOT"  { mza_yylval.bValue = BytecodeStream::JMPIFNOT; return MZA_JMPIFNOT; }
+"JMP"       { yylval->bValue = BytecodeStream::JMP; return MZA_JMP; }
+"JMPIF"     { yylval->bValue = BytecodeStream::JMPIF; return MZA_JMPIF; }
+"JMPIFNOT"  { yylval->bValue = BytecodeStream::JMPIFNOT; return MZA_JMPIFNOT; }
 
-"EQI"       { mza_yylval.bValue = BytecodeStream::EQI; return MZA_EQI; }
-"LTI"       { mza_yylval.bValue = BytecodeStream::LTI; return MZA_LTI; }
-"LEI"       { mza_yylval.bValue = BytecodeStream::LEI; return MZA_LEI; }
+"EQI"       { yylval->bValue = BytecodeStream::EQI; return MZA_EQI; }
+"LTI"       { yylval->bValue = BytecodeStream::LTI; return MZA_LTI; }
+"LEI"       { yylval->bValue = BytecodeStream::LEI; return MZA_LEI; }
 
-"AND"       { mza_yylval.bValue = BytecodeStream::AND; return MZA_AND; }
-"OR"        { mza_yylval.bValue = BytecodeStream::OR; return MZA_OR; }
-"NOT"       { mza_yylval.bValue = BytecodeStream::NOT; return MZA_NOT; }
-"XOR"       { mza_yylval.bValue = BytecodeStream::XOR; return MZA_XOR; }
+"AND"       { yylval->bValue = BytecodeStream::AND; return MZA_AND; }
+"OR"        { yylval->bValue = BytecodeStream::OR; return MZA_OR; }
+"NOT"       { yylval->bValue = BytecodeStream::NOT; return MZA_NOT; }
+"XOR"       { yylval->bValue = BytecodeStream::XOR; return MZA_XOR; }
 
-"ISPAR"     { mza_yylval.bValue = BytecodeStream::ISPAR; return MZA_ISPAR; }
-"ISEMPTY"   { mza_yylval.bValue = BytecodeStream::ISEMPTY; return MZA_ISEMPTY; }
-"LENGTH"    { mza_yylval.bValue = BytecodeStream::LENGTH; return MZA_LENGTH; }
-"GET_VEC"   { mza_yylval.bValue = BytecodeStream::GET_VEC; return MZA_GET_VEC; }
+"ISPAR"     { yylval->bValue = BytecodeStream::ISPAR; return MZA_ISPAR; }
+"ISEMPTY"   { yylval->bValue = BytecodeStream::ISEMPTY; return MZA_ISEMPTY; }
+"LENGTH"    { yylval->bValue = BytecodeStream::LENGTH; return MZA_LENGTH; }
+"GET_VEC"   { yylval->bValue = BytecodeStream::GET_VEC; return MZA_GET_VEC; }
 
-"LB"        { mza_yylval.bValue = BytecodeStream::LB; return MZA_LB; }
-"UB"        { mza_yylval.bValue = BytecodeStream::UB; return MZA_UB; }
-"DOM"       { mza_yylval.bValue = BytecodeStream::DOM; return MZA_DOM; }
+"LB"        { yylval->bValue = BytecodeStream::LB; return MZA_LB; }
+"UB"        { yylval->bValue = BytecodeStream::UB; return MZA_UB; }
+"DOM"       { yylval->bValue = BytecodeStream::DOM; return MZA_DOM; }
 
-"MAKE_SET" { mza_yylval.bValue = BytecodeStream::MAKE_SET; return MZA_MAKE_SET; }
-"DIFF"     { mza_yylval.bValue = BytecodeStream::DIFF; return MZA_DIFF; }
-"INTERSECTION" { mza_yylval.bValue = BytecodeStream::INTERSECTION; return MZA_INTERSECTION; }
-"UNION"     { mza_yylval.bValue = BytecodeStream::UNION; return MZA_UNION; }
+"MAKE_SET" { yylval->bValue = BytecodeStream::MAKE_SET; return MZA_MAKE_SET; }
+"DIFF"     { yylval->bValue = BytecodeStream::DIFF; return MZA_DIFF; }
+"INTERSECTION" { yylval->bValue = BytecodeStream::INTERSECTION; return MZA_INTERSECTION; }
+"UNION"     { yylval->bValue = BytecodeStream::UNION; return MZA_UNION; }
 
-"INTERSECT_DOMAIN" { mza_yylval.bValue = BytecodeStream::INTERSECT_DOMAIN; return MZA_INTERSECT_DOMAIN; }
+"INTERSECT_DOMAIN" { yylval->bValue = BytecodeStream::INTERSECT_DOMAIN; return MZA_INTERSECT_DOMAIN; }
 
-"OPEN_AGGREGATION" { mza_yylval.bValue = BytecodeStream::OPEN_AGGREGATION; return MZA_OPEN_AGGREGATION; }
-"CLOSE_AGGREGATION" { mza_yylval.bValue = BytecodeStream::CLOSE_AGGREGATION; return MZA_CLOSE_AGGREGATION; }
-"SIMPLIFY_LIN" { mza_yylval.bValue = BytecodeStream::SIMPLIFY_LIN; return MZA_SIMPLIFY_LIN; }
+"OPEN_AGGREGATION" { yylval->bValue = BytecodeStream::OPEN_AGGREGATION; return MZA_OPEN_AGGREGATION; }
+"CLOSE_AGGREGATION" { yylval->bValue = BytecodeStream::CLOSE_AGGREGATION; return MZA_CLOSE_AGGREGATION; }
+"SIMPLIFY_LIN" { yylval->bValue = BytecodeStream::SIMPLIFY_LIN; return MZA_SIMPLIFY_LIN; }
 
-"PUSH"      { mza_yylval.bValue = BytecodeStream::PUSH; return MZA_PUSH; }
-"POP"       { mza_yylval.bValue = BytecodeStream::POP; return MZA_POP; }
-"POST"       { mza_yylval.bValue = BytecodeStream::POST; return MZA_POST; }
+"PUSH"      { yylval->bValue = BytecodeStream::PUSH; return MZA_PUSH; }
+"POP"       { yylval->bValue = BytecodeStream::POP; return MZA_POP; }
+"POST"       { yylval->bValue = BytecodeStream::POST; return MZA_POST; }
 
-"RET"       { mza_yylval.bValue = BytecodeStream::RET; return MZA_RET; }
-"CALL"      { mza_yylval.bValue = BytecodeStream::CALL; return MZA_CALL; }
-"BUILTIN"   { mza_yylval.bValue = BytecodeStream::BUILTIN; return MZA_BUILTIN; }
-"TCALL"     { mza_yylval.bValue = BytecodeStream::TCALL; return MZA_TCALL; }
+"RET"       { yylval->bValue = BytecodeStream::RET; return MZA_RET; }
+"CALL"      { yylval->bValue = BytecodeStream::CALL; return MZA_CALL; }
+"BUILTIN"   { yylval->bValue = BytecodeStream::BUILTIN; return MZA_BUILTIN; }
+"TCALL"     { yylval->bValue = BytecodeStream::TCALL; return MZA_TCALL; }
 
-"TRACE"     { mza_yylval.bValue = BytecodeStream::TRACE; return MZA_TRACE; }
-"ABORT"     { mza_yylval.bValue = BytecodeStream::ABORT; return MZA_ABORT; }
+"TRACE"     { yylval->bValue = BytecodeStream::TRACE; return MZA_TRACE; }
+"ABORT"     { yylval->bValue = BytecodeStream::ABORT; return MZA_ABORT; }
 
-"VEC"       { mza_yylval.iValue = AggregationCtx::VCTX_VEC; return MZA_CTX; }
-"OTHER"     { mza_yylval.iValue = AggregationCtx::VCTX_OTHER; return MZA_CTX; }
+"VEC"       { yylval->iValue = AggregationCtx::VCTX_VEC; return MZA_CTX; }
+"OTHER"     { yylval->iValue = AggregationCtx::VCTX_OTHER; return MZA_CTX; }
 
-"RAW"       { mza_yylval.iValue = BytecodeProc::RAW; return MZA_MODE; }
-"ROOT"      { mza_yylval.iValue = BytecodeProc::ROOT; return MZA_MODE; }
-"ROOT_NEG"  { mza_yylval.iValue = BytecodeProc::ROOT_NEG; return MZA_MODE; }
-"FUN"       { mza_yylval.iValue = BytecodeProc::FUN; return MZA_MODE; }
-"FUN_NEG"   { mza_yylval.iValue = BytecodeProc::FUN_NEG; return MZA_MODE; }
-"IMP"       { mza_yylval.iValue = BytecodeProc::IMP; return MZA_MODE; }
-"IMP_NEG"   { mza_yylval.iValue = BytecodeProc::IMP_NEG; return MZA_MODE; }
+"RAW"       { yylval->iValue = BytecodeProc::RAW; return MZA_MODE; }
+"ROOT"      { yylval->iValue = BytecodeProc::ROOT; return MZA_MODE; }
+"ROOT_NEG"  { yylval->iValue = BytecodeProc::ROOT_NEG; return MZA_MODE; }
+"FUN"       { yylval->iValue = BytecodeProc::FUN; return MZA_MODE; }
+"FUN_NEG"   { yylval->iValue = BytecodeProc::FUN_NEG; return MZA_MODE; }
+"IMP"       { yylval->iValue = BytecodeProc::IMP; return MZA_MODE; }
+"IMP_NEG"   { yylval->iValue = BytecodeProc::IMP_NEG; return MZA_MODE; }
 
 
-[A-Za-z][A-Za-z0-9_]*  { mza_yylval.sValue = strdup(yytext); return MZA_ID; }
-"'"[^\\'\xa\xd\x0]*"'" { mza_yylval.sValue = strdup(yytext); return MZA_ID; }
+[A-Za-z][A-Za-z0-9_]*  { yylval->sValue = strdup(yytext); return MZA_ID; }
+"'"[^\\'\xa\xd\x0]*"'" { yylval->sValue = strdup(yytext); return MZA_ID; }
 
 .   {
   /* Catch all */
-  throw std::runtime_error("Illegal token in regular expression: '" + std::string(mza_yytext) + "'");
+  throw std::runtime_error("Illegal token in regular expression: '" + std::string(yytext) + "'");
 }
 
 %%
