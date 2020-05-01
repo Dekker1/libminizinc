@@ -99,6 +99,7 @@ void yyerror(MZAContext& ctx, const char* s);
 %token<bValue> MZA_DOM
 
 %token<bValue> MZA_MAKE_SET
+%token<bValue> MZA_DIFF
 %token<bValue> MZA_INTERSECTION
 %token<bValue> MZA_UNION
 
@@ -378,6 +379,7 @@ instrRRR:
   | MZA_OR
   | MZA_XOR
   | MZA_GET_VEC
+  | MZA_DIFF
   | MZA_INTERSECTION
   | MZA_UNION
   | MZA_INTERSECT_DOMAIN
