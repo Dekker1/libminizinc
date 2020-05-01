@@ -488,7 +488,7 @@ namespace MiniZinc {
 
     class Sort : public PrimitiveMap::Primitive {
     public:
-      Sort() : PrimitiveMap::Primitive("sort",PrimitiveMap::SORT, 1) {}
+      Sort() : PrimitiveMap::Primitive("internal_sort",PrimitiveMap::SORT, 1) {}
       virtual void execute(Interpreter& i, const std::vector<Val>& args) {
         assert(args.size()==1);
 

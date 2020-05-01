@@ -1203,12 +1203,14 @@ The sort is stable, i.e. if \a y[\p i] = \a y[\p j] with \p i < \p j, then
 */
 function array[$$E] of $T: sort_by(array[$$E] of $T: x, array[$$E] of float: y);
 
+function array[$$E] of bool: internal_sort(array[$$E] of bool: x);
+function array[$$E] of int: internal_sort(array[$$E] of int: x);
 /** @group builtins.sort Return values from array \a x sorted in non-decreasing order */
-function array[$$E] of int: sort(array[$$E] of int: x);
+function array[$$E] of int: sort(array[$$E] of int: x) = internal_sort(x);
 /** @group builtins.sort Return values from array \a x sorted in non-decreasing order */
 function array[$$E] of float: sort(array[$$E] of float: x);
 /** @group builtins.sort Return values from array \a x sorted in non-decreasing order */
-function array[$$E] of bool: sort(array[$$E] of bool: x);
+function array[$$E] of bool: sort(array[$$E] of bool: x) = internal_sort(x);
 
 /** @group builtins.sort
 Returns the permutation \a p which causes \a x to be in sorted order hence
