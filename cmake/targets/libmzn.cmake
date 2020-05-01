@@ -62,6 +62,10 @@ add_library(mzn
   lib/type.cpp
   lib/typecheck.cpp
   lib/values.cpp
+  lib/support/assembly/parser.yxx
+  lib/support/assembly/lexer.lxx
+  lib/support/regex/parser.yxx
+  lib/support/regex/lexer.lxx
 
   include/minizinc/ast.hh
   include/minizinc/ast.hpp
