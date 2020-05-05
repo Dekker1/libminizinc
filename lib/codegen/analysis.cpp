@@ -43,12 +43,20 @@ namespace MiniZinc {
         for(int d = 0; d < d_n; ++d)
           update(comp.decl(gg, d), o, m);
         update(comp.in(gg), o, m);
-        if(comp.where(gg))
+        if(comp.where(gg)) {
           update(comp.where(gg), Use, BytecodeProc::FUN);
+        }
       }
     }
-    if(o == Use || !comp.e()->type().isbool())
+    if(o == Use ||!comp.e()->type().isbool()) {
+      int g_n(comp.n_generators());
+      for(int gg = 0; gg < comp.n_generators(); ++gg) {
+        if(comp.where(gg)) {
+          update(comp.where(gg), Use, BytecodeProc::FUN);
+        }
+      }
       update(comp.e(), o, m);
+    }
   }
 /// Visit if-then-else
   void ModeAnalysis::vITE(ITE& ite, Occurrence o, CG::Mode m) {
