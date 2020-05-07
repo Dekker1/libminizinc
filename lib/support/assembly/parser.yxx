@@ -54,6 +54,7 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
   char* sValue;
   MiniZinc::BytecodeStream::Instr bValue;
   std::list<int>* liValue;
+  std::list<std::string>* sliValue;
 }
 %parse-param {MZAContext& ctx}
 %locations
@@ -133,6 +134,7 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
 %type<bValue> instr instrIR instrR instrRR instrRS instrRRR instrRRRR instrS
 %type<sValue> label
 %type<liValue> registers
+%type<sliValue> labels
 
 %start program
 
@@ -214,11 +216,17 @@ instructions:
   | instructions labeled_instr
 
 labeled_instr:
-    instruction
-  | label instruction
+    labels instruction
     {
-      ctx.labels.emplace($1, $2);
+      for (auto l : *$1) {
+        ctx.labels.emplace(l, $2);
+      }
+      delete $1;
     }
+
+labels:
+    /* empty */ { $$ = new std::list<std::string>(); }
+  | labels label { $1->push_back($2); $$ = $1; }
 
 label:
     MZA_ID ":"
