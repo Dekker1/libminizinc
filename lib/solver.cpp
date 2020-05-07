@@ -690,6 +690,29 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
         auto glob = globals.find(ai->id().str());
         if (glob != globals.end()) {
           Expression* expr = ai->e();
+          Vec* ranges = nullptr;
+          if (expr->isa<Call>()) {
+            Call* c = expr->cast<Call>();
+            if (c->id() == "array1d") {
+              if (c->n_args() == 1) {
+                expr = c->arg(0);
+              } else {
+                expr = c->arg(1);
+                IntSetVal* sl = eval_intset(env.envi(), c->arg(0));
+                /* assert(sl->size() == 1); // Index Set should be continuous */
+                std::vector<Val> vranges = {Val(sl->min()), Val(sl->max())};
+                ranges = Vec::a(interpreter, interpreter->newIdent(), vranges);
+              }
+            } else if (c->id() == "array2d") {
+                expr = c->arg(2);
+                IntSetVal* sl1 = eval_intset(env.envi(), c->arg(0));
+                /* assert(sl1->size() == 1); // Index Set should be continuous */
+                IntSetVal* sl2 = eval_intset(env.envi(), c->arg(1));
+                /* assert(sl2->size() == 1); // Index Set should be continuous */
+                std::vector<Val> vranges = {Val(sl1->min()), Val(sl1->max()), Val(sl2->min()), Val(sl2->max())};
+                ranges = Vec::a(interpreter, interpreter->newIdent(), vranges);
+            }
+          }
           Val v;
           switch (expr->eid()) {
             case Expression::E_INTLIT:
@@ -713,42 +736,43 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
                   bool b(eval_bool(env.envi(), (*al)[i]));
                   content[i] = Val(b);
                 } else if ((*al)[i]->eid() == Expression::E_SETLIT) {
-                  IntSetVal* sl = eval_intset(env.envi(), expr); 
-                  std::vector<Val> ranges(sl->size()*2);
+                  IntSetVal* sl = eval_intset(env.envi(), (*al)[i]);
+                  std::vector<Val> vranges(sl->size()*2);
                   for (size_t i = 0; i < sl->size(); ++i) {
-                    ranges[i*2] = Val(sl->min(i));
-                    ranges[i*2+1] = Val(sl->max(i));
+                    vranges[i*2] = Val(sl->min(i));
+                    vranges[i*2+1] = Val(sl->max(i));
                   }
-                  v = Val(Vec::a(interpreter, interpreter->newIdent(), ranges));
+                  v = Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
                 } else {
                   assert((*al)[i]->eid() == Expression::E_INTLIT);
                   IntVal iv(eval_int(env.envi(), (*al)[i]));
                   content[i] = Val(iv);
-                } 
-
+                }
               }
               Vec* vc = Vec::a(interpreter, interpreter->newIdent(), content);
 
-              std::vector<Val> idxs(al->dims()*2);
-              for (size_t i = 0; i < al->dims(); ++i) {
-                idxs[i*2] = Val(al->min(i));
-                idxs[i*2+1] = Val(al->max(i));
+              if (not ranges) {
+                std::vector<Val> idxs(al->dims()*2);
+                for (size_t i = 0; i < al->dims(); ++i) {
+                  idxs[i*2] = Val(al->min(i));
+                  idxs[i*2+1] = Val(al->max(i));
+                }
+                Vec* ranges = Vec::a(interpreter, interpreter->newIdent(), idxs);
               }
-              Vec* vi = Vec::a(interpreter, interpreter->newIdent(), idxs);
 
-              v = Val(Vec::a(interpreter, interpreter->newIdent(), {Val(vc), Val(vi)}));
+              v = Val(Vec::a(interpreter, interpreter->newIdent(), {Val(vc), Val(ranges)}));
             }
             break;
             case Expression::E_SETLIT:
             {
               //TODO: Might not be int
               IntSetVal* sl = eval_intset(env.envi(), expr); 
-              std::vector<Val> ranges(sl->size()*2);
+              std::vector<Val> vranges(sl->size()*2);
               for (size_t i = 0; i < sl->size(); ++i) {
-                ranges[i*2] = Val(sl->min(i));
-                ranges[i*2+1] = Val(sl->max(i));
+                vranges[i*2] = Val(sl->min(i));
+                vranges[i*2+1] = Val(sl->max(i));
               }
-              v = Val(Vec::a(interpreter, interpreter->newIdent(), ranges));
+              v = Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
             }
             break;
             default:
