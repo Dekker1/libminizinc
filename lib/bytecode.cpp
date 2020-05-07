@@ -281,10 +281,10 @@ namespace MiniZinc {
         d = d->next();
         continue;
       }
+      toFZNItem(d, bs, fzn, vdmap, interpreter);
       if (d->defs()) {
         toFZN(d->defs(), bs, fzn, vdmap, interpreter);
       }
-      toFZNItem(d, bs, fzn, vdmap, interpreter);
       d = d->next();
     }
   }
