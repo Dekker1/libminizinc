@@ -682,9 +682,9 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   interpreter = new Interpreter(bs, frame);
   // Parse and add data
   if (!data_files.empty()) {
+    GCLock lock;
     Env env(new Model);
     Model* m = parseData(env, env.model(), data_files, {}, true, false, verbose, std::cerr);
-    debugprint(m);
     for (auto it : *m) {
       if (auto ai = it->dyn_cast<AssignI>()) {
         auto glob = globals.find(ai->id().str());
@@ -754,7 +754,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
             default:
             {
               interpreter_status = SolverInstance::ERROR;
-              std::cerr << "Error: Unable to use data expression: " << expr << std::endl;
+              std::cerr << "Error: Unable to use data expression: " << *expr << std::endl;
               return;
             }
           }
