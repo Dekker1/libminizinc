@@ -742,7 +742,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
                     vranges[i*2] = Val(sl->min(i));
                     vranges[i*2+1] = Val(sl->max(i));
                   }
-                  v = Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
+                  content[i] = Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
                 } else {
                   assert((*al)[i]->eid() == Expression::E_INTLIT);
                   IntVal iv(eval_int(env.envi(), (*al)[i]));
