@@ -294,10 +294,6 @@ namespace MiniZinc {
         return PS_ENTAILED;
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {}
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        assert(false);
-        throw Error("internal error");
-      }
     };
 
     class IntSum : public PrimitiveMap::Primitive {

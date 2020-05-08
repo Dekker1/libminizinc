@@ -404,6 +404,17 @@ namespace MiniZinc {
       }
       return nv;
     }
+    int count(Val v) {
+      int count = 0;
+      for (int i = 0; i < _size; ++i) {
+        if (_data[i].isVec()) {
+          count += _data[i].toVec()->count(v);
+        } else {
+          count += _data[i] == v;
+        }
+      }
+      return count;
+    }
   };
 
   /// Iterator over a Vec interpreted as a range set

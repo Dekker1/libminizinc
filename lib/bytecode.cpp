@@ -361,13 +361,19 @@ namespace MiniZinc {
 
   void Definition::alias(Interpreter* interpreter, Val v) {
     assert(size() >= 1);
-    // Destroy old definition
-    auto ref_count = _ref_count;
-    _ref_count = (1u<<31u)-1u;
+    // Move constraints in _defs
     if (_defs) {
       Definition* cur = _defs->next();
       while (cur != _defs) {
         Definition* nxt = cur->next();
+        for (int i = 0; i < cur->size(); ++i) {
+          Val arg = cur->arg(i);
+          if (arg.isVec()) {
+            _ref_count += arg.toVec()->count(Val(this));
+          } else {
+            _ref_count += (arg == Val(this));
+          }
+        }
         cur->unlink(interpreter);
         cur->insertBefore(interpreter, this->next());
         cur = nxt;
@@ -379,6 +385,7 @@ namespace MiniZinc {
     }
     assert(_defs == nullptr || interpreter->trail.is_trailed(this));
 
+    // Destroy old definition
     _domain.destroy(interpreter);
     _domain = Val(IntVal(0));
     _ann.destroy(interpreter);
@@ -386,7 +393,6 @@ namespace MiniZinc {
     for (unsigned int i=0; i<_size; i++) {
       _args[i].destroy(interpreter);
     }
-    _ref_count = ref_count;
 
     if (!_subscriptions.empty()) {
       // Transfer subscriptions to new value and schedule propagators
