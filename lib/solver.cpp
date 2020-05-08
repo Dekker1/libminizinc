@@ -751,13 +751,13 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
               }
               Vec* vc = Vec::a(interpreter, interpreter->newIdent(), content);
 
-              if (not ranges) {
+              if (!ranges) {
                 std::vector<Val> idxs(al->dims()*2);
                 for (size_t i = 0; i < al->dims(); ++i) {
                   idxs[i*2] = Val(al->min(i));
                   idxs[i*2+1] = Val(al->max(i));
                 }
-                Vec* ranges = Vec::a(interpreter, interpreter->newIdent(), idxs);
+                ranges = Vec::a(interpreter, interpreter->newIdent(), idxs);
               }
 
               v = Val(Vec::a(interpreter, interpreter->newIdent(), {Val(vc), Val(ranges)}));
