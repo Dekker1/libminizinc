@@ -127,6 +127,7 @@ namespace MiniZinc {
     } else if (_binding && !f) {
       RefCountedObject::rmRef(interpreter, this);
     }
+    _binding = f;
   }
   
   void Definition::destroy(MiniZinc::Interpreter* interpreter)  {
