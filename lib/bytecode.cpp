@@ -656,61 +656,59 @@ namespace MiniZinc {
       } else {
         Definition* cur = stacktop.toDef();
         assert(cur->pred() == PrimitiveMap::MK_INTVAR);
-        if(cur->_ref_count <= 1) {
-          if (Definition* defby = cur->defined_by()) {
-            switch (defby->pred()) {
-              case PrimitiveMap::INT_LIN_EQ: {
-                IntVal cur_coeff = 0;
-                for (int i = defby->arg(1)[0].size() - 1; i >= 0; --i) {
-                  if (defby->arg(1)[0][i] == Val(cur)) {
-                    cur_coeff += defby->arg(0)[0][i]();
-                    break; // TODO: Can we assume no dumplicates?
-                  }
+        if (Definition* defby = cur->defined_by()) {
+          switch (defby->pred()) {
+            case PrimitiveMap::INT_LIN_EQ: {
+              IntVal cur_coeff = 0;
+              for (int i = defby->arg(1)[0].size() - 1; i >= 0; --i) {
+                if (defby->arg(1)[0][i] == Val(cur)) {
+                  cur_coeff += defby->arg(0)[0][i]();
+                  break; // TODO: Can we assume no dumplicates?
                 }
-                assert(cur_coeff != 0);
-                if (std::abs(coeff) == std::abs(cur_coeff)) {
-                  IntVal mult = ((coeff > 0) == (cur_coeff > 0)) ? -1 : 1;
-                  for (int i = 0; i < defby->arg(0)[0].size(); i++) {
-                    if (defby->arg(1)[0][i] != Val(cur)) {
-                      defs.emplace_back(mult * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
-                    }
-                  }
-                  d += mult * -defby->arg(2)();
-                  continue;
-                }
-                if (std::abs(cur_coeff) == 1) {
-                  if (((coeff > 0) == (cur_coeff > 0))) {
-                    coeff = -1 * coeff;
-                  }
-                  for (int i = 0; i < defby->arg(0)[0].size(); i++) {
-                    if (defby->arg(1)[0][i] != Val(cur)) {
-                      defs.emplace_back(coeff * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
-                    }
-                  }
-                  d += coeff * -defby->arg(2)();
-                  continue;
-                }
-                break;
               }
-              case PrimitiveMap::INT_TIMES: {
-                assert(Val(cur) == defby->arg(2));
-                if (defby->arg(0).isInt()) {
-                  if (defby->arg(1).isInt()) {
-                    // both constants, compute result
-                    d += coeff * defby->arg(0)() * defby->arg(1)();
-                  } else {
-                    defs.emplace_back(coeff * defby->arg(0)(), defby->arg(1));
+              assert(cur_coeff != 0);
+              if (std::abs(coeff) == std::abs(cur_coeff)) {
+                IntVal mult = ((coeff > 0) == (cur_coeff > 0)) ? -1 : 1;
+                for (int i = 0; i < defby->arg(0)[0].size(); i++) {
+                  if (defby->arg(1)[0][i] != Val(cur)) {
+                    defs.emplace_back(mult * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
                   }
-                  continue;
                 }
-                if (defby->arg(1).isInt()) {
-                  defs.emplace_back(coeff * defby->arg(1)(), defby->arg(0));
-                  continue;
-                }
-                break;
+                d += mult * -defby->arg(2)();
+                continue;
               }
-              default: {}
+              if (std::abs(cur_coeff) == 1) {
+                if (((coeff > 0) == (cur_coeff > 0))) {
+                  coeff = -1 * coeff;
+                }
+                for (int i = 0; i < defby->arg(0)[0].size(); i++) {
+                  if (defby->arg(1)[0][i] != Val(cur)) {
+                    defs.emplace_back(coeff * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
+                  }
+                }
+                d += coeff * -defby->arg(2)();
+                continue;
+              }
+              break;
             }
+            case PrimitiveMap::INT_TIMES: {
+              assert(Val(cur) == defby->arg(2));
+              if (defby->arg(0).isInt()) {
+                if (defby->arg(1).isInt()) {
+                  // both constants, compute result
+                  d += coeff * defby->arg(0)() * defby->arg(1)();
+                } else {
+                  defs.emplace_back(coeff * defby->arg(0)(), defby->arg(1));
+                }
+                continue;
+              }
+              if (defby->arg(1).isInt()) {
+                defs.emplace_back(coeff * defby->arg(1)(), defby->arg(0));
+                continue;
+              }
+              break;
+            }
+            default: {}
           }
         }
         coeffs.emplace_back(coeff);
