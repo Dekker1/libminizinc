@@ -612,14 +612,14 @@ namespace MiniZinc {
     }
 
     /// Set new minimum value included in the domain
-    bool setMin(Interpreter* interpreter, IntVal i);
+    bool setMin(Interpreter* interpreter, IntVal i, bool binding=true);
     /// Set new maximum value included in the domain
-    bool setMax(Interpreter* interpreter, IntVal i);
+    bool setMax(Interpreter* interpreter, IntVal i, bool binding=true);
     /// Restrict domain to a single value
-    bool setVal(Interpreter* interpreter, IntVal i);
+    bool setVal(Interpreter* interpreter, IntVal i, bool binding=true);
     /// Intersect current domain with given domain
-    bool intersectDom(Interpreter* interpreter, const std::vector<Val>& dom);
-    bool intersectDom(Interpreter* interpreter, Val dom);
+    bool intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding=true);
+    bool intersectDom(Interpreter* interpreter, Val dom, bool binding=true);
     /// Set domain to \a newDomain, schedule propagators
     void domain(Interpreter* interpreter, const Val& newDomain, bool binding);
     /// Set domain to \a newDomain, schedule propagators

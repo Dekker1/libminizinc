@@ -465,7 +465,6 @@ namespace MiniZinc {
   void
   Definition::domain(Interpreter* interpreter, const Val& newDomain, bool binding0) {
     interpreter->trail.trail_domain(interpreter, this, _domain);
-    binding(interpreter,binding0);
     _domain.destroy(interpreter);
     _domain = newDomain;
     _domain.construct(interpreter);
@@ -475,33 +474,7 @@ namespace MiniZinc {
       _domain.construct(interpreter);
     }
     interpreter->schedule(this, isFixed() ? Definition::SEV_VAL : Definition::SEV_DOM);
-    // TODO: This is currently not correct. We cannot just remove a constraint when its domain is fixed.
-//    if (isFixed() && _pred != PrimitiveMap::MK_INTVAR) {
-//      // This is a constrained expression, turn it into toplevel constraint
-//
-//      // Create new constraint
-//      std::vector<Val> args(size());
-//      for (unsigned int i=0; i<size(); i++) {
-//        args[i] = arg(i);
-//      }
-//      Definition* nd = Definition::a(interpreter,newDomain,true,_pred,BytecodeProc::ROOT,args,-1);
-//      interpreter->pushDef(nd);
-//
-//      // Turn this definition into a (fixed) variable
-//      _pred = PrimitiveMap::MK_INTVAR;
-//      binding(interpreter,false);
-//      for (unsigned int i=0; i<_size; i++) {
-//        _args[i].destroy(interpreter);
-//        _args[i] = IntVal(0);
-//      }
-//      interpreter->unsubscribe(this);
-//
-//      // Promote hedge to parent
-//      if (_defs) {
-//        interpreter->pushDefs(_defs);
-//        _defs = nullptr;
-//      }
-//    }
+    binding(interpreter,binding0);
   }
   void
   Definition::domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding0) {
@@ -527,7 +500,7 @@ namespace MiniZinc {
     }
   }
 
-  bool Definition::setMin(Interpreter* interpreter, IntVal i) {
+  bool Definition::setMin(Interpreter* interpreter, IntVal i, bool binding) {
     if (isFixed()) {
       return lb() >= i;
     }
@@ -540,7 +513,7 @@ namespace MiniZinc {
       return true;
     }
     if (j == _domain.size()) {
-      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), false); // TODO: Is the domain binding when propagating??
+      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
       return false;
     }
     std::vector<Val> dom;
@@ -550,11 +523,11 @@ namespace MiniZinc {
     for (; j < _domain.size(); ++j) {
       dom.push_back(_domain[j]);
     }
-    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), false); // TODO: Is the domain binding when propagating??
+    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
     return true;
   }
 
-  bool Definition::setMax(Interpreter* interpreter, IntVal i) {
+  bool Definition::setMax(Interpreter* interpreter, IntVal i, bool binding) {
     if (isFixed()) {
       return ub() <= i;
     }
@@ -567,7 +540,7 @@ namespace MiniZinc {
       return true;
     }
     if (j < 0 ) {
-      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), false); // TODO: Is the domain binding when propagating??
+      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
       return false;
     }
     std::vector<Val> dom;
@@ -577,26 +550,26 @@ namespace MiniZinc {
     if (j % 2 == 0) {
       dom.emplace_back(i);
     }
-    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), false); // TODO: Is the domain binding when propagating??
+    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
     return true;
   }
 
-  bool Definition::setVal(Interpreter* interpreter, IntVal i) {
+  bool Definition::setVal(Interpreter* interpreter, IntVal i, bool binding) {
     if (isFixed()) {
       return i == _domain();
     }
     assert(_domain.size() % 2 == 0);
     for (int j = 0; j < _domain.size(); j+=2) {
       if (_domain[j]() <= i && i <= _domain[j+1]()) {
-        domain(interpreter, Val(i), false); // TODO: Is the domain binding when propagating??
+        domain(interpreter, Val(i), binding);
         return true;
       }
     }
-    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), false); // TODO: Is the domain binding when propagating??
+    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
     return false;
   }
 
-  bool Definition::intersectDom(Interpreter* interpreter, const std::vector<Val>& dom) {
+  bool Definition::intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding) {
     if (isFixed()) {
       assert(dom.size() % 2 == 0);
       for (int i = 0; i < dom.size(); i+=2) {
@@ -607,7 +580,7 @@ namespace MiniZinc {
       return false;
     }
     if (!isBounded()) {
-      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), false);
+      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
       return true;
     }
     VecSetRanges vsr1(_domain.toVec());
@@ -618,11 +591,11 @@ namespace MiniZinc {
       result.emplace_back(inter.min());
       result.emplace_back(inter.max());
     }
-    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), result)), false); // TODO: Is the domain binding when propagating??
+    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), result)), binding);
     return !result.empty();
   }
 
-  bool Definition::intersectDom(Interpreter* interpreter, Val dom) {
+  bool Definition::intersectDom(Interpreter* interpreter, Val dom, bool binding) {
     assert(!dom.isDef());
     if (dom.isInt()) {
       return setVal(interpreter, dom());
@@ -632,7 +605,7 @@ namespace MiniZinc {
     for (int i = 0; i < dom.size(); ++i) {
       vdom[i] = dom[i];
     }
-    return intersectDom(interpreter, vdom);
+    return intersectDom(interpreter, vdom, binding);
   }
 
   std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v) {
