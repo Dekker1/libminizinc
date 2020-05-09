@@ -841,8 +841,8 @@ std::pair<SolverInstance::Status, std::string> MznSolver::solve()
   std::string sol = printSolution(status);
   if (si_opt->printStatistics)
       getSI()->printStatistics();
-  if (flag_statistics)
-    getSI()->getSolns2Out()->printStatistics(log);
+  /* if (flag_statistics) */
+  /*   getSI()->getSolns2Out()->printStatistics(log); */
   return {status, sol};
 }
 

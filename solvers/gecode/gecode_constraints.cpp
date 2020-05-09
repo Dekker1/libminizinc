@@ -24,7 +24,7 @@ namespace MiniZinc {
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar res;
       if(def->isBounded()) {
-        res = IntVar(*gi._current_space, gi.arg2intset(def->domain()));
+        res = IntVar(*gi._current_space, gi.arg2intset(Val(def->domain())));
       } else {
         res = IntVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
         std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << def->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
@@ -40,13 +40,7 @@ namespace MiniZinc {
       assert(static_cast<BytecodeProc::Mode>(def->mode()) == BytecodeProc::RAW);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       assert(def->timestamp() != -1);
-      if (def->isFixed()) {
-        IntVar intVar(*gi._current_space, def->val().toInt(), def->val().toInt());
-        gi._current_space->iv.push_back(intVar);
-        gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
-        gi._current_space->iv_introduced.push_back(false);
-        gi._current_space->iv_defined.push_back(false);
-      } else if(def->isBounded()) {
+      if(def->isBounded()) {
         if (def->lb() >= 0 && def->ub() <= 1) {
           BoolVar boolVar(*gi._current_space, def->lb().toInt(), def->ub().toInt());
           gi._current_space->bv.push_back(boolVar);
@@ -54,7 +48,7 @@ namespace MiniZinc {
           gi._current_space->bv_introduced.push_back(false);
           gi._current_space->bv_defined.push_back(false);
         } else {
-          IntVar intVar(*gi._current_space, gi.arg2intset(def->domain()));
+          IntVar intVar(*gi._current_space, gi.arg2intset(Val(def->domain())));
           gi._current_space->iv.push_back(intVar);
           gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
           gi._current_space->iv_introduced.push_back(false);
@@ -515,9 +509,9 @@ namespace MiniZinc {
         IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + call->arg(1)().toInt()
             == res, gi.ann2icl(call->ann()));
-      } else if (call->isFixed()) {
-        rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + gi.arg2intvar(call->arg(1)) 
-            == call->lb().toInt(), gi.ann2icl(call->ann()));
+      /* } else if (call->isFixed()) { */
+      /*   rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + gi.arg2intvar(call->arg(1)) */ 
+      /*       == call->lb().toInt(), gi.ann2icl(call->ann())); */
       } else {
         IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + gi.arg2intvar(call->arg(1)) 
@@ -574,9 +568,9 @@ namespace MiniZinc {
         IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - call->arg(1)().toInt()
             == res, gi.ann2icl(call->ann()));
-      } else if (call->isFixed()) {
-        rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) 
-            == call->val().toInt(), gi.ann2icl(call->ann()));
+      /* } else if (call->isFixed()) { */
+      /*   rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) */ 
+      /*       == call->val().toInt(), gi.ann2icl(call->ann())); */
       } else {
         IntVar res = create_intvar(s, call);
         rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) 
@@ -732,8 +726,6 @@ namespace MiniZinc {
     BoolVarArgs bv = gi.arg2boolvarargs(call->arg(0)); \
     if (call->size()==1) { \
       rel(*gi._current_space, op, bv, 1, gi.ann2icl(ann)); \
-    } else if (call->isFixed()) { \
-      rel(*gi._current_space, op, bv, call->lb().toInt(), gi.ann2icl(ann)); \
     } else { \
       rel(*gi._current_space, op, bv, gi.reifyVar(call), gi.ann2icl(ann)); \
     }

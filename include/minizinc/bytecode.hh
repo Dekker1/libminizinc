@@ -568,7 +568,7 @@ namespace MiniZinc {
   protected:
     Definition* _prev;
     Definition* _next;
-    Val _domain;
+    Vec* _domain;
     Val _ann;
     Definition* _defs;
     int _pred : 32;
@@ -579,36 +579,19 @@ namespace MiniZinc {
     char _mode : 8;
     Subscriptions _subscriptions;
     Val _args[1];
-    Definition(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
+    Definition(Interpreter* interpreter,Vec* domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
   public:
-    Val domain(void) const { return _domain; }
+    Vec* domain(void) const { return _domain; }
     IntVal lb() const {
-      if (_domain.isInt()) {
-        return _domain();
-      } else {
-        assert(_domain.isVec() && _domain[0].isInt());
-        return _domain[0]();
-      }
+      assert((*_domain)[0].isInt());
+      return (*_domain)[0]();
     }
     IntVal ub() const {
-      if (_domain.isInt()) {
-        return _domain();
-      } else {
-        assert(_domain.isVec() && _domain[_domain.size()-1].isInt());
-        return _domain[_domain.size()-1]();
-      }
-    }
-    IntVal val() const {
-      if (!isFixed()) {
-        throw InternalError("Cannot retrieve the value of a Definition that is not fixed.");
-      }
-      return _domain();
+      assert((*_domain)[_domain->size()-1].isInt());
+      return (*_domain)[_domain->size()-1]();
     }
     bool isBounded() const {
       return lb().isFinite() && ub().isFinite();
-    }
-    bool isFixed() const {
-      return _domain.isInt();
     }
 
     /// Set new minimum value included in the domain
@@ -638,7 +621,7 @@ namespace MiniZinc {
     Definition* defs(void) const { return _defs; }
     void defs(Interpreter* interpreter, Definition* defs) {
       if (!_defs) {
-        _defs = Definition::a(interpreter,IntVal(0),false,0,0,{},-1); // Empty Head
+        _defs = Definition::a(interpreter, nullptr,false,0,0,{},-1); // Empty Head
       }
       if (_defs->next()->timestamp() < 0 || (defs->timestamp() > 0 && defs->timestamp() < _defs->next()->timestamp())) {
         _defs->next()->appendBefore(interpreter, defs);
@@ -658,7 +641,7 @@ namespace MiniZinc {
       }
       return nullptr;
     }
-    static Definition* a(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
+    static Definition* a(Interpreter* interpreter,Vec* domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
       Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
       new (d) Definition(interpreter,domain,binding,pred,mode,args,ident,ann);
       return d;
@@ -968,7 +951,7 @@ namespace MiniZinc {
     std::vector<RefCountedObject*> obj_trail;
     // <Definition, procedure, size, arg(0)>
     std::vector<std::tuple<Definition*, int, int, Val>> alias_trail;
-    std::vector<std::pair<Definition*, Val>> domain_trail;
+    std::vector<std::pair<Definition*, Vec*>> domain_trail;
     // <Hedge trail size, Obj trail size, Alias trail size, Domain trail size>
     std::vector<std::tuple<size_t, size_t, size_t, size_t>> trail_size;
     std::vector<int> timestamp_trail;
@@ -1016,11 +999,12 @@ namespace MiniZinc {
       return true;
     }
     // Trail definition domain change
-    inline bool trail_domain(Interpreter* interpreter, Definition* def, Val dom) {
+    inline bool trail_domain(Interpreter* interpreter, Definition* def, Vec* dom) {
       if (!is_trailed(def)) {
         return false;
       }
-      dom.addWeakRef(interpreter);
+      assert(dom);
+      dom->addWRef(interpreter);
       domain_trail.emplace_back(def, dom);
       return true;
     }
@@ -1141,7 +1125,7 @@ namespace MiniZinc {
 
   inline
   AggregationCtx::AggregationCtx(Interpreter* interpreter, int s) :
-    def_stack(Definition::a(interpreter,IntVal(0),false,0,0,{},-1)), // Empty Head
+    def_stack(Definition::a(interpreter,nullptr,false,0,0,{},-1)), // Empty Head
     def_ident_start(interpreter->currentIdent()),
     symbol(static_cast<Symbol>(s)), n_symbols(1) {
     assert(s >= 0 && s <= VCTX_OTHER);

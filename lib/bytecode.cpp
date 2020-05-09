@@ -60,7 +60,7 @@ namespace MiniZinc {
       if (v.isVec() && (!v.toVec()->isPar())) {
         return false;
       }
-      if (v.isDef() && (!v.toDef()->domain().isInt())) {
+      if (v.isDef()) {
         return false;
       }
     }
@@ -89,7 +89,13 @@ namespace MiniZinc {
           os << ", ";
       }
       os << ")";
-      os << " domain: " << d->domain().toString() << "\n";
+      if (d->domain()) {
+        if (d->_binding) {
+          os << " binding";
+        }
+        os << " domain: " << Val(d->domain()).toString();
+      }
+      os << "\n";
       if (!d->subscriptions().empty()) {
         for (unsigned int i=0; i<indent; i++) {
           os << "  ";
@@ -106,10 +112,12 @@ namespace MiniZinc {
     }
   }
 
-  Definition::Definition(Interpreter* interpreter,Val domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann)
+  Definition::Definition(Interpreter* interpreter, Vec* domain, bool binding, int pred, char mode, const std::vector<Val>& args, int ident, Val ann)
   : RefCountedObject(RefCountedObject::DEF,ident), _prev(this), _next(this),
   _domain(domain), _ann(ann), _defs(nullptr), _pred(pred), _size(args.size()), _flag(0), _binding(binding), _mode(mode) {
-    _domain.construct(interpreter);
+    if (_domain) {
+      _domain->addRef(interpreter);
+    }
     _ann.construct(interpreter);
     for (unsigned int i=0; i<args.size(); i++) {
       new (&_args[i]) Val(args[i]);
@@ -161,7 +169,9 @@ namespace MiniZinc {
     }
     assert(_defs == nullptr || interpreter->trail.is_trailed(this));
 
-    _domain.destroy(interpreter);
+    if (_domain){
+      RefCountedObject::rmRef(interpreter, _domain);
+    }
     _ann.destroy(interpreter);
     interpreter->unsubscribe(this);
     for (unsigned int i=0; i<_size; i++) {
@@ -181,7 +191,7 @@ namespace MiniZinc {
     }
     interpreter->subscribe(this);
     _ann.construct(interpreter);
-    _domain.construct(interpreter);
+    _domain->addRef(interpreter);
     _ref_count = 0;
   }
 
@@ -235,16 +245,13 @@ namespace MiniZinc {
     auto mode = static_cast<BytecodeProc::Mode>(d->mode());
     assert(mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG);
 
-    Val dom = d->domain();
-    SetLit* dom_set = nullptr;
-    if (dom.isVec()) {
-      assert(dom.size() >= 2 && dom.size() % 2 == 0);
-      std::vector<IntSetVal::Range> ranges;
-      for (int i = 0; i < dom.size(); i += 2) {
-        ranges.emplace_back(dom[i](), dom[i+1]());
-      }
-      dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+    Vec* dom = d->domain();
+    assert(dom->size() >= 2 && dom->size() % 2 == 0);
+    std::vector<IntSetVal::Range> ranges;
+    for (int i = 0; i < dom->size(); i += 2) {
+      ranges.emplace_back((*dom)[i](), (*dom)[i+1]());
     }
+    SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
     auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
     auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
     vd->addAnnotation(constants().ann.output_var);
@@ -387,9 +394,7 @@ namespace MiniZinc {
     assert(_defs == nullptr || interpreter->trail.is_trailed(this));
 
     // Destroy old definition
-    _domain.destroy(interpreter);
-    _domain = Val(IntVal(0));
-    _ann.destroy(interpreter);
+    RefCountedObject::rmRef(interpreter, _domain);
     _ann = Val(IntVal(0));
     for (unsigned int i=0; i<_size; i++) {
       _args[i].destroy(interpreter);
@@ -428,7 +433,7 @@ namespace MiniZinc {
     // TODO: Transfer back subscriptions moved on aliasing?
     interpreter->subscribe(this);
     _ann.construct(interpreter);
-    _domain.construct(interpreter);
+    _domain->addRef(interpreter);
     _ref_count = ref_count;
   }
 
@@ -465,15 +470,20 @@ namespace MiniZinc {
   void
   Definition::domain(Interpreter* interpreter, const Val& newDomain, bool binding0) {
     interpreter->trail.trail_domain(interpreter, this, _domain);
-    _domain.destroy(interpreter);
-    _domain = newDomain;
-    _domain.construct(interpreter);
-    if (_domain.isVec() && _domain.size() == 2 && _domain[0]() == _domain[1]()) {
-      _domain.destroy(interpreter);
-      _domain = _domain[0];
-      _domain.construct(interpreter);
+    if (newDomain.isInt()) {
+      alias(interpreter, newDomain);
+      interpreter->schedule(this, Definition::SEV_VAL);
+    } else if (newDomain.size() == 2 && newDomain[0]() == newDomain[1]()) {
+      alias(interpreter, newDomain[0]);
+      interpreter->schedule(this, Definition::SEV_VAL);
+    } else {
+      if (_domain) {
+        RefCountedObject::rmRef(interpreter, _domain);
+      }
+      _domain = newDomain.toVec();
+      _domain->addRef(interpreter);
+      interpreter->schedule(this, Definition::SEV_DOM);
     }
-    interpreter->schedule(this, isFixed() ? Definition::SEV_VAL : Definition::SEV_DOM);
     binding(interpreter,binding0);
   }
   void
@@ -481,14 +491,12 @@ namespace MiniZinc {
     if (!isBounded()) {
       domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), newDomain)), binding0);
     } else {
-      assert(!isFixed());
       bool did_update = false;
-      Vec* d = _domain.toVec();
-      if (newDomain.size() != d->size()) {
+      if (newDomain.size() != _domain->size()) {
         did_update = true;
       } else {
         for (int i=0; i<newDomain.size(); i++) {
-          if (newDomain[i]() != (*d)[i]()) {
+          if (newDomain[i]() != (*_domain)[i]()) {
             did_update = true;
             break;
           }
@@ -501,18 +509,15 @@ namespace MiniZinc {
   }
 
   bool Definition::setMin(Interpreter* interpreter, IntVal i, bool binding) {
-    if (isFixed()) {
-      return lb() >= i;
-    }
-    assert(_domain.size() % 2 == 0);
+    assert(_domain->size() % 2 == 0);
     size_t j = 0;
-    while (j < _domain.size() && _domain[j]() < i) {
+    while (j < _domain->size() && (*_domain)[j]() < i) {
       ++j;
     }
     if (j == 0) {
       return true;
     }
-    if (j == _domain.size()) {
+    if (j == _domain->size()) {
       domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
       return false;
     }
@@ -520,23 +525,20 @@ namespace MiniZinc {
     if (j % 2 == 1) {
       dom.emplace_back(i);
     }
-    for (; j < _domain.size(); ++j) {
-      dom.push_back(_domain[j]);
+    for (; j < _domain->size(); ++j) {
+      dom.push_back((*_domain)[j]);
     }
     domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
     return true;
   }
 
   bool Definition::setMax(Interpreter* interpreter, IntVal i, bool binding) {
-    if (isFixed()) {
-      return ub() <= i;
-    }
-    assert(_domain.size() % 2 == 0);
-    size_t j = _domain.size() - 1;
-    while (j >= 0 && _domain[j]() > i) {
+    assert(_domain->size() % 2 == 0);
+    size_t j = _domain->size() - 1;
+    while (j >= 0 && (*_domain)[j]() > i) {
       --j;
     }
-    if (j == _domain.size() - 1) {
+    if (j == _domain->size() - 1) {
       return true;
     }
     if (j < 0 ) {
@@ -545,7 +547,7 @@ namespace MiniZinc {
     }
     std::vector<Val> dom;
     for (size_t k = 0; k <= j; ++j) {
-      dom.push_back(_domain[j]);
+      dom.push_back((*_domain)[j]);
     }
     if (j % 2 == 0) {
       dom.emplace_back(i);
@@ -555,13 +557,11 @@ namespace MiniZinc {
   }
 
   bool Definition::setVal(Interpreter* interpreter, IntVal i, bool binding) {
-    if (isFixed()) {
-      return i == _domain();
-    }
-    assert(_domain.size() % 2 == 0);
-    for (int j = 0; j < _domain.size(); j+=2) {
-      if (_domain[j]() <= i && i <= _domain[j+1]()) {
-        domain(interpreter, Val(i), binding);
+    assert(_domain->size() % 2 == 0);
+    for (int j = 0; j < _domain->size(); j+=2) {
+      if ((*_domain)[j]() <= i && i <= (*_domain)[j+1]()) {
+        this->binding(interpreter, binding);
+        alias(interpreter, Val(i));
         return true;
       }
     }
@@ -570,20 +570,11 @@ namespace MiniZinc {
   }
 
   bool Definition::intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding) {
-    if (isFixed()) {
-      assert(dom.size() % 2 == 0);
-      for (int i = 0; i < dom.size(); i+=2) {
-        if (dom[i]() <= _domain() && _domain() <= dom[i+1]()) {
-          return true;
-        }
-      }
-      return false;
-    }
     if (!isBounded()) {
       domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
       return true;
     }
-    VecSetRanges vsr1(_domain.toVec());
+    VecSetRanges vsr1(_domain);
     StdVecSetRanges vsr2(&dom);
     Ranges::Inter<IntVal,VecSetRanges,StdVecSetRanges> inter(vsr1,vsr2);
     std::vector<Val> result;
@@ -827,15 +818,6 @@ namespace MiniZinc {
     }
   }
 
-  bool Val::isFixed() const {
-    if (isInt()) {
-      return true;
-    } else {
-      assert(isDef());
-      return toDef()->isFixed();
-    }
-  }
-
   CSETable::Key::Key(const std::vector<Val> &vec) {
     _size = vec.size();
     // TODO: Should CSEKeys compare arrays with the same content again?
@@ -891,7 +873,8 @@ namespace MiniZinc {
             auto cmode = BytecodeProc::FUN;
             std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
             if (!found) {
-              auto d = Definition::a(interpreter, interpreter->boolean_domain(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter->newIdent());
+              // FIXME: This is no longer how this works. We do not create FUN definitions (They should not exist)
+              auto d = Definition::a(interpreter, interpreter->boolean_domain().toVec(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter->newIdent());
               interpreter->pushDef(d);
               new_val = Val(d);
               interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
@@ -952,7 +935,8 @@ namespace MiniZinc {
             Val new_val;
             std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
             if (!found) {
-              auto negation = Definition::a(interpreter, interpreter->boolean_domain(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent());
+              // FIXME: This is no longer how this works. We do not create FUN definitions (They should not exist)
+              auto negation = Definition::a(interpreter, interpreter->boolean_domain().toVec(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent());
               interpreter->pushDef(negation);
               new_val = Val(negation);
               interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
@@ -1525,13 +1509,7 @@ namespace MiniZinc {
           if (v.isInt()) {
             frame->reg.assign(this, r2, IntVal(1));
           } else if (v.isDef()) {
-            Definition* def = v.toDef();
-            if (def->domain().isInt()) {
-              frame->reg.assign(this, r1, def->lb());
-              frame->reg.assign(this, r2, IntVal(1));
-            } else {
-              frame->reg.assign(this, r2, IntVal(0));
-            }
+            frame->reg.assign(this, r2, IntVal(0));
           } else {
             assert(v.isVec());
             IntVal ret = IntVal(v.toVec()->isPar());
@@ -1580,22 +1558,8 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("LB R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           Val v = Val::follow_alias(frame->reg[r1], this);
-          if (v.isInt()) {
-            frame->reg.assign(this, r2, v);
-          } else if (v.isDef()) {
-            Definition* def = v.toDef();
-            if (def->isBounded()) {
-              Val lb(def->lb());
-              frame->reg.assign(this, r2, lb);
-              DBG_INTERPRETER(" R" << r2 <<  "(" << lb.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
-            } else {
-              std::cerr << "PROPAGATE " << _procs[v.toDef()->pred()].name << "!\n";
-              std::cerr << v.toString() << " with domain " << v.toDef()->domain().toString() << std::endl;
-              throw Error("Error: lb on unbounded variable");
-            }
-          } else {
-            throw Error("Error: lb on invalid type");
-          }
+          frame->reg.assign(this, r2, v.lb());
+          DBG_INTERPRETER(" R" << r2 <<  "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::UB:
@@ -1604,20 +1568,8 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("UB R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           Val v = Val::follow_alias(frame->reg[r1], this);
-          if (v.isInt()) {
-            frame->reg.assign(this, r2, v);
-          } else if (v.isDef()) {
-            Definition* def = v.toDef();
-            if (def->isBounded()) {
-              Val ub(def->ub());
-              frame->reg.assign(this, r2, ub);
-              DBG_INTERPRETER(" R" << r2 <<  "(" << ub.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
-            } else {
-              throw Error("Error: ub on unbounded variable");
-            }
-          } else {
-            throw Error("Error: ub on invalid type");
-          }
+          frame->reg.assign(this, r2, v.ub());
+          DBG_INTERPRETER(" R" << r2 <<  "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::DOM:
@@ -1630,15 +1582,11 @@ namespace MiniZinc {
             frame->reg.assign(this, r2, Val(Vec::a(this, newIdent(), {v,v})));
           } else if (v.isDef()) {
             Definition* def = v.toDef();
-            if (def->domain().isVec()) {
-              frame->reg.assign(this, r2, def->domain());
-              DBG_INTERPRETER(" R" << r2 <<  "(" << def->domain().toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
-            } else {
-              throw Error("Error: dom on unbounded variable");
-            }
+            frame->reg.assign(this, r2, Val(def->domain()));
           } else {
             throw Error("Error: dom on invalid type");
           }
+          DBG_INTERPRETER(" R" << r2 <<  "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::MAKE_SET:
@@ -1767,21 +1715,14 @@ namespace MiniZinc {
           Val v1 = Val::follow_alias(frame->reg[r1], this);
           Val v2 = Val::follow_alias(frame->reg[r2], this);
 
-          Val dom_val;
-          if (v1.isDef()) {
-            dom_val = v1.toDef()->domain();
-          } else {
+          // FIXME: What if variable is already fixed, then v1.isInt()!
+          if (!v1.isDef()) {
             throw Error("Error: INTERSECT_DOMAIN on invalid type");
           }
 
           Val result_val;
-          if (dom_val.isInt()) {
-            if (v2.isVec()) {
-              result_val = v2;
-              v1.toDef()->domain(this, result_val, true);
-            }
-          } else if (v2.isVec()) {
-            Vec* s1 = dom_val.toVec();
+          if (v2.isVec()) {
+            Vec* s1 = v1.toDef()->domain();
             Vec* s2 = v2.toVec();
             VecSetRanges vsr1(s1);
             VecSetRanges vsr2(s2);
@@ -1792,7 +1733,7 @@ namespace MiniZinc {
               result.emplace_back(inter.max());
             }
             v1.toDef()->domain(this, result, true);
-            result_val = v1.toDef()->domain();
+            result_val = Val(v1.toDef()->domain());
           }
           frame->reg.assign(this, r3, result_val);
           DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
@@ -1871,23 +1812,8 @@ execute_ret:
             DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
             // this is a FlatZinc builtin
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-            Val dom;
-            switch (mode) {
-              case BytecodeProc::ROOT:
-                dom = Val(IntVal(1));
-                break;
-              case BytecodeProc::ROOT_NEG:
-                dom = Val(IntVal(0));
-                break;
-              case BytecodeProc::IMP:
-              case BytecodeProc::IMP_NEG:
-                dom = boolean_domain();
-                break;
-              default:
-                dom = infinite_domain();
-                break;
-            }
-            Definition* def = Definition::a(this,dom,false,code,mode,args,ident);
+            assert (mode == BytecodeProc::RAW || mode == BytecodeProc::ROOT);
+            Definition* def = Definition::a(this,nullptr,false,code,mode,args,ident);
             for (const Val& arg : args) {
               if (arg.isDef()) {
                 Definition* argDef = arg.toDef();
@@ -1985,23 +1911,8 @@ execute_ret:
             DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
             // this is a FlatZinc builtin
             int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-            Val dom;
-            switch (mode) {
-              case BytecodeProc::ROOT:
-                dom = Val(IntVal(1));
-                break;
-              case BytecodeProc::ROOT_NEG:
-                dom = Val(IntVal(0));
-                break;
-              case BytecodeProc::IMP:
-              case BytecodeProc::IMP_NEG:
-                dom = boolean_domain();
-                break;
-              default:
-                dom = infinite_domain();
-                break;
-            }
-            Definition* def = Definition::a(this,dom,false,code,mode,args,ident);
+            assert (mode == BytecodeProc::RAW || mode == BytecodeProc::ROOT);
+            Definition* def = Definition::a(this,nullptr,false,code,mode,args,ident);
             for (const Val& arg : args) {
               if (arg.isDef()) {
                 Definition* argDef = arg.toDef();
@@ -2198,8 +2109,8 @@ execute_ret:
                   pushAgg(args[0], -2);
                 } else {
                   Vec* arr = Vec::allocate_array(this, newIdent(), args);
-                  result = Definition::a(this,infinite_domain(),false,PrimitiveMap::MK_INTVAR,BytecodeProc::RAW,{boolean_domain()},newIdent());
-                  auto ndefs = Definition::a(this,Val(1),false,PrimitiveMap::FORALL,BytecodeProc::ROOT,{Val(arr), Val(result)},newIdent());
+                  result = Definition::a(this,infinite_domain().toVec(),false,PrimitiveMap::MK_INTVAR,BytecodeProc::RAW,{boolean_domain()},newIdent());
+                  auto ndefs = Definition::a(this,nullptr,false,PrimitiveMap::FORALL,BytecodeProc::ROOT,{Val(arr), Val(result)},newIdent());
                   result->defs(this, ndefs);
 
                   pushAgg(Val(result),-2);
@@ -2233,7 +2144,8 @@ execute_ret:
                   // Push into root context
                   Vec* arr = Vec::allocate_array(this, newIdent(), args);
                   Vec* empty = Vec::allocate_array(this, newIdent(), {});
-                  Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::CLAUSE,BytecodeProc::ROOT,
+                  // FIXME: This does not seem valid -- The return value of a ROOT constraint should not be used (or have a domain)
+                  Definition* d = Definition::a(this,boolean_domain().toVec(),false,PrimitiveMap::CLAUSE,BytecodeProc::ROOT,
                                                 {Val(arr), Val(empty)},-1);
                   if (defs) {
                     d->appendBefore(this, defs);
@@ -2244,8 +2156,8 @@ execute_ret:
                   pushAgg(args[0],-2);
                 } else {
                   Vec* arr = Vec::allocate_array(this, newIdent(), args);
-                  result = Definition::a(this,infinite_domain(),false,PrimitiveMap::MK_INTVAR,BytecodeProc::RAW,{boolean_domain()},newIdent());
-                  auto ndefs = Definition::a(this,Val(1),false,PrimitiveMap::EXISTS,BytecodeProc::ROOT,{Val(arr), Val(result)},newIdent());
+                  result = Definition::a(this,nullptr,false,PrimitiveMap::MK_INTVAR,BytecodeProc::RAW,{boolean_domain()},newIdent());
+                  auto ndefs = Definition::a(this,nullptr,false,PrimitiveMap::EXISTS,BytecodeProc::ROOT,{Val(arr), Val(result)},newIdent());
                   result->defs(this, ndefs);
 
                   pushAgg(Val(result),-2);
@@ -2420,23 +2332,8 @@ execute_ret:
       DBG_INTERPRETER("--- FZN Builtin\n");
       // this is a FlatZinc builtin
       int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-      Val dom;
-      switch (mode) {
-        case BytecodeProc::ROOT:
-          dom = Val(IntVal(1));
-          break;
-        case BytecodeProc::ROOT_NEG:
-          dom = Val(IntVal(0));
-          break;
-        case BytecodeProc::IMP:
-        case BytecodeProc::IMP_NEG:
-          dom = boolean_domain();
-          break;
-        default:
-          dom = infinite_domain();
-          break;
-      }
-      Definition* def = Definition::a(this,dom,false,code,mode,args,ident);
+      assert (mode == BytecodeProc::RAW || mode == BytecodeProc::ROOT);
+      Definition* def = Definition::a(this,nullptr,false,code,mode,args,ident);
       pushDef(def);
       if (cse_suited) {
         Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
@@ -2536,12 +2433,13 @@ execute_ret:
     // Restore original domains
     while (domain_trail.size() > dt_size) {
       Definition* def;
-      Val dom;
+      Vec* dom;
       std::tie(def, dom) = domain_trail.back();
-      def->_domain.destroy(interpreter);
+      assert(def->_domain != nullptr);
+      RefCountedObject::rmRef(interpreter, def->_domain);
       def->_domain = dom;
-      def->_domain.construct(interpreter);
-      dom.removeWeakRef(interpreter);
+      def->_domain->addRef(interpreter);
+      RefCountedObject::rmWRef(interpreter, dom);
       domain_trail.pop_back();
     }
     // Remove all additions/changes to the CSE table

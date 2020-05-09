@@ -27,7 +27,6 @@ namespace MiniZinc {
       FORALL,
       EXISTS,
       INT_EQ,
-      INT_SUM,
       INT_TIMES,
       INT_LIN_EQ,
       UNIFORM,
@@ -103,10 +102,6 @@ namespace MiniZinc {
       Alias(void) : PrimitiveMap::Primitive("<alias>",PrimitiveMap::ALIAS,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const { return PS_OK; }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {}
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        assert(false);
-        throw Error("internal error");
-      }
     };
 
     class BoolNot : public PrimitiveMap::Primitive {
@@ -119,23 +114,26 @@ namespace MiniZinc {
         if (d->arg(1).isDef()) {
           d->arg(1).toDef()->subscribe(d, Definition::SES_VAL);
         }
-        if (d->arg(0).isFixed() || d->arg(1).isFixed()) {
+        if (d->arg(0).isInt() || d->arg(1).isInt()) {
           return propagate(i,d);
         } else {
           return PS_OK;
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        Val arg = Val::follow_alias(d->arg(0), &i);
-        if (arg.isDef()) {
-          arg.toDef()->unsubscribe(d);
+        for (unsigned int j=0; j<d->arg(0).size(); j++) {
+          Val arg = Val::follow_alias(d->arg(j), &i);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
+          }
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        Val arg = Val::follow_alias(d->arg(0), &i);
-        if ((arg.isDef() && arg.toDef()->isFixed()) || arg.isInt()) {
-          return d->setVal(&i, 1 - arg.lb()) ? PS_ENTAILED : PS_FAILED;
-        }
+        // FIXME: Write new relational propagator
+        /* Val arg = Val::follow_alias(d->arg(0), &i); */
+        /* if (arg.isInt()) { */
+        /*   return d->setVal(&i, 1 - arg.lb()) ? PS_ENTAILED : PS_FAILED; */
+        /* } */
         return PS_OK;
       }
     };
@@ -144,19 +142,13 @@ namespace MiniZinc {
     public:
       MkIntVar(void) : PrimitiveMap::Primitive("mk_intvar",PrimitiveMap::MK_INTVAR,1) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        assert(!d->isBounded());
-        if (d->arg(0).isVec()) {
-          // Propagate declared domain to definition
-          d->domain(&i, d->arg(0), false);
-        }
+        assert(!d->domain());
+        assert(d->arg(0).isVec());
+        // Propagate declared domain to definition
+        d->domain(&i, d->arg(0), false);
         return PS_OK;
       }
-      virtual void unsubscribe(Interpreter& i, Definition* d) const {
-      }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        assert(false);
-        throw Error("internal error");
-      }
+      virtual void unsubscribe(Interpreter& i, Definition* d) const {}
     };
 
     class Clause : public PrimitiveMap::Primitive {
@@ -165,14 +157,14 @@ namespace MiniZinc {
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = false;
         for (unsigned int i=0; i<d->arg(0).size(); i++) {
-          if (d->arg(0)[i].isDef()) {
-            d->arg(0)[i].toDef()->subscribe(d, Definition::SES_VAL);
+          if (d->arg(0)[0][i].isDef()) {
+            d->arg(0)[0][i].toDef()->subscribe(d, Definition::SES_VAL);
           } else {
             propImmediately = true;
           }
         }
         for (unsigned int i=0; i<d->arg(1).size(); i++) {
-          if (d->arg(1)[i].isDef()) {
+          if (d->arg(1)[0][i].isDef()) {
             d->arg(1)[i].toDef()->subscribe(d, Definition::SES_VAL);
           } else {
             propImmediately = true;
@@ -186,13 +178,15 @@ namespace MiniZinc {
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
         for (unsigned int i=0; i<d->arg(0).size(); i++) {
-          if (d->arg(0)[i].isDef()) {
-            d->arg(0)[i].toDef()->unsubscribe(d);
+          Val arg = Val::follow_alias(d->arg(0)[0][i]);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
           }
         }
         for (unsigned int i=0; i<d->arg(1).size(); i++) {
-          if (d->arg(1)[i].isDef()) {
-            d->arg(1)[i].toDef()->unsubscribe(d);
+          Val arg = Val::follow_alias(d->arg(1)[0][i]);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
           }
         }
       }
@@ -224,9 +218,14 @@ namespace MiniZinc {
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
         for (unsigned int i=0; i<d->arg(0).size(); i++) {
-          if (d->arg(0)[i].isDef()) {
-            d->arg(0)[i].toDef()->unsubscribe(d);
+          Val arg = Val::follow_alias(d->arg(0)[0][i]);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
           }
+        }
+        Val arg = Val::follow_alias(d->arg(1));
+        if (arg.isDef()) {
+          arg.toDef()->unsubscribe(d);
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const { return PS_OK; }
@@ -286,7 +285,7 @@ namespace MiniZinc {
           return y.toDef()->setVal(&i, x()) ? PS_ENTAILED : PS_FAILED;
         }
         assert(x.toDef()->pred() == PrimitiveMap::MK_INTVAR);
-        bool success = y.toDef()->intersectDom(&i, x.toDef()->domain());
+        bool success = y.toDef()->intersectDom(&i, Val(x.toDef()->domain()));
         if (!success) {
           return PS_FAILED;
         }
@@ -296,54 +295,6 @@ namespace MiniZinc {
       virtual void unsubscribe(Interpreter& i, Definition* d) const {}
     };
 
-    class IntSum : public PrimitiveMap::Primitive {
-    public:
-      IntSum(void) : PrimitiveMap::Primitive("int_sum",PrimitiveMap::INT_SUM,1) {}
-      virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        bool propImmediately = true;
-        for (int j = 0; j < Val::follow_alias(d->arg(0), &i).size(); ++j) {
-          Val arg = Val::follow_alias(d->arg(0)[j], &i);
-          if (arg.isDef()) {
-            arg.toDef()->subscribe(d, Definition::SES_ANY);
-            if (!arg.toDef()->isBounded()) {
-              propImmediately = false;
-            }
-          }
-        }
-        if (propImmediately) {
-          return propagate(i,d);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (int j=0; j < d->arg(0).size(); j++) {
-          if (d->arg(0)[j].isDef()) {
-            d->arg(0)[j].toDef()->unsubscribe(d);
-          }
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        IntVal lb, ub;
-
-        for (int j=0; j < Val::follow_alias(d->arg(0), &i).size(); j++) {
-          Val v = Val::follow_alias(d->arg(0)[j], &i);
-          if (v.isDef() && !v.toDef()->isBounded()) {
-            return PS_OK;
-          }
-          lb += v.lb();
-          ub += v.ub();
-        }
-
-        if (lb == ub) {
-          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
-        } else {
-          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
-        }
-        // TODO: Backwards Propagation
-      }
-    };
-
     class IntTimes : public PrimitiveMap::Primitive {
     public:
       IntTimes(void) : PrimitiveMap::Primitive("int_times",PrimitiveMap::INT_TIMES,3) {}
@@ -351,7 +302,7 @@ namespace MiniZinc {
         assert(d->mode() == BytecodeProc::ROOT);
         bool propImmediately = true;
         for (int j = 0; j < _n_args; ++j) {
-          Val arg = Val::follow_alias(d->arg(j), &i);
+          Val arg = d->arg(j);
           if (arg.isDef()) {
             arg.toDef()->subscribe(d, Definition::SES_ANY);
             if (!arg.toDef()->isBounded()) {
@@ -378,8 +329,7 @@ namespace MiniZinc {
         Val b = Val::follow_alias(d->arg(1), &i);
         Val res = Val::follow_alias(d->arg(2), &i);
         if (b.isInt() && a.isDef()) {
-          a = Val::follow_alias(d->arg(1), &i);
-          b = Val::follow_alias(d->arg(0), &i);
+          std::swap(a, b);
         }
 
         IntVal lb, ub;
@@ -437,9 +387,10 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (unsigned int j=0; j < d->arg(1).size(); j++) {
-          if (d->arg(1)[j].isDef()) {
-            d->arg(1)[j].toDef()->unsubscribe(d);
+        for (int j = 0; j < d->arg(1)[0].size(); ++j) {
+          Val arg = Val::follow_alias(d->arg(1)[0][j], &i);
+          if (arg.isDef()) {
+            arg.toDef()->unsubscribe(d);
           }
         }
       }
@@ -542,7 +493,7 @@ namespace MiniZinc {
       IntMax(void) : PrimitiveMap::Primitive("int_max",PrimitiveMap::INT_MAX_,3) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
         bool propImmediately = true;
-        for (int j = 0; j < 3; ++j) {
+        for (int j = 0; j < _n_args; ++j) {
           Val arg = Val::follow_alias(d->arg(j), &i);
           if (arg.isDef()) {
             arg.toDef()->subscribe(d, Definition::SES_ANY);
@@ -558,7 +509,7 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (int j = 0; j < 2; ++j) {
+        for (int j = 0; j < _n_args; ++j) {
           Val arg = Val::follow_alias(d->arg(j), &i);
           if (arg.isDef()) {
             arg.toDef()->unsubscribe(d);
@@ -595,10 +546,11 @@ namespace MiniZinc {
         IntVal lb, ub;
         lb = std::max(a.lb(), b.lb());
         ub = std::max(a.ub(), b.ub());
+        // FIXME: c is not guaranteed to be a definition
         if (lb == ub) {
-          return d->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+          return c.toDef()->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
         } else {
-          return d->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+          return c.toDef()->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
         }
       }
     };

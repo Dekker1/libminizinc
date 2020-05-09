@@ -21,7 +21,6 @@ namespace MiniZinc {
     Forall forall;
     Exists exists;
     IntEq int_eq;
-    IntSum intsum;
     IntTimes inttimes;
     IntLinEq int_lin_eq;
     Uniform uniform;
@@ -35,7 +34,7 @@ namespace MiniZinc {
     SliceXd slice_xd;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &int_eq, &intsum, &inttimes, &int_lin_eq, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
+      &alias, &mk_intvar, &boolnot, &clause, &forall, &exists, &int_eq, &inttimes, &int_lin_eq, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
     };
   }
   
