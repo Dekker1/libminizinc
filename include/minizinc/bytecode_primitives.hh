@@ -132,12 +132,18 @@ namespace MiniZinc {
         }
       }
       virtual PropStatus propagate(Interpreter& i, Definition* d) const {
-        // FIXME: Write new relational propagator
-        /* Val arg = Val::follow_alias(d->arg(0), &i); */
-        /* if (arg.isInt()) { */
-        /*   return d->setVal(&i, 1 - arg.lb()) ? PS_ENTAILED : PS_FAILED; */
-        /* } */
-        return PS_OK;
+        Val lhs = Val::follow_alias(d->arg(0), &i);
+        Val rhs = Val::follow_alias(d->arg(1), &i);
+        if (!lhs.isInt()) {
+          std::swap(lhs, rhs);
+        }
+        if (!lhs.isInt()) {
+          return PS_OK;
+        }
+        if (rhs.isInt()) {
+          return lhs() == rhs() ? PS_ENTAILED : PS_FAILED;
+        }
+        return rhs.toDef()->setVal(&i, 1 - lhs()) ? PS_ENTAILED : PS_FAILED;
       }
     };
 
