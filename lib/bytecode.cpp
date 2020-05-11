@@ -394,7 +394,9 @@ namespace MiniZinc {
     assert(_defs == nullptr || interpreter->trail.is_trailed(this));
 
     // Destroy old definition
-    RefCountedObject::rmRef(interpreter, _domain);
+    if (_domain) {
+      RefCountedObject::rmRef(interpreter, _domain);
+    }
     _ann = Val(IntVal(0));
     for (unsigned int i=0; i<_size; i++) {
       _args[i].destroy(interpreter);
