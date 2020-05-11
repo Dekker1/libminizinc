@@ -2111,7 +2111,7 @@ execute_ret:
                   pushAgg(args[0], -2);
                 } else {
                   Vec* arr = Vec::allocate_array(this, newIdent(), args);
-                  result = Definition::a(this,infinite_domain().toVec(),false,PrimitiveMap::MK_INTVAR,BytecodeProc::RAW,{boolean_domain()},newIdent());
+                  result = Definition::a(this,nullptr,false,PrimitiveMap::MK_INTVAR,BytecodeProc::RAW,{boolean_domain()},newIdent());
                   auto ndefs = Definition::a(this,nullptr,false,PrimitiveMap::FORALL,BytecodeProc::ROOT,{Val(arr), Val(result)},newIdent());
                   result->defs(this, ndefs);
 
