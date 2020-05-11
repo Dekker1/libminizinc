@@ -108,20 +108,23 @@ namespace MiniZinc {
     public:
       BoolNot(void) : PrimitiveMap::Primitive("bool_not",PrimitiveMap::BOOLNOT,2) {}
       virtual PropStatus subscribe(Interpreter& i, Definition* d) const {
-        if (d->arg(0).isDef()) {
-          d->arg(0).toDef()->subscribe(d, Definition::SES_VAL);
+        bool propImmediately = false;
+        for (unsigned int j=0; j<_n_args; j++) {
+          Val arg = d->arg(j);
+          if (arg.isDef()) {
+            arg.toDef()->subscribe(d, Definition::SES_VAL);
+          } else {
+            propImmediately = true;
+          }
         }
-        if (d->arg(1).isDef()) {
-          d->arg(1).toDef()->subscribe(d, Definition::SES_VAL);
-        }
-        if (d->arg(0).isInt() || d->arg(1).isInt()) {
+        if (propImmediately) {
           return propagate(i,d);
         } else {
           return PS_OK;
         }
       }
       virtual void unsubscribe(Interpreter& i, Definition* d) const {
-        for (unsigned int j=0; j<d->arg(0).size(); j++) {
+        for (unsigned int j=0; j<_n_args; j++) {
           Val arg = Val::follow_alias(d->arg(j), &i);
           if (arg.isDef()) {
             arg.toDef()->unsubscribe(d);
