@@ -622,7 +622,7 @@ namespace MiniZinc {
     std::vector<int> idx;
     while (!defs.empty()) {
       IntVal coeff = defs.back().first;
-      Val stacktop = defs.back().second;
+      Val stacktop = Val::follow_alias(defs.back().second);
       defs.pop_back();
       if (stacktop.isInt()) {
         d += coeff*stacktop();
