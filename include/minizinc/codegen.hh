@@ -302,11 +302,13 @@ struct CG_Cond {
     static const Kind _kind = CC_Call;
     Kind kind(void) const { return _kind; }
 
-    C_Call(CG_ProcID _p, BytecodeProc::Mode _m, std::vector<CG_Value>& _params)
-      : p(_p), m(_m), params(_params) { }
-    
-    CG_ProcID p;
+    C_Call(ASTString _ident, BytecodeProc::Mode _m, const std::vector<Type>& _ty, const std::vector<CG_Value>& _params)
+      : ident(_ident), m(std::move(_m)), ty(_ty), params(_params) {}
+
+    ASTString ident;
+    // Return Types + argument types
     BytecodeProc::Mode m;
+    std::vector<Type> ty;
     std::vector<CG_Value> params;
   };
   class C_And : public _T {
@@ -325,22 +327,12 @@ struct CG_Cond {
     return T::of_ptr(new C_Reg(r));
   }
 
-  template<typename ...Args>
-  static T call(CG_ProcID p, BytecodeProc::Mode m, Args... args) {
-    std::vector<CG_Value> params;
-    return _call(p, m, params, args...);
-  }
-  static T call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params) {
-    return _call(p, m, params);
+  static T call(ASTString ident, BytecodeProc::Mode m, const std::vector<Type>& ty, const std::vector<CG_Value>& params) {
+    return _call(ident, m, ty, params);
   }
 
-  template<typename ...Args>
-  static T _call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params, CG_Value next, Args... rest) {
-    params.push_back(next);
-    return _call(p, m, params, rest...);
-  }
-  static T _call(CG_ProcID p, BytecodeProc::Mode m, std::vector<CG_Value>& params) {
-    return T::of_ptr(new C_Call(p, m, params));
+  static T _call(ASTString ident, BytecodeProc::Mode m, const std::vector<Type>& ty, const std::vector<CG_Value>& params) {
+    return T::of_ptr(new C_Call(ident, m, ty, params));
   }
 
   template<typename ...Args>
