@@ -490,16 +490,9 @@ int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r
       return r_vlhs;
     }
     default:
-      TODO();
-      return 0xdead;
-    /*
-    // BOT_PLUS, BOT_MINUS, BOT_MULT, BOT_DIV, BOT_IDIV, BOT_MOD, BOT_POW,
-    // BOT_LE, BOT_LQ, BOT_GR, BOT_GQ, BOT_EQ, BOT_NQ,
-    // BOT_IN, BOT_SUBSET, BOT_SUPERSET, BOT_UNION, BOT_DIFF, BOT_SYMDIFF,
-    // BOT_INTERSECT,
-    // BOT_PLUSPLUS,
-    */
+      break;
   }
+  throw InternalError("Unexpected fall-through in bind_binop_par.");
 }
 
 CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, int r_lhs, int r_rhs) {
@@ -4154,6 +4147,7 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     case BOT_GR:
     case BOT_GQ:
     case BOT_EQ:
+    case BOT_EQUIV:
     case BOT_NQ: {
       // Potentially partial.
       int r_lhs = CG::force_or_bind(b->lhs(), ctx, cond, cg, frag);
