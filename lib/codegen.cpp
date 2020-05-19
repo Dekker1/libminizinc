@@ -2117,8 +2117,8 @@ private:
     // Now compile the result. 
     OPEN_OTHER(cg, frag);
     CG_Cond::T cond(CG::compile(e, cg, frag));
-    if(m == BytecodeProc::ROOT) {
-      post_cond(cg, frag, cond);
+    if(m.strength() == Mode::Root) {
+      post_cond(cg, frag,  m.is_neg() ? ~cond : cond);
     } else {
       aggregate_cond(cg, frag, m.is_neg() ? ~cond : cond);
     }
