@@ -581,63 +581,11 @@ int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r
   }
 }
 
-CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs) {
-  GCLock lock;
-  switch(op) {
-    // Actual builtins
-    case BOT_EQUIV:
-    case BOT_EQ: {
-      ASTString ident = {"op_equals"};
-      if (ctx == BytecodeProc::ROOT) {
-        ident = { "int_eq" };
-      } else if (ctx == BytecodeProc::ROOT_NEG) {
-        ident = { "int_ne" };
-        ctx = BytecodeProc::ROOT;
-        // Negated for context reversal in post_cond
-        return ~CG_Cond::call(ident, ctx, {Type::varbool(), Type::varint(), Type::varint()}, {CG::r(r_lhs), CG::r(r_rhs)});
-      }
-      return CG_Cond::call(ident, ctx, {Type::varbool(), Type::varint(), Type::varint()}, {CG::r(r_lhs), CG::r(r_rhs)});
-    }
-    case BOT_LQ:
-    {
-      return CG_Cond::call({"op_lessorequals"}, ctx, {Type::varbool(), Type::varint(), Type::varint()}, {CG::r(r_lhs), CG::r(r_rhs)});
-    }
-    case BOT_LE:
-    {
-      return CG_Cond::call({"op_less"}, ctx, {Type::varbool(), Type::varint(), Type::varint()}, {CG::r(r_lhs), CG::r(r_rhs)});
-    }
-    case BOT_IN:
-    {
-      return CG_Cond::call({"op_in"}, ctx, {Type::varbool(), Type::varint(), Type::varsetint()}, {CG::r(r_lhs), CG::r(r_rhs)});
-    }
-    // Normalisation
-    case BOT_NQ:
-      return ~binop_cond(cg, BOT_EQ, -ctx, r_lhs, r_rhs);
-    case BOT_GR:
-      return binop_cond(cg, BOT_LE, ctx, r_rhs, r_lhs);
-    case BOT_GQ:
-      return binop_cond(cg, BOT_LQ, ctx, r_rhs, r_lhs);
-    case BOT_XOR:
-      return ~binop_cond(cg, BOT_EQUIV, -ctx, r_lhs, r_rhs);
-    case BOT_RIMPL:
-      return binop_cond(cg, BOT_IMPL, ctx, r_rhs, r_lhs);
-    default:
-      TODO();
-    // BOT_PLUS, BOT_MINUS, BOT_MULT, BOT_DIV, BOT_IDIV, BOT_MOD, BOT_POW,
-    // BOT_LE, BOT_LQ, BOT_GR, BOT_GQ, BOT_EQ, BOT_NQ,
-    // BOT_IN, BOT_SUBSET, BOT_SUPERSET, BOT_UNION, BOT_DIFF, BOT_SYMDIFF,
-    // BOT_INTERSECT,
-    // BOT_PLUSPLUS,
-    // BOT_EQUIV, BOT_IMPL, BOT_RIMPL, BOT_OR, BOT_AND, BOT_XOR,
-    // BOT_DOTDOT
-  }
-  throw InternalError("Unexpected fall-through in binop_cond.");
-}
-
 CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, int r_lhs, int r_rhs) {
   GCLock lock;
   switch(op) {
     // Actual builtins
+    case BOT_EQUIV:
     case BOT_EQ: {
       int c = GET_REG(cg);
       int x = GET_REG(cg);
@@ -651,6 +599,10 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      if (ctx == BytecodeProc::ROOT_NEG) {
+        // Negated to match ROOT_NEG posting
+        return ~CG_Cond::call({"int_lin_ne"}, BytecodeProc::ROOT, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
+      }
       return CG_Cond::call({"int_lin_eq"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_LQ:
@@ -686,11 +638,11 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       return CG_Cond::call({"int_lin_le"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_NQ:
-      return ~binop_cond(cg, BOT_EQ, -ctx, r_lhs, r_rhs);
+      return ~linear_cond(cg, frag, BOT_EQ, -ctx, r_lhs, r_rhs);
     case BOT_GR:
-      return binop_cond(cg, BOT_LE, ctx, r_rhs, r_lhs);
+      return linear_cond(cg, frag, BOT_LE, ctx, r_rhs, r_lhs);
     case BOT_GQ:
-      return binop_cond(cg, BOT_LQ, ctx, r_rhs, r_lhs);
+      return linear_cond(cg, frag, BOT_LQ, ctx, r_rhs, r_lhs);
     default:
       break;
   }
@@ -4315,23 +4267,13 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       assert(b->rhs()->type().ispar());
       cond.push_back(b_lhs.second);
       cond.push_back(b_rhs.second);
-      cond.push_back(binop_cond(cg, BOT_IN, ctx, b_lhs.first, b_rhs.first));
+      cond.push_back(CG_Cond::call({"op_in"}, ctx, {Type::varbool(), Type::varint(), Type::varsetint()}, {CG::r(b_lhs.first), CG::r(b_rhs.first)}));
       return CG_Cond::forall(ctx, cond);
     }
-    default: {
-      // Standard case.
-      int r_lhs(CG::force(CG::compile(b->lhs(), cg, frag), ctx, cg, frag));
-      int r_rhs(CG::force(CG::compile(b->rhs(), cg, frag), ctx, cg, frag));
-      return binop_cond(cg, b->op(), ctx, r_lhs, r_rhs);
-      /*
-      if(b->type().ispar()) {
-        return CG_Cond::reg(bind_binop_par(cg, frag, b->op(), r_lhs, r_rhs));
-      } else {
-        return binop_cond(cg, b->op(), ctx, r_lhs, r_rhs);
-      }
-      */
-    }
+    default:
+      break;
   }
+  throw InternalError("Unexpected fall-through in compilation of BinOp.");
 }
 
 CG_Cond::T CG::compile(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
