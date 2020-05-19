@@ -85,14 +85,14 @@ namespace MiniZinc {
   }
 
   Variable::Variable(Interpreter* interpreter, Val domain, int ident)
-    : RefCountedObject(RefCountedObject::VAR,ident), _prev(this), _next(this), _domain(domain), _binding(true) {
+    : RefCountedObject(RefCountedObject::VAR,ident), _prev(this), _next(this), _domain(domain), _binding(true), _aliased(false) {
     _domain.construct(interpreter);
     _ann.construct(interpreter);
     addRef(interpreter);
   }
 
   Variable::Variable(Interpreter* interpreter, Val domain, bool binding, int ident, Val ann)
-    : RefCountedObject(RefCountedObject::VAR,ident), _prev(this), _next(this), _domain(domain), _ann(ann), _binding(binding) {
+    : RefCountedObject(RefCountedObject::VAR,ident), _prev(this), _next(this), _domain(domain), _ann(ann), _binding(binding), _aliased(false) {
     _domain.construct(interpreter);
     _ann.construct(interpreter);
     if (binding)
