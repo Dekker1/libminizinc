@@ -269,8 +269,9 @@ namespace MiniZinc {
     Status solve(void) override;
     void resetSolver(void) override;
 
-    void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
-    Val getSolutionValue(Definition* def) override;
+    virtual void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override;
+    virtual void addVariable(Variable* var) override;
+    virtual Val getSolutionValue(Variable* var) override;
 
     // Able to return to the solver into a position where no search decisions
     // have been made. SolverInstance must allow addDefinition calls after
@@ -379,13 +380,13 @@ namespace MiniZinc {
 
     /// Returns the GecodeVariable representing the Id, VarDecl or ArrayAccess
     GecodeSolver::Variable resolveVar(Expression* e);
-    GecodeSolver::Variable resolveVar(Definition* d);
+    GecodeSolver::Variable resolveVar(Variable* var);
 
-    Gecode::BoolVar reifyVar(const Definition* d);
+    Gecode::BoolVar reifyVar(const Variable* var);
 
     /// Inserts variable gv into _variableMap with key id
-    inline void insertVar(const Definition* def, GecodeVariable gv) {
-      _variableMap.back().emplace(def->timestamp(), gv);
+    inline void insertVar(const Variable* var, GecodeVariable gv) {
+      _variableMap.back().emplace(var->timestamp(), gv);
     }
 
 

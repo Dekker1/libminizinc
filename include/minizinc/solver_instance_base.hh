@@ -76,8 +76,9 @@ namespace MiniZinc {
     virtual StatusReason reason(void) {return _status_reason;}
     virtual Status status(void) {return _status;}
     
-    virtual void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) = 0;
-    virtual Val getSolutionValue(Definition* def) = 0;
+    virtual void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) = 0;
+    virtual void addVariable(Variable* var) = 0;
+    virtual Val getSolutionValue(Variable* var) = 0;
 
     /// reset the model to its core (removing temporary cts) and the solver to the root node of the search 
     void reset(void);
@@ -116,7 +117,7 @@ namespace MiniZinc {
       : SolverInstanceBase(log, opt) {}
   };
   
-  typedef void (*poster) (SolverInstanceBase&, const Definition* call);
+  typedef void (*poster) (SolverInstanceBase&, const Constraint* call);
   class Registry {
   protected:
     std::unordered_map<std::string,poster> _registry;
@@ -124,7 +125,7 @@ namespace MiniZinc {
   public:
     Registry(SolverInstanceBase& base) : _base(base) {}
     void add(const std::string& name, poster p);
-    void post(std::string name, Definition* d);      
+    void post(std::string name, Constraint* c);      
     void cleanup() { _registry.clear(); }
   };
 

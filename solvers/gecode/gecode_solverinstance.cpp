@@ -176,7 +176,6 @@ namespace MiniZinc {
 
     void GecodeSolverInstance::registerConstraints(void) {
       GCLock lock;
-      registerConstraint("mk_intvar", GecodeConstraints::p_mk_intvar);
       registerConstraint("all_different_int", GecodeConstraints::p_distinct);
       registerConstraint("all_different_offset", GecodeConstraints::p_distinctOffset);
       registerConstraint("all_equal_int", GecodeConstraints::p_all_equal);
@@ -211,9 +210,9 @@ namespace MiniZinc {
       registerConstraint("int_lin_gt", GecodeConstraints::p_int_lin_gt);
       registerConstraint("int_lin_gt_reif", GecodeConstraints::p_int_lin_gt_reif);
       registerConstraint("int_lin_gt_imp", GecodeConstraints::p_int_lin_gt_imp);
-      registerConstraint("int_plus", GecodeConstraints::p_int_plus);
-      registerConstraint("int_sum", GecodeConstraints::p_int_sum);
-      registerConstraint("int_minus", GecodeConstraints::p_int_minus);
+//      registerConstraint("int_plus", GecodeConstraints::p_int_plus);
+//      registerConstraint("int_sum", GecodeConstraints::p_int_sum);
+//      registerConstraint("int_minus", GecodeConstraints::p_int_minus);
       registerConstraint("int_times", GecodeConstraints::p_int_times);
       registerConstraint("int_div", GecodeConstraints::p_int_div);
       registerConstraint("int_mod", GecodeConstraints::p_int_mod);
@@ -249,7 +248,7 @@ namespace MiniZinc {
       registerConstraint("array_bool_and", GecodeConstraints::p_array_bool_and);
       registerConstraint("array_bool_and_imp", GecodeConstraints::p_array_bool_and_imp);
       registerConstraint("array_bool_or", GecodeConstraints::p_array_bool_or);
-      registerConstraint("exists", GecodeConstraints::p_exists);
+//      registerConstraint("exists", GecodeConstraints::p_exists);
       registerConstraint("array_bool_or_imp", GecodeConstraints::p_array_bool_or_imp);
       registerConstraint("array_bool_xor", GecodeConstraints::p_array_bool_xor);
       registerConstraint("array_bool_xor_imp", GecodeConstraints::p_array_bool_xor_imp);
@@ -258,7 +257,7 @@ namespace MiniZinc {
       registerConstraint("bool_clause_imp", GecodeConstraints::p_array_bool_clause_imp);
       registerConstraint("bool_left_imp", GecodeConstraints::p_bool_l_imp);
       registerConstraint("bool_right_imp", GecodeConstraints::p_bool_r_imp);
-      registerConstraint("bool_not", GecodeConstraints::p_bool_not);
+//      registerConstraint("bool_not", GecodeConstraints::p_bool_not);
       registerConstraint("array_int_element", GecodeConstraints::p_array_int_element);
       registerConstraint("array_var_int_element", GecodeConstraints::p_array_int_element);
       registerConstraint("array_bool_element", GecodeConstraints::p_array_bool_element);
@@ -423,8 +422,11 @@ namespace MiniZinc {
     return bo >= Gecode::Int::Limits::min && bo <= Gecode::Int::Limits::max;
   }
 
-  void GecodeSolverInstance::addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) {
-    _constraintRegistry.post(bs[def->pred()].name, def);
+  void GecodeSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
+    _constraintRegistry.post(bs[c->pred()].name, c);
+  }
+  void GecodeSolverInstance::addVariable(Variable* var) {
+    GecodeConstraints::p_mk_intvar(*this, var);
   }
 
   void GecodeSolverInstance::processFlatZinc(void) {
@@ -833,9 +835,9 @@ namespace MiniZinc {
         ia[i] = IntVar(*this->_current_space, 0, 0);
     for (int i=vec.size(); i--;) {
         const Val& val = Val::follow_alias(vec[i]);
-        if (val.isDef()) {
+        if (val.isVar()) {
             //ia[i+offset] = _current_space->iv[*(int*)resolveVar(getVarDecl(e))];
-            GecodeSolver::Variable var = resolveVar(val.toDef());
+            GecodeSolver::Variable var = resolveVar(val.toVar());
             if (var.isbool()) {
               // TODO: We should cache the channeling
               IntVar intVar(*_current_space, 0, 1);
@@ -911,8 +913,8 @@ namespace MiniZinc {
         if (i==siv)
             continue;
         const Val& v = Val::follow_alias(vec[i]);
-        if(v.isDef()) {
-            GecodeVariable var = resolveVar(v.toDef());
+        if(v.isVar()) {
+            GecodeVariable var = resolveVar(v.toVar());
             if (var.isbool()) {
               // assert(var.isbool());
               ia[offset++] = var.boolVar(_current_space);
@@ -979,10 +981,10 @@ namespace MiniZinc {
   }
 
   Gecode::BoolVar
-  GecodeSolverInstance::reifyVar(const Definition* def) {
+  GecodeSolverInstance::reifyVar(const Variable* var) {
     BoolVar boolVar(*_current_space, 0, 1);
     _current_space->bv.push_back(boolVar);
-    insertVar(def, GecodeVariable(GecodeVariable::BOOL_TYPE, _current_space->bv.size()-1));
+    insertVar(var, GecodeVariable(GecodeVariable::BOOL_TYPE, _current_space->bv.size()-1));
     _current_space->bv_introduced.push_back(true);
     _current_space->bv_defined.push_back(true);
     return boolVar;
@@ -992,9 +994,9 @@ namespace MiniZinc {
   GecodeSolverInstance::arg2boolvar(const Val& v) {
     Val _v = Val::follow_alias(v);
     BoolVar x0;
-    if (_v.isDef()) {
+    if (_v.isVar()) {
       //x0 = _current_space->bv[*(int*)resolveVar(getVarDecl(e))];
-      GecodeVariable var = resolveVar(v.toDef());
+      GecodeVariable var = resolveVar(v.toVar());
       assert(var.isbool());
       x0 = var.boolVar(_current_space);
     } else {
@@ -1051,10 +1053,10 @@ namespace MiniZinc {
   GecodeSolverInstance::arg2intvar(const Val& val) {
     IntVar x0;
     Val _val = Val::follow_alias(val);
-    if (_val.isDef()) {
-      Definition* def = _val.toDef();
+    if (_val.isVar()) {
+      Variable* v = _val.toVar();
       //x0 = _current_space->iv[*(int*)resolveVar(getVarDecl(e))];
-      GecodeVariable var = resolveVar(def);
+      GecodeVariable var = resolveVar(v);
       if (var.isbool()) {
         // TODO: We should cache the channeling
         IntVar intVar(*_current_space, 0, 1);
@@ -1109,7 +1111,7 @@ namespace MiniZinc {
       const Val& val = Val::follow_alias(arr[i]);
       if (val.isInt() && val().toInt() >= 0 && val().toInt() <= 1) {
         continue;
-      } else if (val.isDef()) {
+      } else if (val.isVar()) {
         if (val.lb().toInt() >= 0 && val.ub().toInt() <= 1) {
           continue;
         }
@@ -1315,11 +1317,11 @@ namespace MiniZinc {
   }
 
   GecodeSolver::Variable
-  GecodeSolverInstance::resolveVar(Definition* def) {
+  GecodeSolverInstance::resolveVar(Variable* v) {
     int i = _variableMap.size()-1;
     std::unordered_map<int, VarId>::iterator it;
     while (i >= 0) {
-      it = _variableMap[i].find(def->timestamp());
+      it = _variableMap[i].find(v->timestamp());
       if (it != _variableMap[i].end()) {
         break;
       }
@@ -1400,8 +1402,8 @@ namespace MiniZinc {
   }
 
   Val
-  GecodeSolverInstance::getSolutionValue(Definition* def) {
-    GecodeVariable var = resolveVar(def);
+  GecodeSolverInstance::getSolutionValue(Variable* v) {
+    GecodeVariable var = resolveVar(v);
 
     if (var.isbool()) {
       assert(var.boolVar(_solution).assigned());

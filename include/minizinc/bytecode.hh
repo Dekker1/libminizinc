@@ -163,12 +163,14 @@ namespace MiniZinc {
   };
 
   class Vec;
-  class Definition;
   class WeakVal;
+
+  class Variable;
+  class Constraint;
 
   class RefCountedObject {
   public:
-    enum RCOType { VEC, DEF };
+    enum RCOType { VEC, VAR };
   protected:
     unsigned int _ref_count;
     unsigned int _weak_ref_count : 31;
@@ -176,7 +178,7 @@ namespace MiniZinc {
     int _timestamp;
     RefCountedObject(const RCOType& t, int timestamp) : _ref_count(0), _weak_ref_count(0), _rco_type(t==VEC ? 1 : 0), _timestamp(timestamp) {}
   public:
-    RCOType rcoType(void) const { return _rco_type==1 ? VEC : DEF; }
+    RCOType rcoType(void) const { return _rco_type==1 ? VEC : VAR; }
     const int timestamp() const { return _timestamp; }
 
     void addRef(Interpreter* interpreter) { _ref_count++; }
@@ -216,8 +218,8 @@ namespace MiniZinc {
     bool isInt(void) const {
       return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == 0;
     }
-    bool isDef(void) const {
-      return isRCO() && toRCO()->rcoType()==RefCountedObject::DEF;
+    bool isVar(void) const {
+      return isRCO() && toRCO()->rcoType()==RefCountedObject::VAR;
     }
     bool operator==(const Val& rhs) const;
     bool operator!=(const Val& rhs) const {
@@ -237,8 +239,8 @@ namespace MiniZinc {
       return false;
     }
 
-    /// Access value as Definition
-    Definition* toDef(void) const;
+    /// Access value as Variable
+    Variable* toVar(void) const;
     /// Access value as IntVal
     IntVal operator() (void) const {
       assert(isInt());
@@ -322,7 +324,7 @@ namespace MiniZinc {
       GCLock lock;
       if (this->isInt()) {
         return IntLit::a((*this)());
-      } else if (this->isDef()) {
+      } else if (this->isVar()) {
         auto it = vdmap.find(this->timestamp());
         assert(it != vdmap.end());
         VarDecl* vd = it->second;
@@ -557,38 +559,93 @@ namespace MiniZinc {
     }
   };
 
-  class Definition : public RefCountedObject {
+  class Constraint {
     friend class Trail;
-    friend void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
+  protected:
+    Val _ann;
+    unsigned int _pred : 24;
+    unsigned int _mode : 8;
+    unsigned int _size : 31;
+    /// Whether the constraint is scheduled for propagation
+    unsigned int _scheduled : 1;
+    Val _args[1];
+    Val _defines;
+    Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines);
+  public:
+    static Constraint* a(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val defines=IntVal(1), Val ann=IntVal(0)) {
+      Constraint* c = static_cast<Constraint*>(::malloc(sizeof(Constraint)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
+      new (c) Constraint(interpreter,pred,mode,args,ann,defines);
+      return c;
+    }
+    static void free(Constraint* c) {
+      ::free(c);
+    }
+    void destroy(Interpreter* interpreter);
+    void reconstruct(Interpreter* interpreter);
+    
+    ~Constraint(void) = delete;
+    
+    Val ann(void) const { return _ann; }
+    int pred(void) const { return _pred; }
+    char mode(void) const { return _mode; }
+    int size(void) const { return _size; }
+    Val arg(int i) const { assert(i < _size); return _args[i]; }
+    void arg(Interpreter* interpreter, int i, Val nv) {
+      assert(i < _size);
+      _args[i].destroy(interpreter);
+      _args[i] = nv;
+      _args[i].construct(interpreter);
+    }
+    
+    /// Flag whether constraint is currently scheduled
+    bool scheduled(void) const { return _scheduled==1; }
+    /// Set flag whether constraint is currently scheduled
+    void scheduled(bool f) { _scheduled = f; }
+
+  };
+
+  class Variable : public RefCountedObject {
+    friend class Trail;
+    friend class Interpreter;
   public:
     enum SubscriptionEvent { SEV_VAL, SEV_UNIFY, SEV_DOM, SEV };
     /// Event sets propagators can subscribe to: only value events, value+unification, or any change
     enum SubscriptionEventSet { SES_VAL, SES_VALUNIFY, SES_ANY };
-    typedef std::unordered_map<Definition*, SubscriptionEventSet> Subscriptions;
+    typedef std::unordered_map<Constraint*, SubscriptionEventSet> Subscriptions;
   protected:
-    Definition* _prev;
-    Definition* _next;
-    Vec* _domain;
+    Variable* _prev;
+    Variable* _next;
+    Val _domain; // could be the domain, or the variable or value this variable is aliased to
     Val _ann;
-    Definition* _defs;
-    int _pred : 32;
-    int _size : 31;
-    unsigned int _flag : 1;
-    /// Whether current domain is binding
-    unsigned int _binding : 1;
-    char _mode : 8;
     Subscriptions _subscriptions;
-    Val _args[1];
-    Definition(Interpreter* interpreter,Vec* domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
+    std::vector<Constraint*> _definitions;
+    
+    /// Whether domain is binding
+    /// TODO: tag _domain pointer instead
+    bool _binding;
+
+    /// Whether variable is aliased
+    /// TODO: tag _domain pointer instead
+    bool _aliased;
+
+    Variable(Interpreter* interpreter, Val domain, int ident);
+    Variable(Interpreter* interpreter, Val domain, bool binding, int ident, Val ann);
+    static Variable* createRoot(Interpreter* interpreter, Val domain, int ident) {
+      Variable* v = static_cast<Variable*>(::malloc(sizeof(Variable)));
+      return new (v) Variable(interpreter,domain,ident);
+    }
   public:
-    Vec* domain(void) const { return _domain; }
+    bool aliased(void) const { return _aliased; }
+    Vec* domain(void) const { assert(!aliased()); return _domain.toVec(); }
     IntVal lb() const {
-      assert((*_domain)[0].isInt());
-      return (*_domain)[0]();
+      assert(!aliased());
+      assert(_domain[0].isInt());
+      return _domain[0]();
     }
     IntVal ub() const {
-      assert((*_domain)[_domain->size()-1].isInt());
-      return (*_domain)[_domain->size()-1]();
+      assert(!aliased());
+      assert(_domain[_domain.size()-1].isInt());
+      return _domain[_domain.size()-1]();
     }
     bool isBounded() const {
       return lb().isFinite() && ub().isFinite();
@@ -608,117 +665,217 @@ namespace MiniZinc {
     /// Set domain to \a newDomain, schedule propagators
     void domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding);
     Val ann(void) const { return _ann; }
-    int pred(void) const { return _pred; }
-    char mode(void) const { return _mode; }
-    int size(void) const { return _size; }
-    Val arg(int i) const { assert(i < _size); return _args[i]; }
-    void arg(Interpreter* interpreter, int i, Val nv) {
-      assert(i < _size);
-      _args[i].destroy(interpreter);
-      _args[i] = nv;
-      _args[i].construct(interpreter);
+
+    Constraint* defined_by() {
+      return (_definitions.size()==1) ? _definitions[0] : nullptr;
     }
-    Definition* defs(void) const { return _defs; }
-    void defs(Interpreter* interpreter, Definition* defs) {
-      if (!_defs) {
-        _defs = Definition::a(interpreter, nullptr,false,0,0,{},-1); // Empty Head
-      }
-      if (_defs->next()->timestamp() < 0 || (defs->timestamp() > 0 && defs->timestamp() < _defs->next()->timestamp())) {
-        _defs->next()->appendBefore(interpreter, defs);
-      } else {
-        _defs->appendBefore(interpreter, defs);
-      }
+    void addDefinition(Interpreter* interpreter, Constraint* c);
+    
+    static Variable* a(Interpreter* interpreter, Val domain, bool binding, int ident, Val ann=IntVal(0)) {
+      Variable* v = static_cast<Variable*>(::malloc(sizeof(Variable)));
+      return new (v) Variable(interpreter,domain,binding,ident,ann);
     }
-    Definition* defined_by() {
-      if (!_defs) {
-        return nullptr;
+    static void free(Variable* var) {
+      // INVARIANT: var->destroy() must be called before free(var);
+      assert(var->_ref_count == 0 && var->_weak_ref_count == 0);
+      for (auto c : var->_definitions) {
+        Constraint::free(c);
       }
-      // Ignore empty head
-      Definition* d = _defs->next();
-      // If defined using only one definition
-      if (d->next() == _defs) {
-        return d;
-      }
-      return nullptr;
+      ::free(var);
     }
-    static Definition* a(Interpreter* interpreter,Vec* domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
-      Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
-      new (d) Definition(interpreter,domain,binding,pred,mode,args,ident,ann);
-      return d;
-    }
-    static void free(Definition* def) {
-      // INVARIANT: def->destroy() should be called before free(def);
-      assert(def->_ref_count == 0 && def->_weak_ref_count == 0);
-      if (def->_defs) {
-        // destroy all linked definitions
-        Definition* d = def->_defs;
-        bool finished = false;
-        while (!finished) {
-          Definition* cur = d;
-          d = d->next();
-          finished = (cur == d);
-          // INVARIANT: def->destroy() should ensure that no children with reference counts are still linked
-          assert(cur->_ref_count == 0 && cur->_weak_ref_count == 0);
-          Definition::free(cur);
-        }
-      }
-      ::free(def);
-    }
-    ~Definition(void) = delete;
-    /// Destroy and unlink this definition
+    ~Variable(void) = delete;
+    /// Destroy and unlink this variable
     void destroy(Interpreter* interpreter);
     void reconstruct(Interpreter* interpreter);
-    /// Insert singleton element into list before \a d
-    void insertBefore(Interpreter* interpreter, Definition* d);
-    /// Append list to other list before \a d
-    void appendBefore(Interpreter* interpreter, Definition* d);
-    void unlink(Interpreter* interpreter);
     /// Set the reference count to 1
     void makeUniqueReference(void) { _ref_count = 1; }
     void alias(Interpreter* interpreter, Val v);
-    void unalias(Interpreter* interpreter, int proc, int size, const Val& arg0);
-    Definition* prev(void) const { return _prev; }
-    Definition* next(void) const { return _next; }
-    int listSize(void) const {
-      int i=1;
-      if (_next != this) {
-        for (Definition* d = _next; d != this; d = d->next()) {
-          i++;
-        }
-      }
-      return i;
-    }
-    bool attached() { return !(this == _prev); }
+    void unalias(Interpreter* interpreter, Val dom);
+    Val alias(void) { assert(aliased()); return _domain; };
+    Variable* prev(void) const { return _prev; }
+    Variable* next(void) const { return _next; }
 
-    static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
-    static VarDecl* varDecl(Definition* d);
-    static void toFZN(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
-    static void toFZNItem(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
-    static void addToSolver(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
+    static void dump(Variable* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
+    static VarDecl* varDecl(Variable* d);
+    static void toFZN(Variable* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
+    static void toFZNItem(Variable* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
+    static void addToSolver(Interpreter* interpreter, Variable* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
 
     // Propagation interface
     
-    /// Flag whether definition is currently scheduled
-    bool flag(void) const { return _flag==1; }
-    /// Set flag whether definition is currently scheduled
-    void flag(bool f) { _flag = f; }
     /// Flag whether definition's domain is binding
     bool binding(void) const { return _binding==1; }
     /// Set flag whether definition's domain is binding
     void binding(Interpreter* interpreter, bool f);
-    /// Add \a d to set of subscribed constraints
-    void subscribe(Definition* d, const SubscriptionEventSet& events);
-    /// Remove \a d from set of subscribed constraints
-    void unsubscribe(Definition* d);
-    /// Return subscribed definitions
-    const Subscriptions& subscriptions(void) const {
-      return _subscriptions;
-    }
-    /// Return subscribed definitions
-    Subscriptions& subscriptions(void) {
-      return _subscriptions;
-    }
+    /// Add \a c to set of subscribed constraints
+    void subscribe(Constraint* d, const SubscriptionEventSet& events);
+    /// Remove \a c from set of subscribed constraints
+    void unsubscribe(Constraint* c);
+
   };
+
+//  class Definition : public RefCountedObject {
+//    friend class Trail;
+//    friend void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
+//  public:
+//    enum SubscriptionEvent { SEV_VAL, SEV_UNIFY, SEV_DOM, SEV };
+//    /// Event sets propagators can subscribe to: only value events, value+unification, or any change
+//    enum SubscriptionEventSet { SES_VAL, SES_VALUNIFY, SES_ANY };
+//    typedef std::unordered_map<Definition*, SubscriptionEventSet> Subscriptions;
+//  protected:
+//    Definition* _prev;
+//    Definition* _next;
+//    Vec* _domain;
+//    Val _ann;
+//    Definition* _defs;
+//    int _pred : 32;
+//    int _size : 31;
+//    unsigned int _flag : 1;
+//    /// Whether current domain is binding
+//    unsigned int _binding : 1;
+//    char _mode : 8;
+//    Subscriptions _subscriptions;
+//    Val _args[1];
+//    Definition(Interpreter* interpreter,Vec* domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
+//  public:
+//    Vec* domain(void) const { return _domain; }
+//    IntVal lb() const {
+//      assert((*_domain)[0].isInt());
+//      return (*_domain)[0]();
+//    }
+//    IntVal ub() const {
+//      assert((*_domain)[_domain->size()-1].isInt());
+//      return (*_domain)[_domain->size()-1]();
+//    }
+//    bool isBounded() const {
+//      return lb().isFinite() && ub().isFinite();
+//    }
+//
+//    /// Set new minimum value included in the domain
+//    bool setMin(Interpreter* interpreter, IntVal i, bool binding=true);
+//    /// Set new maximum value included in the domain
+//    bool setMax(Interpreter* interpreter, IntVal i, bool binding=true);
+//    /// Restrict domain to a single value
+//    bool setVal(Interpreter* interpreter, IntVal i, bool binding=true);
+//    /// Intersect current domain with given domain
+//    bool intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding=true);
+//    bool intersectDom(Interpreter* interpreter, Val dom, bool binding=true);
+//    /// Set domain to \a newDomain, schedule propagators
+//    void domain(Interpreter* interpreter, const Val& newDomain, bool binding);
+//    /// Set domain to \a newDomain, schedule propagators
+//    void domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding);
+//    Val ann(void) const { return _ann; }
+//    int pred(void) const { return _pred; }
+//    char mode(void) const { return _mode; }
+//    int size(void) const { return _size; }
+//    Val arg(int i) const { assert(i < _size); return _args[i]; }
+//    void arg(Interpreter* interpreter, int i, Val nv) {
+//      assert(i < _size);
+//      _args[i].destroy(interpreter);
+//      _args[i] = nv;
+//      _args[i].construct(interpreter);
+//    }
+//    Definition* defs(void) const { return _defs; }
+//    void defs(Interpreter* interpreter, Definition* defs) {
+//      if (!_defs) {
+//        _defs = Definition::a(interpreter, nullptr,false,0,0,{},-1); // Empty Head
+//      }
+//      if (_defs->next()->timestamp() < 0 || (defs->timestamp() > 0 && defs->timestamp() < _defs->next()->timestamp())) {
+//        _defs->next()->appendBefore(interpreter, defs);
+//      } else {
+//        _defs->appendBefore(interpreter, defs);
+//      }
+//    }
+//    Definition* defined_by() {
+//      if (!_defs) {
+//        return nullptr;
+//      }
+//      // Ignore empty head
+//      Definition* d = _defs->next();
+//      // If defined using only one definition
+//      if (d->next() == _defs) {
+//        return d;
+//      }
+//      return nullptr;
+//    }
+//    static Definition* a(Interpreter* interpreter,Vec* domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
+//      Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
+//      new (d) Definition(interpreter,domain,binding,pred,mode,args,ident,ann);
+//      return d;
+//    }
+//    static void free(Definition* def) {
+//      // INVARIANT: def->destroy() should be called before free(def);
+//      assert(def->_ref_count == 0 && def->_weak_ref_count == 0);
+//      if (def->_defs) {
+//        // destroy all linked definitions
+//        Definition* d = def->_defs;
+//        bool finished = false;
+//        while (!finished) {
+//          Definition* cur = d;
+//          d = d->next();
+//          finished = (cur == d);
+//          // INVARIANT: def->destroy() should ensure that no children with reference counts are still linked
+//          assert(cur->_ref_count == 0 && cur->_weak_ref_count == 0);
+//          Definition::free(cur);
+//        }
+//      }
+//      ::free(def);
+//    }
+//    ~Definition(void) = delete;
+//    /// Destroy and unlink this definition
+//    void destroy(Interpreter* interpreter);
+//    void reconstruct(Interpreter* interpreter);
+//    /// Insert singleton element into list before \a d
+//    void insertBefore(Interpreter* interpreter, Definition* d);
+//    /// Append list to other list before \a d
+//    void appendBefore(Interpreter* interpreter, Definition* d);
+//    void unlink(Interpreter* interpreter);
+//    /// Set the reference count to 1
+//    void makeUniqueReference(void) { _ref_count = 1; }
+//    void alias(Interpreter* interpreter, Val v);
+//    void unalias(Interpreter* interpreter, int proc, int size, const Val& arg0);
+//    Definition* prev(void) const { return _prev; }
+//    Definition* next(void) const { return _next; }
+//    int listSize(void) const {
+//      int i=1;
+//      if (_next != this) {
+//        for (Definition* d = _next; d != this; d = d->next()) {
+//          i++;
+//        }
+//      }
+//      return i;
+//    }
+//    bool attached() { return !(this == _prev); }
+//
+//    static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
+//    static VarDecl* varDecl(Definition* d);
+//    static void toFZN(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
+//    static void toFZNItem(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
+//    static void addToSolver(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
+//
+//    // Propagation interface
+//
+//    /// Flag whether definition is currently scheduled
+//    bool flag(void) const { return _flag==1; }
+//    /// Set flag whether definition is currently scheduled
+//    void flag(bool f) { _flag = f; }
+//    /// Flag whether definition's domain is binding
+//    bool binding(void) const { return _binding==1; }
+//    /// Set flag whether definition's domain is binding
+//    void binding(Interpreter* interpreter, bool f);
+//    /// Add \a d to set of subscribed constraints
+//    void subscribe(Definition* d, const SubscriptionEventSet& events);
+//    /// Remove \a d from set of subscribed constraints
+//    void unsubscribe(Definition* d);
+//    /// Return subscribed definitions
+//    const Subscriptions& subscriptions(void) const {
+//      return _subscriptions;
+//    }
+//    /// Return subscribed definitions
+//    Subscriptions& subscriptions(void) {
+//      return _subscriptions;
+//    }
+//  };
 
   void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
   std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v);
@@ -752,10 +909,10 @@ namespace MiniZinc {
     /// Stack of values that need to be aggregated
     std::vector<Val> stack;
   public:
-    /// Definitions attached to the computed value
-    Definition* def_stack;
     /// Earliest time stamp for definitions in the current aggregation
     int def_ident_start;
+    /// Constraints attached to the computed value
+    std::vector<Constraint*> constraints;
     /// Type of function represented by this context
     enum Symbol { VCTX_AND, VCTX_OR, VCTX_VEC, VCTX_OTHER, MAX_SYMBOL=VCTX_OTHER } symbol;
     static const std::string symbol_to_string[MAX_SYMBOL+1];
@@ -763,8 +920,11 @@ namespace MiniZinc {
     int n_symbols;
     /// Constructor
     AggregationCtx(Interpreter* interpreter, int s);
+    /// Destructor
+    ~AggregationCtx(void);
     /// Push value onto aggregation stack
     void push(Interpreter* interpreter, const Val& v) {
+      assert(stack.empty() || symbol != VCTX_OTHER);
       stack.push_back(v);
       stack.back().construct(interpreter);
     }
@@ -778,16 +938,12 @@ namespace MiniZinc {
     const Val& operator [](int i) const { return stack[i]; }
     int size(void) const { return stack.size(); }
     bool empty(void) const { return stack.empty(); }
-    Val createVec(Interpreter* interpreter, Definition* defs, int timestamp) const;
+    Val createVec(Interpreter* interpreter, int timestamp) const;
     /// Destroy stack values
     void destroyStack(Interpreter* interpreter) {
       for (auto& v : stack) {
         v.destroy(interpreter);
       }
-    }
-    /// Destroy head of linked definitions
-    void destroyDef(Interpreter* interpreter) {
-      RefCountedObject::rmRef(interpreter, def_stack);
     }
   };
 
@@ -947,21 +1103,22 @@ namespace MiniZinc {
   class Trail {
     friend class MznSolver;
   protected:
-    std::vector<std::pair<Definition**, Definition*>> hedge_trail;
+    std::vector<std::pair<Variable**, Variable*>> var_list_trail;
     std::vector<RefCountedObject*> obj_trail;
     // <Definition, procedure, size, arg(0)>
-    std::vector<std::tuple<Definition*, int, int, Val>> alias_trail;
-    std::vector<std::pair<Definition*, Vec*>> domain_trail;
-    // <Hedge trail size, Obj trail size, Alias trail size, Domain trail size>
-    std::vector<std::tuple<size_t, size_t, size_t, size_t>> trail_size;
+    std::vector<std::tuple<Variable*, Val>> alias_trail;
+    std::vector<std::pair<Variable*, Vec*>> domain_trail;
+    std::vector<std::tuple<Variable*,Constraint*,bool>> def_trail;
+    // <Var list trail size, Obj trail size, Alias trail size, Domain trail size, Def trail size>
+    std::vector<std::tuple<size_t, size_t, size_t, size_t, size_t>> trail_size;
     std::vector<int> timestamp_trail;
     bool last_operation_pop = false;
   public:
     Trail() = default;
     virtual ~Trail() {
       for (auto &i : obj_trail) {
-        if (i->rcoType() == RefCountedObject::DEF) {
-          Definition::free(static_cast<Definition*>(i));
+        if (i->rcoType() == RefCountedObject::VAR) {
+          Variable::free(static_cast<Variable*>(i));
         } else {
           free(i);
         }
@@ -974,11 +1131,11 @@ namespace MiniZinc {
     bool is_trailed(RefCountedObject* rco) { return (!trail_size.empty() && timestamp_trail.back() > rco->timestamp()); }
 
     // Trail hedge pointer change
-    inline bool trail_ptr(Definition* def, Definition** member) {
-      if (!is_trailed(def)) {
+    inline bool trail_ptr(Variable* obj, Variable** member) {
+      if (!is_trailed(obj)) {
         return false;
       }
-      hedge_trail.emplace_back(member, *member);
+      var_list_trail.emplace_back(member, *member);
       return true;
     }
     // Trail Reference Counted Object removal
@@ -989,25 +1146,40 @@ namespace MiniZinc {
       obj_trail.push_back(obj);
       return true;
     }
-    // Trail definition aliasing
-    inline bool trail_alias(Interpreter* interpreter, Definition* def) {
-      if (!is_trailed(def)) {
+    // Trail variable aliasing
+    inline bool trail_alias(Interpreter* interpreter, Variable* v) {
+      if (!is_trailed(v)) {
         return false;
       }
-      def->arg(0).addWeakRef(interpreter);
-      alias_trail.emplace_back(def, def->pred(), def->size(), def->arg(0));
+      v->alias().addWeakRef(interpreter);
+      alias_trail.emplace_back(v, v->alias());
       return true;
     }
     // Trail definition domain change
-    inline bool trail_domain(Interpreter* interpreter, Definition* def, Vec* dom) {
-      if (!is_trailed(def)) {
+    inline bool trail_domain(Interpreter* interpreter, Variable* v, Vec* dom) {
+      if (!is_trailed(v)) {
         return false;
       }
       assert(dom);
       dom->addWRef(interpreter);
-      domain_trail.emplace_back(def, dom);
+      domain_trail.emplace_back(v, dom);
       return true;
     }
+    bool trail_add_def(Variable* var, Constraint* c) {
+      if (!is_trailed(var)) {
+        return false;
+      }
+      def_trail.emplace_back(var,c,true);
+      return true;
+    }
+    bool trail_rm_def(Variable* var, Constraint* c) {
+      if (!is_trailed(var)) {
+        return false;
+      }
+      def_trail.emplace_back(var,c,false);
+      return true;
+    }
+    
     size_t save_state(Interpreter* interpreter);
     void untrail(Interpreter* interpreter);
   };
@@ -1024,13 +1196,19 @@ namespace MiniZinc {
     std::vector<BytecodeProc>& _procs;
     int _identCount;
     std::vector<CSETable> cse;
-    std::vector<Definition*> delayed_calls;
-    std::deque<Definition*> _propQueue;
+    std::vector<Constraint*> delayed_calls;
+    std::deque<Constraint*> _propQueue;
     RegisterFile globals;
     Status _status = ROGER;
 
+    // The root variable. It's fixed to true, all toplevel constraints
+    // are attached to it, and it's the head of the linked list of
+    // all variables
+    Variable* _root_var;
+    
     Vec* infinite_dom;
     Vec* boolean_dom;
+    Vec* true_dom;
   public:
     Trail trail;
     std::unordered_map<int, IntVal> solutions;
@@ -1043,14 +1221,17 @@ namespace MiniZinc {
       infinite_dom->addRef(this);
       boolean_dom = Vec::a(this, newIdent(), {Val(IntVal(0)), Val(IntVal(1))});
       boolean_dom->addRef(this);
+      true_dom = Vec::a(this, newIdent(), {Val(IntVal(1)), Val(IntVal(1))});
+      true_dom->addRef(this);
+      _root_var = Variable::createRoot(this, Val(true_dom), newIdent());
+      _root_var->addRef(this);
     }
     ~Interpreter(void);
     Status status() { return _status; }
     void run(void);
     bool runDelayed();
     void pushAgg(const Val& v, int stackOffset);
-    void pushDef(Definition* d);
-    void pushDefs(Definition* defs);
+    void pushConstraint(Constraint* d);
     std::pair<Val, bool> cse_lookup(int proc, const CSETable::Key& key, BytecodeProc::Mode& mode) {
       return cse[proc].lookup(this, key, mode);
     }
@@ -1059,13 +1240,13 @@ namespace MiniZinc {
     }
     void set_global(int i, const Val& val) { globals.assign(this, i, val); }
     const Val get_global(int i) { return globals[i]; }
-    void subscribe(Definition* d);
-    void unsubscribe(Definition* d);
+    void subscribe(Constraint* c);
+    void unsubscribe(Constraint* d);
     int newIdent(void) { return _identCount++; }
     int currentIdent(void) const { return _identCount; }
     void dumpState(std::ostream& os);
-    void schedule(Definition* d, const Definition::SubscriptionEvent& ev);
-    void deschedule(Definition* d);
+    void schedule(Constraint* d, const Variable::SubscriptionEvent& ev);
+    void deschedule(Constraint* d);
     void propagate(void);
     Model* toFZN();
     void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
@@ -1077,6 +1258,8 @@ namespace MiniZinc {
       return Val(boolean_dom);
     }
     
+    Variable* root() { return _root_var; }
+    
     /// Perform optimizatin by basic propagation on generated FlatZinc
     void optimize(void);
   };
@@ -1085,8 +1268,8 @@ namespace MiniZinc {
   void RefCountedObject::rmRef(Interpreter* interpreter, RefCountedObject* rco) {
     if(--rco->_ref_count==0) {
       switch (rco->rcoType()) {
-        case DEF:
-          static_cast<Definition*>(rco)->destroy(interpreter);
+        case VAR:
+          static_cast<Variable*>(rco)->destroy(interpreter);
           break;
         case VEC:
           static_cast<Vec*>(rco)->destroy(interpreter);
@@ -1098,7 +1281,7 @@ namespace MiniZinc {
         interpreter->trail.trail_removal(rco);
       } else if (rco->_weak_ref_count==0) {
         // INVARIANT: All children of a definition are already promoted, cut, or freed.
-        assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());
+//        assert(rco->rcoType() != VAR || !static_cast<Variable*>(rco)->constraints().empty());
         free(rco);
       }
     }
@@ -1107,15 +1290,15 @@ namespace MiniZinc {
   void RefCountedObject::rmWRef(Interpreter* interpreter, RefCountedObject* rco) {
     if(--rco->_weak_ref_count == 0 && !interpreter->trail.is_trailed(rco) && rco->_ref_count == 0) {
       // INVARIANT: All children of a definition are already promoted, cut, or freed.
-      assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());
+//      assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());
       free(rco);
     }
   }
 
   inline
-  Definition* Val::toDef(void) const {
-    assert(isDef());
-    return static_cast<Definition*>(toRCO());
+  Variable* Val::toVar(void) const {
+    assert(isVar());
+    return static_cast<Variable*>(toRCO());
   }
   inline
   Vec* Val::toVec(void) const {
@@ -1125,11 +1308,9 @@ namespace MiniZinc {
 
   inline
   AggregationCtx::AggregationCtx(Interpreter* interpreter, int s) :
-    def_stack(Definition::a(interpreter,nullptr,false,0,0,{},-1)), // Empty Head
     def_ident_start(interpreter->currentIdent()),
     symbol(static_cast<Symbol>(s)), n_symbols(1) {
     assert(s >= 0 && s <= VCTX_OTHER);
-    def_stack->addRef(interpreter);
   }
 
   std::vector<BytecodeProc> parse(const std::string& s);

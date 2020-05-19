@@ -166,8 +166,8 @@ MznSolver::MznSolver(std::vector<std::string> args0)
   }
 
   flatten(file, file);
-  Definition* head = interpreter->_agg[0].def_stack;
-  def_ptr = head;
+//  Definition* head = interpreter->_agg[0].def_stack;
+//  def_ptr = head;
 }
 
 MznSolver::~MznSolver()
@@ -866,11 +866,11 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
           if (i > 0) {
             ss << ", ";
           }
-          if (vec[i].isDef()) {
+          if (vec[i].isVar()) {
             if (output_dict) {
               ss << "\"" << vec[i].timestamp() << "\"" << ": ";
             }
-            ss << si->getSolutionValue(vec[i].toDef()).toString();
+            ss << si->getSolutionValue(vec[i].toVar()).toString();
           } else {
             assert(!output_dict);
             ss << vec[i].toString();
@@ -881,36 +881,37 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         // Set output for sol() builtin
         interpreter->solutions.clear();
         for (int i = 0; i < vec.size(); ++i) {
-          if (vec[i].isDef()) {
-            interpreter->solutions.emplace(vec[i].timestamp(), si->getSolutionValue(vec[i].toDef())());
+          if (vec[i].isVar()) {
+            interpreter->solutions.emplace(vec[i].timestamp(), si->getSolutionValue(vec[i].toVar())());
           }
         }
       } else {
         interpreter->solutions.clear();
-        Definition* head = interpreter->_agg[0].def_stack;
-        Definition* d = head->next(); //ignore dummy head
-        bool first = true;
-        ss << "{" << std::endl;
-        while (d != head) {
-          if (d->pred() == 0) {
-            d = d->next();
-            continue;
-          }
-          int timestamp = d->timestamp();
-          if (timestamp >= 0) {
-            if (!first) {
-              ss << "," << std::endl;
-            }
-            ss << "    \"" << timestamp << "\"" << ": ";
-            ss << si->getSolutionValue(d).toString();
-            first = false;
-
-            // Set output for sol() builtin
-            interpreter->solutions.emplace(timestamp, si->getSolutionValue(d)());
-          }
-
-          d = d->next();
-        }
+        /// TODO
+//        Definition* head = interpreter->_agg[0].def_stack;
+//        Definition* d = head->next(); //ignore dummy head
+//        bool first = true;
+//        ss << "{" << std::endl;
+//        while (d != head) {
+//          if (d->pred() == 0) {
+//            d = d->next();
+//            continue;
+//          }
+//          int timestamp = d->timestamp();
+//          if (timestamp >= 0) {
+//            if (!first) {
+//              ss << "," << std::endl;
+//            }
+//            ss << "    \"" << timestamp << "\"" << ": ";
+//            ss << si->getSolutionValue(d).toString();
+//            first = false;
+//
+//            // Set output for sol() builtin
+//            interpreter->solutions.emplace(timestamp, si->getSolutionValue(d)());
+//          }
+//
+//          d = d->next();
+//        }
         ss << std::endl << "}" << std::endl;
       }
     }
@@ -1013,25 +1014,25 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
 }
 
 void MznSolver::addDefinitions() {
-  Definition* head = interpreter->_agg[0].def_stack;
-  if (def_ptr->next() == head) {
-    return;
-  }
-  do {
-    def_ptr = def_ptr->next();
-    if (def_ptr->pred() == 0) {
-      continue;
-    }
-    if (interpreter->_procs[def_ptr->pred()].name == "output_this") {
-      output = def_ptr;
-      continue;
-    }
-    si->addDefinition(interpreter->_procs, def_ptr);
-    if (def_ptr->defs()) {
-      Definition::addToSolver(interpreter, def_ptr->defs(), interpreter->_procs, si);
-    }
-  } while(def_ptr->next() != head);
-  // TODO: Domain Changes
+//  Definition* head = interpreter->_agg[0].def_stack;
+//  if (def_ptr->next() == head) {
+//    return;
+//  }
+//  do {
+//    def_ptr = def_ptr->next();
+//    if (def_ptr->pred() == 0) {
+//      continue;
+//    }
+//    if (interpreter->_procs[def_ptr->pred()].name == "output_this") {
+//      output = def_ptr;
+//      continue;
+//    }
+//    si->addDefinition(interpreter->_procs, def_ptr);
+//    if (def_ptr->defs()) {
+//      Definition::addToSolver(interpreter, def_ptr->defs(), interpreter->_procs, si);
+//    }
+//  } while(def_ptr->next() != head);
+//  // TODO: Domain Changes
 }
 
 void MznSolver::pushToSolver() {
@@ -1054,8 +1055,8 @@ void MznSolver::popFromSolver() {
     tsi->restart();
     tsi->popState();
 
-    Definition* head = interpreter->_agg[0].def_stack;
-    def_ptr = head->prev();
+//    Definition* head = interpreter->_agg[0].def_stack;
+//    def_ptr = head->prev();
   } else {
     assert(false);
     delete si;

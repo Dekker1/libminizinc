@@ -116,7 +116,7 @@ namespace MiniZinc {
     enum OptionStatus { OPTION_OK, OPTION_ERROR, OPTION_FINISH };
     /// Solver configurations
     SolverConfigs solver_configs;
-    Definition* output = nullptr;
+    Constraint* output = nullptr;
     std::vector<BytecodeProc> bs;
     std::unordered_map<std::string, int> globals;
     std::vector<std::string> data_files;
@@ -131,7 +131,7 @@ namespace MiniZinc {
     std::ostream& os;
     std::ostream& log;
     SolverInstance::Status interpreter_status = SolverInstance::UNKNOWN;
-    Definition* def_ptr = nullptr;
+//    Definition* def_ptr = nullptr; /// TODO: this doesn't work, need to keep track of what's new in some other way
     double flatten_time = 0;
   public:
     bool output_dict = false;

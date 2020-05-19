@@ -20,51 +20,34 @@ using namespace Gecode;
 namespace MiniZinc {
   namespace GecodeConstraints {
 
-    IntVar create_intvar(SolverInstanceBase& s, const Definition* def) {
+    void p_mk_intvar(SolverInstanceBase& s, const Variable* var) {
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
-      IntVar res;
-      if(def->isBounded()) {
-        res = IntVar(*gi._current_space, gi.arg2intset(Val(def->domain())));
-      } else {
-        res = IntVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
-        std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << def->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
-      }
-      gi._current_space->iv.push_back(res);
-      gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
-      gi._current_space->iv_introduced.push_back(false);
-      gi._current_space->iv_defined.push_back(true);
-      return res;
-    }
-
-    void p_mk_intvar(SolverInstanceBase& s, const Definition* def) {
-      assert(static_cast<BytecodeProc::Mode>(def->mode()) == BytecodeProc::RAW);
-      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
-      assert(def->timestamp() != -1);
-      if(def->isBounded()) {
-        if (def->lb() >= 0 && def->ub() <= 1) {
-          BoolVar boolVar(*gi._current_space, def->lb().toInt(), def->ub().toInt());
+      assert(var->timestamp() != -1);
+      if(var->isBounded()) {
+        if (var->lb() >= 0 && var->ub() <= 1) {
+          BoolVar boolVar(*gi._current_space, var->lb().toInt(), var->ub().toInt());
           gi._current_space->bv.push_back(boolVar);
-          gi.insertVar(def, GecodeVariable(GecodeVariable::BOOL_TYPE, gi._current_space->bv.size()-1));
+          gi.insertVar(var, GecodeVariable(GecodeVariable::BOOL_TYPE, gi._current_space->bv.size()-1));
           gi._current_space->bv_introduced.push_back(false);
           gi._current_space->bv_defined.push_back(false);
         } else {
-          IntVar intVar(*gi._current_space, gi.arg2intset(Val(def->domain())));
+          IntVar intVar(*gi._current_space, gi.arg2intset(Val(var->domain())));
           gi._current_space->iv.push_back(intVar);
-          gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
+          gi.insertVar(var, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
           gi._current_space->iv_introduced.push_back(false);
           gi._current_space->iv_defined.push_back(false);
         }
       } else {
         IntVar intVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
         gi._current_space->iv.push_back(intVar);
-        gi.insertVar(def, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
-        std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << def->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
+        gi.insertVar(var, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size()-1));
+        std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable " << var->timestamp() << " given maximum integer bounds, this may be incorrect: " << std::endl;
         gi._current_space->iv_introduced.push_back(false);
         gi._current_space->iv_defined.push_back(false);
       }
     }
 
-    void p_distinct(SolverInstanceBase& s, const Definition* call) {
+    void p_distinct(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs va = gi.arg2intvarargs(call->arg(0));
@@ -73,7 +56,7 @@ namespace MiniZinc {
       distinct(*gi._current_space, va, icl == MZ_ICL_DEF ? MZ_ICL_DOM : icl);
     }
 
-    void p_distinctOffset(SolverInstanceBase& s, const Definition* call) {
+    void p_distinctOffset(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs va = gi.arg2intvarargs(call->arg(1));
@@ -83,19 +66,19 @@ namespace MiniZinc {
       distinct(*gi._current_space, oa, va, icl == MZ_ICL_DEF ? MZ_ICL_DOM : icl);
     }
 
-    void p_all_equal(SolverInstanceBase& s, const Definition* call) {
+    void p_all_equal(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs va = gi.arg2intvarargs(call->arg(0));
       rel(*gi._current_space, va, IRT_EQ, gi.ann2icl(call->ann()));
     }
 
-    void p_int_CMP(GecodeSolverInstance& s, IntRelType irt, const Definition* ce) {
+    void p_int_CMP(GecodeSolverInstance& s, IntRelType irt, const Constraint* ce) {
       const Val& ann = ce->ann();
       const Val& lhs = ce->arg(0);
       const Val& rhs = ce->arg(1);
-      if (lhs.isDef()) {
-        if (rhs.isDef()) {
+      if (lhs.isVar()) {
+        if (rhs.isVar()) {
           rel(*s._current_space, s.arg2intvar(lhs), irt, s.arg2intvar(rhs), s.ann2icl(ann));
         } else {
           rel(*s._current_space, s.arg2intvar(lhs), irt, rhs().toInt(), s.ann2icl(ann));
@@ -105,7 +88,7 @@ namespace MiniZinc {
       }
     }
 
-    void p_int_eq(SolverInstanceBase& s, const Definition* call) {
+    void p_int_eq(SolverInstanceBase& s, const Constraint* call) {
       BytecodeProc::Mode m = static_cast<BytecodeProc::Mode>(call->mode());
       switch(m) {
       case BytecodeProc::ROOT:
@@ -131,106 +114,96 @@ namespace MiniZinc {
         break;
       }
     }
-    void p_int_ne(SolverInstanceBase& s, const Definition* call) {
+    void p_int_ne(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_NQ, call);
     }
-    void p_int_ge(SolverInstanceBase& s, const Definition* call) {
+    void p_int_ge(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_GQ, call);
     }
-    void p_int_gt(SolverInstanceBase& s, const Definition* call) {
+    void p_int_gt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_GR, call);
     }
-    void p_int_le(SolverInstanceBase& s, const Definition* call) {
+    void p_int_le(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LQ, call);
     }
-    void p_int_lt(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LE, call);
     }
-    void p_int_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Definition* call) {
+    void p_int_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Constraint* call) {
       const Val& ann =call->ann();
-      // TODO: Check if reification is already decided
-      // if (rm == RM_EQV && !call->arg(2).isDef()) {
-      //   if (call->arg(2)().toInt()) {
-      //     p_int_CMP(s, irt, call);
-      //   } else {
-      //     p_int_CMP(s, neg(irt), call);
-      //   }
-      //   return;
-      // }
-      auto var = s.reifyVar(call);
-      if (call->arg(0).isDef()) {
-        if (call->arg(1).isDef()) {
+      if (call->arg(0).isVar()) {
+        if (call->arg(1).isVar()) {
           rel(*s._current_space, s.arg2intvar(call->arg(0)), irt, s.arg2intvar(call->arg(1)),
-              Reify(var, rm), s.ann2icl(ann));
+              Reify(s.arg2boolvar(call->arg(0)), rm), s.ann2icl(ann));
         } else {
           rel(*s._current_space, s.arg2intvar(call->arg(0)), irt,
               call->arg(1)().toInt(),
-              Reify(var, rm), s.ann2icl(ann));
+              Reify(s.arg2boolvar(call->arg(0)), rm), s.ann2icl(ann));
         }
       } else {
         rel(*s._current_space, s.arg2intvar(call->arg(1)), swap(irt),
             call->arg(0)().toInt(),
-            Reify(var, rm), s.ann2icl(ann));
+            Reify(s.arg2boolvar(call->arg(0)), rm), s.ann2icl(ann));
       }
     }
 
     ///* Comparisons */
-    void p_int_eq_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_eq_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_EQV, call);
     }
-    void p_int_ne_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_ne_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_EQV, call);
     }
-    void p_int_ge_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_ge_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GQ, RM_EQV, call);
     }
-    void p_int_gt_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_gt_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GR, RM_EQV, call);
     }
-    void p_int_le_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_le_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LQ, RM_EQV, call);
     }
-    void p_int_lt_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lt_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_EQV, call);
     }
 
-    void p_int_eq_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_eq_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_IMP, call);
     }
-    void p_int_ne_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_ne_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_IMP, call);
     }
-    void p_int_ge_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_ge_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GQ, RM_IMP, call);
     }
-    void p_int_gt_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_gt_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GR, RM_IMP, call);
     }
-    void p_int_le_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_le_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LQ, RM_IMP, call);
     }
-    void p_int_lt_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lt_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_IMP, call);
     }
 
-    void p_int_lin_CMP(GecodeSolverInstance& s, IntRelType irt, const Definition* call) {
+    void p_int_lin_CMP(GecodeSolverInstance& s, IntRelType irt, const Constraint* call) {
       const Val& ann =call->ann();
       IntArgs ia = s.arg2intargs(call->arg(0));
       const Val& vars = call->arg(1);
@@ -261,20 +234,12 @@ namespace MiniZinc {
         linear(*s._current_space, ia, iv, irt, call->arg(2)().toInt(), s.ann2icl(ann));
       }
     }
-    void p_int_lin_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Definition* call) {
+    void p_int_lin_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Constraint* call) {
       const Val& ann =call->ann();
-//      if (rm == RM_EQV && call->arg(2).isInt()) {
-//        if (call->arg(2)().toInt()) {
-//          p_int_lin_CMP(s, irt, call);
-//        } else {
-//          p_int_lin_CMP(s, neg(irt), call);
-//        }
-//        return;
-//      }
       IntArgs ia = s.arg2intargs(call->arg(0));
       const Val& vars = call->arg(1);
       int singleIntVar;
-      auto var = s.reifyVar(call);
+      auto var = s.arg2boolvar(call->arg(3));
       if (s.isBoolArray(vars,singleIntVar)) {
         if (singleIntVar != -1) {
           if (std::abs(ia[singleIntVar]) == 1 && call->arg(2)().toInt() == 0) {
@@ -307,7 +272,7 @@ namespace MiniZinc {
       }
     }
 
-    void p_int_lin_eq(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_eq(SolverInstanceBase& s, const Constraint* call) {
       switch (static_cast<BytecodeProc::Mode>(call->mode())) {
         case BytecodeProc::ROOT:
           p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
@@ -329,66 +294,66 @@ namespace MiniZinc {
           break;
       }
     }
-    void p_int_lin_le(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_le(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LQ, call);
     }
-    void p_int_lin_le_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_le_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LQ, RM_EQV, call);
     }
-    void p_int_lin_le_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_le_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LQ, RM_IMP, call);
     }
-    void p_int_lin_lt(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_lt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LE, call);
     }
-    void p_int_lin_lt_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_lt_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_EQV, call);
     }
-    void p_int_lin_lt_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_lt_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_IMP, call);
     }
-    void p_int_lin_ge(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_ge(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_GQ, call);
     }
-    void p_int_lin_ge_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_ge_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GQ, RM_EQV, call);    
     }
-    void p_int_lin_ge_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_ge_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GQ, RM_IMP, call);    
     }
-    void p_int_lin_gt(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_gt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_GR, call);
     }
-    void p_int_lin_gt_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_gt_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GR, RM_EQV, call);    
     }
-    void p_int_lin_gt_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_lin_gt_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GR, RM_IMP, call);    
     }
 
-    void p_bool_lin_CMP(GecodeSolverInstance& s, IntRelType irt, const Definition* call) {
+    void p_bool_lin_CMP(GecodeSolverInstance& s, IntRelType irt, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       IntArgs ia = s.arg2intargs(call->arg(0));
       BoolVarArgs iv = s.arg2boolvarargs(call->arg(1));
-      if (call->arg(2).isDef())
-        linear(*s._current_space, ia, iv, irt, s.resolveVar(call->arg(2).toDef()).intVar(s._current_space), s.ann2icl(ann));
+      if (call->arg(2).isVar())
+        linear(*s._current_space, ia, iv, irt, s.resolveVar(call->arg(2).toVar()).intVar(s._current_space), s.ann2icl(ann));
       else
         linear(*s._current_space, ia, iv, irt, call->arg(2)().toInt(), s.ann2icl(ann));
     }
-    void p_bool_lin_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Definition* call) {
+    void p_bool_lin_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       if (rm == RM_EQV && call->arg(2).isInt()) {
@@ -401,8 +366,8 @@ namespace MiniZinc {
       }
       IntArgs ia = s.arg2intargs(call->arg(0));
       BoolVarArgs iv = s.arg2boolvarargs(call->arg(1));
-      if (call->arg(2).isDef())
-        linear(*s._current_space, ia, iv, irt, s.resolveVar(call->arg(2).toDef()).intVar(s._current_space),
+      if (call->arg(2).isVar())
+        linear(*s._current_space, ia, iv, irt, s.resolveVar(call->arg(2).toVar()).intVar(s._current_space),
             Reify(s.arg2boolvar(call->arg(3)), rm), 
             s.ann2icl(ann));
       else
@@ -410,87 +375,87 @@ namespace MiniZinc {
             Reify(s.arg2boolvar(call->arg(3)), rm), 
             s.ann2icl(ann));
     }
-    void p_bool_lin_eq(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_lin_eq(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
     }
-    void p_bool_lin_eq_reif(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_eq_reif(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_EQV, call);
     }
-    void p_bool_lin_eq_imp(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_eq_imp(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_IMP, call);
     }
-    void p_bool_lin_ne(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_lin_ne(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_NQ, call);
     }
-    void p_bool_lin_ne_reif(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_ne_reif(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_EQV, call);
     }
-    void p_bool_lin_ne_imp(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_ne_imp(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_IMP, call);
     }
-    void p_bool_lin_le(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_lin_le(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LQ, call);
     }
-    void p_bool_lin_le_reif(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_le_reif(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LQ, RM_EQV, call);
     }
-    void p_bool_lin_le_imp(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_le_imp(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LQ, RM_IMP, call);
     }
-    void p_bool_lin_lt(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_lt(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LE, call);
     }
-    void p_bool_lin_lt_reif(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_lt_reif(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_EQV, call);
     }
-    void p_bool_lin_lt_imp(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_lt_imp(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_IMP, call);
     }
-    void p_bool_lin_ge(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_lin_ge(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_GQ, call);
     }
-    void p_bool_lin_ge_reif(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_ge_reif(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GQ, RM_EQV, call);
     }
-    void p_bool_lin_ge_imp(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_ge_imp(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GQ, RM_IMP, call);
     }
-    void p_bool_lin_gt(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_lin_gt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_GR, call);
     }
-    void p_bool_lin_gt_reif(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_gt_reif(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GR, RM_EQV, call);
     }
-    void p_bool_lin_gt_imp(SolverInstanceBase& s, const Definition* call) 
+    void p_bool_lin_gt_imp(SolverInstanceBase& s, const Constraint* call)
     {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GR, RM_IMP, call);
@@ -498,95 +463,15 @@ namespace MiniZinc {
 
     ///* arithmetic constraints */
 
-    void p_int_plus(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
-      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
-      if (!call->arg(0).isDef()) {
-        IntVar res = create_intvar(s, call);
-        rel(*gi._current_space, call->arg(0)().toInt() + gi.arg2intvar(call->arg(1))
-            == res, gi.ann2icl(call->ann()));
-      } else if (!call->arg(1).isDef()) {
-        IntVar res = create_intvar(s, call);
-        rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + call->arg(1)().toInt()
-            == res, gi.ann2icl(call->ann()));
-      /* } else if (call->isFixed()) { */
-      /*   rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + gi.arg2intvar(call->arg(1)) */ 
-      /*       == call->lb().toInt(), gi.ann2icl(call->ann())); */
-      } else {
-        IntVar res = create_intvar(s, call);
-        rel(*gi._current_space, gi.arg2intvar(call->arg(0)) + gi.arg2intvar(call->arg(1)) 
-            == res, gi.ann2icl(call->ann()));
-      }
-    }
-
-    void p_int_sum(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
-      const Val& ann =call->ann();
-      const Val& vars = call->arg(0);
-      std::vector<int> iav(vars.size(), 1);
-      IntArgs ia(iav);
-      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
-      IntVar res = create_intvar(s, call);
-
-      int singleIntVar;
-      IntRelType irt = IRT_EQ;
-      if (gi.isBoolArray(vars,singleIntVar)) {
-        if (singleIntVar != -1) {
-          if (std::abs(ia[singleIntVar]) == 1 && call->arg(2)().toInt() == 0) {
-            IntVar siv = gi.arg2intvar(vars[singleIntVar]);
-            BoolVarArgs iv = gi.arg2boolvarargs(vars, 0, singleIntVar);
-            IntArgs ia_tmp(ia.size()-1);
-            int count = 0;
-            for (int i=0; i<ia.size(); i++) {
-              if (i != singleIntVar)
-                ia_tmp[count++] = ia[singleIntVar] == -1 ? ia[i] : -ia[i];
-            }
-            IntRelType t = (ia[singleIntVar] == -1 ? irt : swap(irt));
-            linear(*gi._current_space, ia_tmp, iv, t, siv, gi.ann2icl(ann));
-          } else {
-            IntVarArgs iv = gi.arg2intvarargs(vars);
-            linear(*gi._current_space, ia, iv, irt, res, gi.ann2icl(ann));
-          }
-        } else {
-          BoolVarArgs iv = gi.arg2boolvarargs(vars);
-          linear(*gi._current_space, ia, iv, irt, res, gi.ann2icl(ann));
-        }
-      } else {
-        IntVarArgs iv = gi.arg2intvarargs(vars);
-        linear(*gi._current_space, ia, iv, irt, res, gi.ann2icl(ann));
-      }
-    }
-
-    void p_int_minus(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
-      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
-      if (!call->arg(0).isDef()) {
-        IntVar res = create_intvar(s, call);
-        rel(*gi._current_space, call->arg(0)().toInt() - gi.arg2intvar(call->arg(1))
-            == res, gi.ann2icl(call->ann()));
-      } else if (!call->arg(1).isDef()) {
-        IntVar res = create_intvar(s, call);
-        rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - call->arg(1)().toInt()
-            == res, gi.ann2icl(call->ann()));
-      /* } else if (call->isFixed()) { */
-      /*   rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) */ 
-      /*       == call->val().toInt(), gi.ann2icl(call->ann())); */
-      } else {
-        IntVar res = create_intvar(s, call);
-        rel(*gi._current_space, gi.arg2intvar(call->arg(0)) - gi.arg2intvar(call->arg(1)) 
-            == res, gi.ann2icl(call->ann()));
-      }
-    }
-
-    void p_int_times(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
+    void p_int_times(SolverInstanceBase& s, const Constraint* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar x0 = gi.arg2intvar(call->arg(0));
       IntVar x1 = gi.arg2intvar(call->arg(1));
-      IntVar res = create_intvar(s, call);
-      mult(*gi._current_space, x0, x1, res, gi.ann2icl(call->ann()));
+      IntVar x2 = gi.arg2intvar(call->arg(2));
+      mult(*gi._current_space, x0, x1, x2, gi.ann2icl(call->ann()));
     }
-    void p_int_div(SolverInstanceBase& s, const Definition* call) {
+    void p_int_div(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar x0 = gi.arg2intvar(call->arg(0));
@@ -594,7 +479,7 @@ namespace MiniZinc {
       IntVar x2 = gi.arg2intvar(call->arg(2));
       div(*gi._current_space,x0,x1,x2, gi.ann2icl(call->ann()));
     }
-    void p_int_mod(SolverInstanceBase& s, const Definition* call) {
+    void p_int_mod(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar x0 = gi.arg2intvar(call->arg(0));
@@ -603,7 +488,7 @@ namespace MiniZinc {
       mod(*gi._current_space,x0,x1,x2, gi.ann2icl(call->ann()));
     }
 
-    void p_int_min(SolverInstanceBase& s, const Definition* call) {
+    void p_int_min(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar x0 = gi.arg2intvar(call->arg(0));
@@ -611,15 +496,15 @@ namespace MiniZinc {
       IntVar x2 = gi.arg2intvar(call->arg(2));
       min(*gi._current_space, x0, x1, x2, gi.ann2icl(call->ann()));
     }
-    void p_int_max(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
+    void p_int_max(SolverInstanceBase& s, const Constraint* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar x0 = gi.arg2intvar(call->arg(0));
       IntVar x1 = gi.arg2intvar(call->arg(1));
-      IntVar res = create_intvar(s, call);
-      max(*gi._current_space, x0, x1, res, gi.ann2icl(call->ann()));
+      IntVar x2 = gi.arg2intvar(call->arg(2));
+      max(*gi._current_space, x0, x1, x2, gi.ann2icl(call->ann()));
     }
-    void p_int_negate(SolverInstanceBase& s, const Definition* call) {
+    void p_int_negate(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar x0 = gi.arg2intvar(call->arg(0));
@@ -628,86 +513,86 @@ namespace MiniZinc {
     }
 
     ///* Boolean constraints */
-    void p_bool_CMP(GecodeSolverInstance& s, IntRelType irt, const Definition* call) {
+    void p_bool_CMP(GecodeSolverInstance& s, IntRelType irt, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       rel(*s._current_space, s.arg2boolvar(call->arg(0)), irt, s.arg2boolvar(call->arg(1)), s.ann2icl(ann));
     }
-    void p_bool_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Definition* call) {
+    void p_bool_CMP_reif(GecodeSolverInstance& s, IntRelType irt, ReifyMode rm, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       rel(*s._current_space, s.arg2boolvar(call->arg(0)), irt, s.arg2boolvar(call->arg(1)),
           Reify(s.arg2boolvar(call->arg(2)), rm), s.ann2icl(ann));
     }
-    void p_bool_eq(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_eq(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
     }
-    void p_bool_eq_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_eq_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_EQV, call);
     }
-    void p_bool_eq_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_eq_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_IMP, call);
     }
-    void p_bool_ne(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_ne(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP(static_cast<GecodeSolverInstance&>(s), IRT_NQ, call);
     }
-    void p_bool_ne_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_ne_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_EQV, call);
     }
-    void p_bool_ne_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_ne_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_IMP, call);
     }
-    void p_bool_ge(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_ge(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP(static_cast<GecodeSolverInstance&>(s), IRT_GQ, call);
     }
-    void p_bool_ge_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_ge_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GQ, RM_EQV, call);
     }
-    void p_bool_ge_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_ge_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GQ, RM_IMP, call);
     }
-    void p_bool_le(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_le(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LQ, call);
     }
-    void p_bool_le_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_le_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LQ, RM_EQV, call);
     }
-    void p_bool_le_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_le_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LQ, RM_IMP, call);
     }
-    void p_bool_gt(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_gt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP(static_cast<GecodeSolverInstance&>(s), IRT_GR, call);
     }
-    void p_bool_gt_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_gt_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GR, RM_EQV, call);
     }
-    void p_bool_gt_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_gt_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_GR, RM_IMP, call);
     }
-    void p_bool_lt(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_lt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP(static_cast<GecodeSolverInstance&>(s), IRT_LE, call);
     }
-    void p_bool_lt_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_lt_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_EQV, call);
     }
-    void p_bool_lt_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_lt_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       p_bool_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_IMP, call);
     }
@@ -715,10 +600,10 @@ namespace MiniZinc {
 #define BOOL_OP(op) \
     BoolVar b0 = gi.arg2boolvar(call->arg(0)); \
     BoolVar b1 = gi.arg2boolvar(call->arg(1)); \
-    if (!call->arg(2).isDef() && call->arg(2).isInt()) { \
+    if (!call->arg(2).isVar() && call->arg(2).isInt()) { \
       rel(*gi._current_space, b0, op, b1, call->arg(2)().toInt(), gi.ann2icl(ann)); \
     } else { \
-      rel(*gi._current_space, b0, op, b1, gi.resolveVar(call->arg(2).toDef()).boolVar(gi._current_space), gi.ann2icl(ann)); \
+      rel(*gi._current_space, b0, op, b1, gi.resolveVar(call->arg(2).toVar()).boolVar(gi._current_space), gi.ann2icl(ann)); \
     }
 
 
@@ -727,16 +612,16 @@ namespace MiniZinc {
     if (call->size()==1) { \
       rel(*gi._current_space, op, bv, 1, gi.ann2icl(ann)); \
     } else { \
-      rel(*gi._current_space, op, bv, gi.reifyVar(call), gi.ann2icl(ann)); \
+      rel(*gi._current_space, op, bv, gi.arg2boolvar(call->arg(1)), gi.ann2icl(ann)); \
     }
 
-    void p_bool_or(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_or(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_OP(BoolOpType::BOT_OR);
     }
-    void p_bool_or_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_or_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -746,13 +631,13 @@ namespace MiniZinc {
       clause(*gi._current_space, BoolOpType::BOT_OR, BoolVarArgs()<<b0<<b1, BoolVarArgs()<<b2, 1, 
           gi.ann2icl(ann));
     }
-    void p_bool_and(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_and(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_OP(BoolOpType::BOT_AND);
     }
-    void p_bool_and_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_and_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -762,19 +647,19 @@ namespace MiniZinc {
       rel(*gi._current_space, b2, BoolOpType::BOT_IMP, b0, 1, gi.ann2icl(ann));
       rel(*gi._current_space, b2, BoolOpType::BOT_IMP, b1, 1, gi.ann2icl(ann));
     }
-    void p_array_bool_and(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_and(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_ARRAY_OP(Gecode::BoolOpType::BOT_AND);
     }
-    void p_forall(SolverInstanceBase& s, const Definition* call) {
+    void p_forall(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT || static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_ARRAY_OP(Gecode::BoolOpType::BOT_AND);
     }
-    void p_array_bool_and_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_and_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -783,23 +668,23 @@ namespace MiniZinc {
       for (unsigned int i=bv.size(); i--;)
         rel(*gi._current_space, b1, Gecode::BoolOpType::BOT_IMP, bv[i], 1, gi.ann2icl(ann));
     }
-    void p_array_bool_or(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_or(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_ARRAY_OP(BoolOpType::BOT_OR);
     }
-    void p_exists(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
-      const Val& ann =call->ann();
-      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
-      BoolVarArgs bvp = gi.arg2boolvarargs(call->arg(0));
-      BoolVarArgs bvn;
-      auto var = gi.reifyVar(call);
-      bvn << var;
-      clause(*gi._current_space, BoolOpType::BOT_OR, bvp, bvn, 1, gi.ann2icl(ann));
-    }
-    void p_array_bool_or_imp(SolverInstanceBase& s, const Definition* call) {
+//    void p_exists(SolverInstanceBase& s, const Constraint* call) {
+//      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
+//      const Val& ann =call->ann();
+//      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
+//      BoolVarArgs bvp = gi.arg2boolvarargs(call->arg(0));
+//      BoolVarArgs bvn;
+//      auto var = gi.reifyVar(call);
+//      bvn << var;
+//      clause(*gi._current_space, BoolOpType::BOT_OR, bvp, bvn, 1, gi.ann2icl(ann));
+//    }
+    void p_array_bool_or_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -807,13 +692,13 @@ namespace MiniZinc {
       BoolVar b1 = gi.arg2boolvar(call->arg(1));
       clause(*gi._current_space, BoolOpType::BOT_OR, bv, BoolVarArgs()<<b1, 1, gi.ann2icl(ann));
     }
-    void p_array_bool_xor(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_xor(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_ARRAY_OP(BoolOpType::BOT_XOR);
     }
-    void p_array_bool_xor_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_xor_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -822,7 +707,7 @@ namespace MiniZinc {
       rel(*gi._current_space, BoolOpType::BOT_XOR, bv, tmp, gi.ann2icl(ann));
       rel(*gi._current_space, gi.arg2boolvar(call->arg(1)), BoolOpType::BOT_IMP, tmp, 1);
     }
-    void p_array_bool_clause(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_clause(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -830,7 +715,7 @@ namespace MiniZinc {
       BoolVarArgs bvn = gi.arg2boolvarargs(call->arg(1));
       clause(*gi._current_space, BoolOpType::BOT_OR, bvp, bvn, 1, gi.ann2icl(ann));
     }
-    void p_array_bool_clause_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_clause_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -839,7 +724,7 @@ namespace MiniZinc {
       BoolVar b0 = gi.arg2boolvar(call->arg(2));
       clause(*gi._current_space, BoolOpType::BOT_OR, bvp, bvn, b0, gi.ann2icl(ann));
     }
-    void p_array_bool_clause_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_clause_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -848,13 +733,13 @@ namespace MiniZinc {
       BoolVar b0 = gi.arg2boolvar(call->arg(2));
       clause(*gi._current_space, BoolOpType::BOT_OR, bvp, bvn, b0, gi.ann2icl(ann));
     }
-    void p_bool_xor(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_xor(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_OP(BoolOpType::BOT_XOR);
     }
-    void p_bool_xor_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_xor_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -866,7 +751,7 @@ namespace MiniZinc {
       clause(*gi._current_space, BoolOpType::BOT_OR, BoolVarArgs(), BoolVarArgs()<<b0<<b1<<b2, 1,
           gi.ann2icl(ann));
     }
-    void p_bool_l_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_l_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -875,32 +760,32 @@ namespace MiniZinc {
       if (call->arg(2).isInt()) {
         rel(*gi._current_space, b1, BoolOpType::BOT_IMP, b0, call->arg(2)().toInt(), gi.ann2icl(ann));
       } else {
-        rel(*gi._current_space, b1, BoolOpType::BOT_IMP, b0, gi.resolveVar(call->arg(2).toDef()).boolVar(gi._current_space), gi.ann2icl(ann));
+        rel(*gi._current_space, b1, BoolOpType::BOT_IMP, b0, gi.resolveVar(call->arg(2).toVar()).boolVar(gi._current_space), gi.ann2icl(ann));
       }
     }
-    void p_bool_r_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_bool_r_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BOOL_OP(BoolOpType::BOT_IMP);
     }
-    void p_bool_not(SolverInstanceBase& s, const Definition* call) {
-      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
-      const Val& ann =call->ann();
-      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
-      BoolVar x0 = gi.arg2boolvar(call->arg(0));
-      auto x1 = gi.reifyVar(call);
-      rel(*gi._current_space, x0, BoolOpType::BOT_XOR, x1, 1, gi.ann2icl(ann));
-    }
+//    void p_bool_not(SolverInstanceBase& s, const Constraint* call) {
+//      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::FUN);
+//      const Val& ann =call->ann();
+//      GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
+//      BoolVar x0 = gi.arg2boolvar(call->arg(0));
+//      auto x1 = gi.reifyVar(call);
+//      rel(*gi._current_space, x0, BoolOpType::BOT_XOR, x1, 1, gi.ann2icl(ann));
+//    }
 
     ///* element constraints */
-    void p_array_int_element(SolverInstanceBase& s, const Definition* call) {
+    void p_array_int_element(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar selector = gi.arg2intvar(call->arg(0));
       rel(*gi._current_space, selector > 0);
-      if (call->arg(1).isDef()) {
+      if (call->arg(1).isVar()) {
         IntVarArgs iv = gi.arg2intvarargs(call->arg(1), 1);
         element(*gi._current_space, iv, selector, gi.arg2intvar(call->arg(2)), gi.ann2icl(ann));
       } else {
@@ -908,13 +793,13 @@ namespace MiniZinc {
         element(*gi._current_space, ia, selector, gi.arg2intvar(call->arg(2)), gi.ann2icl(ann));
       }
     }
-    void p_array_bool_element(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_element(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar selector = gi.arg2intvar(call->arg(0));
       rel(*gi._current_space, selector > 0);
-      if (call->arg(1).isDef()) {
+      if (call->arg(1).isVar()) {
         BoolVarArgs iv = gi.arg2boolvarargs(call->arg(1), 1);
         element(*gi._current_space, iv, selector, gi.arg2boolvar(call->arg(2)), gi.ann2icl(ann));
       } else {
@@ -924,24 +809,24 @@ namespace MiniZinc {
     }
 
     ///* coercion constraints */
-    void p_bool2int(SolverInstanceBase& s, const Definition* call) {
+    void p_bool2int(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       BoolVar x0 = gi.arg2boolvar(call->arg(0));
       IntVar x1 = gi.arg2intvar(call->arg(1));
-      if (call->arg(0).isDef() && call->arg(1).isDef()) { 
-        int index = gi.resolveVar(call->arg(0).toDef()).index();
-        gi.resolveVar(call->arg(1).toDef()).setBoolAliasIndex(index);
+      if (call->arg(0).isVar() && call->arg(1).isVar()) {
+        int index = gi.resolveVar(call->arg(0).toVar()).index();
+        gi.resolveVar(call->arg(1).toVar()).setBoolAliasIndex(index);
       }
       channel(*gi._current_space, x0, x1, gi.ann2icl(ann));
     }
 
-    void p_int_in(SolverInstanceBase& s, const Definition* call) {
+    void p_int_in(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntSet d = gi.arg2intset( call->arg(1));
-      if (call->arg(0).isDef()) {
+      if (call->arg(0).isVar()) {
         Gecode::IntSetRanges dr(d);
         Iter::Ranges::Singleton sr(0,1);
         Iter::Ranges::Inter<Gecode::IntSetRanges,Iter::Ranges::Singleton> i(dr,sr);
@@ -956,11 +841,11 @@ namespace MiniZinc {
         dom(*gi._current_space, gi.arg2intvar(call->arg(0)), d);
       }
     }
-    void p_int_in_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_int_in_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntSet d = gi.arg2intset( call->arg(1));
-      if (call->arg(0).isDef()) {
+      if (call->arg(0).isVar()) {
         Gecode::IntSetRanges dr(d);
         Iter::Ranges::Singleton sr(0,1);
         Iter::Ranges::Inter<Gecode::IntSetRanges,Iter::Ranges::Singleton> i(dr,sr);
@@ -978,11 +863,11 @@ namespace MiniZinc {
         dom(*gi._current_space, gi.arg2intvar(call->arg(0)), d, gi.arg2boolvar(call->arg(2)));
       }
     }
-    void p_int_in_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_int_in_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntSet d = gi.arg2intset( call->arg(1));
-      if (call->arg(0).isDef()) {
+      if (call->arg(0).isVar()) {
         Gecode::IntSetRanges dr(d);
         Iter::Ranges::Singleton sr(0,1);
         Iter::Ranges::Inter<Gecode::IntSetRanges,Iter::Ranges::Singleton> i(dr,sr);
@@ -1001,7 +886,7 @@ namespace MiniZinc {
 
     ///* constraints from the standard library */
 
-    void p_abs(SolverInstanceBase& s, const Definition* call) {
+    void p_abs(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1010,7 +895,7 @@ namespace MiniZinc {
       abs(*gi._current_space, x0, x1, gi.ann2icl(ann));
     }
 
-    void p_array_int_lt(SolverInstanceBase& s, const Definition* call) {
+    void p_array_int_lt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1019,7 +904,7 @@ namespace MiniZinc {
       rel(*gi._current_space, iv0, IRT_LE, iv1, gi.ann2icl(ann));
     }
 
-    void p_array_int_lq(SolverInstanceBase& s, const Definition* call) {
+    void p_array_int_lq(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1028,7 +913,7 @@ namespace MiniZinc {
       rel(*gi._current_space, iv0, IRT_LQ, iv1, gi.ann2icl(ann));
     }
 
-    void p_array_bool_lt(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_lt(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1037,7 +922,7 @@ namespace MiniZinc {
       rel(*gi._current_space, bv0, IRT_LE, bv1, gi.ann2icl(ann));
     }
 
-    void p_array_bool_lq(SolverInstanceBase& s, const Definition* call) {
+    void p_array_bool_lq(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1046,20 +931,20 @@ namespace MiniZinc {
       rel(*gi._current_space, bv0, IRT_LQ, bv1, gi.ann2icl(ann));
     }
 
-    void p_count(SolverInstanceBase& s, const Definition* call) {
+    void p_count(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs iv = gi.arg2intvarargs(call->arg(0));
-      if (!call->arg(1).isDef()) {
-        if (!call->arg(2).isDef()) {
+      if (!call->arg(1).isVar()) {
+        if (!call->arg(2).isVar()) {
           count(*gi._current_space, iv, call->arg(1)().toInt(), IRT_EQ, call->arg(2)().toInt(), 
               gi.ann2icl(ann));
         } else {
           count(*gi._current_space, iv, call->arg(1)().toInt(), IRT_EQ, gi.arg2intvar(call->arg(2)), 
               gi.ann2icl(ann));
         }
-      } else if (!call->arg(2).isDef()) {
+      } else if (!call->arg(2).isVar()) {
         count(*gi._current_space, iv, gi.arg2intvar(call->arg(1)), IRT_EQ, call->arg(2)().toInt(), 
             gi.ann2icl(ann));
       } else {
@@ -1068,7 +953,7 @@ namespace MiniZinc {
       }
     }
 
-    void p_count_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_count_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1080,7 +965,7 @@ namespace MiniZinc {
       count(*gi._current_space,iv,x,IRT_EQ,c,gi.ann2icl(ann));
       rel(*gi._current_space, b == (c==y));
     }
-    void p_count_imp(SolverInstanceBase& s, const Definition* call) {
+    void p_count_imp(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1093,7 +978,7 @@ namespace MiniZinc {
       rel(*gi._current_space, b >> (c==y));
     }
 
-    void count_rel(IntRelType irt, SolverInstanceBase& s, const Definition* call) {
+    void count_rel(IntRelType irt, SolverInstanceBase& s, const Constraint* call) {
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs iv = gi.arg2intvarargs(call->arg(1));
@@ -1101,17 +986,17 @@ namespace MiniZinc {
           call->arg(0)().toInt(), gi.ann2icl(ann));
     }
 
-    void p_at_most(SolverInstanceBase& s, const Definition* call) {
+    void p_at_most(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       count_rel(IRT_LQ, s, call);
     }
 
-    void p_at_least(SolverInstanceBase& s, const Definition* call) {
+    void p_at_least(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       count_rel(IRT_GQ, s, call);
     }
 
-    void p_bin_packing_load(SolverInstanceBase& s, const Definition* call) {
+    void p_bin_packing_load(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1139,7 +1024,7 @@ namespace MiniZinc {
                  sizes, gi.ann2icl(ann));
     }
 
-    void p_global_cardinality(SolverInstanceBase& s, const Definition* call) {
+    void p_global_cardinality(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1176,7 +1061,7 @@ namespace MiniZinc {
       }
     }
 
-    void p_global_cardinality_closed(SolverInstanceBase& s, const Definition* call) {
+    void p_global_cardinality_closed(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1187,7 +1072,7 @@ namespace MiniZinc {
       count(*gi._current_space, iv0, iv1, cover, gi.ann2icl(ann));
     }
 
-    void p_global_cardinality_low_up(SolverInstanceBase& s, const Definition* call) {
+    void p_global_cardinality_low_up(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1218,7 +1103,7 @@ namespace MiniZinc {
       count(*gi._current_space, x, y, cover, gi.ann2icl(ann));
     }
 
-    void p_global_cardinality_low_up_closed(SolverInstanceBase& s, const Definition* call) {
+    void p_global_cardinality_low_up_closed(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1235,7 +1120,7 @@ namespace MiniZinc {
       count(*gi._current_space, x, y, cover, gi.ann2icl(ann));
     }
 
-    void p_minimum(SolverInstanceBase& s, const Definition* call) {
+    void p_minimum(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1243,7 +1128,7 @@ namespace MiniZinc {
       min(*gi._current_space, iv, gi.arg2intvar(call->arg(0)), gi.ann2icl(ann));
     }
 
-    void p_maximum(SolverInstanceBase& s, const Definition* call) {
+    void p_maximum(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1251,7 +1136,7 @@ namespace MiniZinc {
       max(*gi._current_space, iv, gi.arg2intvar(call->arg(0)), gi.ann2icl(ann));
     }
 
-    void p_maximum_arg(SolverInstanceBase& s, const Definition* call) {
+    void p_maximum_arg(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1259,7 +1144,7 @@ namespace MiniZinc {
       argmax(*gi._current_space, iv, gi.arg2intvar(call->arg(1)), true, gi.ann2icl(ann));
     }
 
-    void p_minimum_arg(SolverInstanceBase& s, const Definition* call) {
+    void p_minimum_arg(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1267,7 +1152,7 @@ namespace MiniZinc {
       argmin(*gi._current_space, iv, gi.arg2intvar(call->arg(1)), true, gi.ann2icl(ann));
     }
 
-    void p_regular(SolverInstanceBase& s, const Definition* call) {
+    void p_regular(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1318,7 +1203,7 @@ namespace MiniZinc {
       extensional(*gi._current_space, iv, dfa, gi.ann2icl(ann));
     }
 
-    void p_sort(SolverInstanceBase& s, const Definition* call) {
+    void p_sort(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1337,7 +1222,7 @@ namespace MiniZinc {
       sorted(*gi._current_space, x, y, gi.ann2icl(ann));
     }
 
-    void p_inverse_offsets(SolverInstanceBase& s, const Definition* call) {
+    void p_inverse_offsets(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs x = gi.arg2intvarargs(call->arg(0));
@@ -1350,7 +1235,7 @@ namespace MiniZinc {
       channel(*gi._current_space, x, xoff, y, yoff, icl == MZ_ICL_DEF ? MZ_ICL_DOM : icl);
     }
 
-    void p_increasing_int(SolverInstanceBase& s, const Definition* call) {
+    void p_increasing_int(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1358,7 +1243,7 @@ namespace MiniZinc {
       rel(*gi._current_space,x,IRT_LQ,gi.ann2icl(ann));
     }
 
-    void p_increasing_bool(SolverInstanceBase& s, const Definition* call) {
+    void p_increasing_bool(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1366,7 +1251,7 @@ namespace MiniZinc {
       rel(*gi._current_space,x,IRT_LQ,gi.ann2icl(ann));
     }
 
-    void p_decreasing_int(SolverInstanceBase& s, const Definition* call) {
+    void p_decreasing_int(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1374,7 +1259,7 @@ namespace MiniZinc {
       rel(*gi._current_space,x,IRT_GQ,gi.ann2icl(ann));
     }
 
-    void p_decreasing_bool(SolverInstanceBase& s, const Definition* call) {
+    void p_decreasing_bool(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1382,7 +1267,7 @@ namespace MiniZinc {
       rel(*gi._current_space,x,IRT_GQ,gi.ann2icl(ann));
     }
 
-    void p_table_int(SolverInstanceBase& s, const Definition* call) {
+    void p_table_int(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1401,7 +1286,7 @@ namespace MiniZinc {
       ts.finalize();
       extensional(*gi._current_space,x,ts,gi.ann2icl(ann));
     }
-    void p_table_bool(SolverInstanceBase& s, const Definition* call) {
+    void p_table_bool(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1421,7 +1306,7 @@ namespace MiniZinc {
       extensional(*gi._current_space,x,ts,gi.ann2icl(ann));
     }
 
-    void p_cumulatives(SolverInstanceBase& s, const Definition* call) {
+    void p_cumulatives(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1500,7 +1385,7 @@ namespace MiniZinc {
       }
     }
 
-    void p_among_seq_int(SolverInstanceBase& s, const Definition* call) {
+    void p_among_seq_int(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1513,7 +1398,7 @@ namespace MiniZinc {
       sequence(*gi._current_space, x, S, q, l, u, gi.ann2icl(ann));
     }
 
-    void p_among_seq_bool(SolverInstanceBase& s, const Definition* call) {
+    void p_among_seq_bool(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1527,7 +1412,7 @@ namespace MiniZinc {
       sequence(*gi._current_space, x, S, q, l, u, gi.ann2icl(ann));
     }
 
-    void p_schedule_unary(SolverInstanceBase& s, const Definition* call) {
+    void p_schedule_unary(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs x = gi.arg2intvarargs(call->arg(0));
@@ -1536,7 +1421,7 @@ namespace MiniZinc {
       unary(*gi._current_space, x, p);
     }
 
-    void p_schedule_unary_optional(SolverInstanceBase& s, const Definition* call) {
+    void p_schedule_unary_optional(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs x = gi.arg2intvarargs(call->arg(0));
@@ -1547,7 +1432,7 @@ namespace MiniZinc {
     }
 
 
-    void p_cumulative_opt(SolverInstanceBase& s, const Definition* ce) {
+    void p_cumulative_opt(SolverInstanceBase& s, const Constraint* ce) {
       assert(static_cast<BytecodeProc::Mode>(ce->mode()) == BytecodeProc::ROOT);
       const Val& ann = ce->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1560,7 +1445,7 @@ namespace MiniZinc {
       cumulative(*gi._current_space,bound,start,duration,height,opt,gi.ann2icl(ann));
     }
 
-    void p_circuit(SolverInstanceBase& s, const Definition* call) {
+    void p_circuit(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1569,7 +1454,7 @@ namespace MiniZinc {
       unshare(*gi._current_space, xv);
       circuit(*gi._current_space,off,xv,gi.ann2icl(ann));
     }
-    void p_circuit_cost_array(SolverInstanceBase& s, const Definition* call) {
+    void p_circuit_cost_array(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1580,7 +1465,7 @@ namespace MiniZinc {
       unshare(*gi._current_space, xv);
       circuit(*gi._current_space,c,xv,yv,z,gi.ann2icl(ann));
     }
-    void p_circuit_cost(SolverInstanceBase& s, const Definition* call) {
+    void p_circuit_cost(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1591,7 +1476,7 @@ namespace MiniZinc {
       circuit(*gi._current_space,c,xv,z,gi.ann2icl(ann));
     }
 
-    void p_nooverlap(SolverInstanceBase& s, const Definition* call) {
+    void p_nooverlap(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1617,7 +1502,7 @@ namespace MiniZinc {
       }
     }
 
-    void p_precede(SolverInstanceBase& s, const Definition* call) {
+    void p_precede(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1627,12 +1512,12 @@ namespace MiniZinc {
       precede(*gi._current_space,x,p_s,p_t,gi.ann2icl(ann));
     }
 
-    void p_nvalue(SolverInstanceBase& s, const Definition* call) {
+    void p_nvalue(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs x = gi.arg2intvarargs(call->arg(1));
-      if (call->arg(0).isDef()) {
+      if (call->arg(0).isVar()) {
         IntVar y = gi.arg2intvar(call->arg(0));
         nvalues(*gi._current_space,x,IRT_EQ,y,gi.ann2icl(ann));
       } else {
@@ -1640,13 +1525,13 @@ namespace MiniZinc {
       }
     }
 
-    void p_among(SolverInstanceBase& s, const Definition* call) {
+    void p_among(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVarArgs x = gi.arg2intvarargs(call->arg(1));
       IntSet v = gi.arg2intset( call->arg(2));
-      if (call->arg(0).isDef()) {
+      if (call->arg(0).isVar()) {
         IntVar n = gi.arg2intvar(call->arg(0));
         unshare(*gi._current_space, x);
         count(*gi._current_space,x,v,IRT_EQ,n,gi.ann2icl(ann));
@@ -1656,7 +1541,7 @@ namespace MiniZinc {
       }
     }
 
-    void p_member_int(SolverInstanceBase& s, const Definition* call) {
+    void p_member_int(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1664,7 +1549,7 @@ namespace MiniZinc {
       IntVar y = gi.arg2intvar(call->arg(1));
       member(*gi._current_space,x,y,gi.ann2icl(ann));
     }
-    void p_member_int_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_member_int_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1673,7 +1558,7 @@ namespace MiniZinc {
       BoolVar b = gi.arg2boolvar(call->arg(2));
       member(*gi._current_space,x,y,b,gi.ann2icl(ann));
     }
-    void p_member_bool(SolverInstanceBase& s, const Definition* call) {
+    void p_member_bool(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
@@ -1681,7 +1566,7 @@ namespace MiniZinc {
       BoolVar y = gi.arg2boolvar(call->arg(1));
       member(*gi._current_space,x,y,gi.ann2icl(ann));
     }
-    void p_member_bool_reif(SolverInstanceBase& s, const Definition* call) {
+    void p_member_bool_reif(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
       const Val& ann =call->ann();
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);

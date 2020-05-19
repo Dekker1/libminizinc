@@ -51,8 +51,9 @@ namespace MiniZinc {
       void resetSolver(void) override;
 
       // TODO: implement
-      void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override { assert(false); };
-      Val getSolutionValue(Definition* def) override { return Val(); };
+      void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override { assert(false); };
+      void addVariable(Variable* var) override { assert(false); };
+      Val getSolutionValue(Variable* var) override { return Val(); };
 
     protected:
       Expression* getSolutionValue(Id* id);

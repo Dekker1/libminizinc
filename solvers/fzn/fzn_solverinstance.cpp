@@ -195,19 +195,23 @@ namespace MiniZinc {
 
   FZNSolverInstance::~FZNSolverInstance(void) {}
 
-  void FZNSolverInstance::addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) {
-    GCLock lock;
-    Definition::toFZNItem(def, bs, _model, vdmap);
-    if (def->timestamp() >= 0) {
-      auto ti = new TypeInst(Location().introduce(), Type::parint(), nullptr);
-      auto vd = new VarDecl(Location().introduce(), ti, def->timestamp());
-      env.output()->addItem(new VarDeclI(Location().introduce(), vd));
-    }
+  void FZNSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
+//    GCLock lock;
+//    Definition::toFZNItem(def, bs, _model, vdmap);
+//    if (def->timestamp() >= 0) {
+//      auto ti = new TypeInst(Location().introduce(), Type::parint(), nullptr);
+//      auto vd = new VarDecl(Location().introduce(), ti, def->timestamp());
+//      env.output()->addItem(new VarDeclI(Location().introduce(), vd));
+//    }
   };
 
-  Val FZNSolverInstance::getSolutionValue(Definition* def) {
+  void FZNSolverInstance::addVariable(Variable* var) {
+    /// TODO
+  }
+
+  Val FZNSolverInstance::getSolutionValue(Variable* var) {
     GCLock lock;
-    Id id(Location().introduce(), def->timestamp(), nullptr);
+    Id id(Location().introduce(), var->timestamp(), nullptr);
     auto de = getSolns2Out()->findOutputVar(id.str());
     assert(de.first->e()); // A solution must have been assigned
     return Val(eval_int(env.envi(), de.first->e()));

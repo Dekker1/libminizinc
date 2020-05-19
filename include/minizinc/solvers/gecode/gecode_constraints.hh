@@ -22,20 +22,21 @@ namespace MiniZinc {
 
 namespace GecodeConstraints {
 
-#define PosterImpl(X) void X(SolverInstanceBase& s, const Definition* ce)
+  void p_mk_intvar(SolverInstanceBase& s, const Variable* var);
 
-      PosterImpl(p_mk_intvar);
+#define PosterImpl(X) void X(SolverInstanceBase& s, const Constraint* ce)
+
       PosterImpl(p_distinct);
       PosterImpl(p_distinctOffset);
       PosterImpl(p_all_equal);
-      void p_int_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Definition* ce);
+      void p_int_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Constraint* ce);
       PosterImpl(p_int_eq);
       PosterImpl(p_int_ne);
       PosterImpl(p_int_ge);
       PosterImpl(p_int_gt);
       PosterImpl(p_int_le);
       PosterImpl(p_int_lt);
-      void p_int_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Definition* call);
+      void p_int_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Constraint* call);
       ///* Comparisons */
       PosterImpl(p_int_eq_reif);
       PosterImpl(p_int_ne_reif);
@@ -49,8 +50,8 @@ namespace GecodeConstraints {
       PosterImpl(p_int_gt_imp);
       PosterImpl(p_int_le_imp);
       PosterImpl(p_int_lt_imp);
-      void p_int_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Definition* call) ;
-      void p_int_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Definition* call);
+      void p_int_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Constraint* call) ;
+      void p_int_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Constraint* call);
       PosterImpl(p_int_lin_eq);
       PosterImpl(p_int_lin_le) ;
       PosterImpl(p_int_lin_le_reif);
@@ -64,8 +65,8 @@ namespace GecodeConstraints {
       PosterImpl(p_int_lin_gt);
       PosterImpl(p_int_lin_gt_reif);
       PosterImpl(p_int_lin_gt_imp);
-      void p_bool_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Definition* call);
-      void p_bool_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Definition* call);
+      void p_bool_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Constraint* call);
+      void p_bool_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Constraint* call);
       PosterImpl(p_bool_lin_eq);
       PosterImpl(p_bool_lin_eq_reif);
       PosterImpl(p_bool_lin_eq_imp) ;
@@ -86,9 +87,9 @@ namespace GecodeConstraints {
       PosterImpl(p_bool_lin_gt_imp) ;
       
       ///* arithmetic constraints */
-      PosterImpl(p_int_plus);
-      PosterImpl(p_int_sum);
-      PosterImpl(p_int_minus);
+//      PosterImpl(p_int_plus);
+//      PosterImpl(p_int_sum);
+//      PosterImpl(p_int_minus);
       PosterImpl(p_int_times);
       PosterImpl(p_int_div);
       PosterImpl(p_int_mod);
@@ -97,8 +98,8 @@ namespace GecodeConstraints {
       PosterImpl(p_int_negate) ;
       
       ///* Boolean constraints */
-      void p_bool_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Definition* call);
-      void p_bool_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Definition* call);
+      void p_bool_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Constraint* call);
+      void p_bool_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Constraint* call);
       PosterImpl(p_bool_eq);
       PosterImpl(p_bool_eq_reif) ;
       PosterImpl(p_bool_eq_imp);
@@ -125,7 +126,7 @@ namespace GecodeConstraints {
       PosterImpl(p_array_bool_and);
       PosterImpl(p_array_bool_and_imp);
       PosterImpl(p_array_bool_or);
-      PosterImpl(p_exists);
+//      PosterImpl(p_exists);
       PosterImpl(p_array_bool_or_imp);
       PosterImpl(p_array_bool_xor);
       PosterImpl(p_array_bool_xor_imp);
@@ -136,7 +137,7 @@ namespace GecodeConstraints {
       PosterImpl(p_bool_xor_imp);
       PosterImpl(p_bool_l_imp);
       PosterImpl(p_bool_r_imp);
-      PosterImpl(p_bool_not);
+//      PosterImpl(p_bool_not);
       
       ///* element constraints */
       PosterImpl(p_array_int_element);
@@ -157,7 +158,7 @@ namespace GecodeConstraints {
       PosterImpl(p_count);
       PosterImpl(p_count_reif);
       PosterImpl(p_count_imp);
-      void count_rel(Gecode::IntRelType irt, SolverInstanceBase& s, const Definition* call);
+      void count_rel(Gecode::IntRelType irt, SolverInstanceBase& s, const Constraint* call);
       PosterImpl(p_at_most);
       PosterImpl(p_at_least);
       PosterImpl(p_bin_packing_load);

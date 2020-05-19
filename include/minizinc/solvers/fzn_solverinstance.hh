@@ -63,8 +63,9 @@ namespace MiniZinc {
 
       void processFlatZinc(void) override;
 
-      void addDefinition(const std::vector<BytecodeProc>& bs, Definition* def) override;
-      Val getSolutionValue(Definition* def) override;
+      void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override;
+      void addVariable(Variable* var) override;
+      Val getSolutionValue(Variable* var) override;
 
       // Able to return to the solver into a position where no search decisions
       // have been made. SolverInstance must allow addDefinition calls after
