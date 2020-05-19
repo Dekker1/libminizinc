@@ -193,67 +193,10 @@ CG_ProcID CodeGen::find_builtin(std::string s) {
 
 int bind_cst(int x, CodeGen& cg, CG_Builder& frag);
 
-void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs, int r_rhs) {
+void bind_binop_var(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs, int r_rhs) {
   GCLock lock;
   switch(op) {
     // Actual builtins
-    case BOT_EQ: {
-      ASTString ident = {"op_equals"};
-      if (ctx == BytecodeProc::ROOT) {
-        ident = { "int_eq" };
-      } else if (ctx == BytecodeProc::ROOT_NEG) {
-        ident = { "int_ne" };
-        ctx = BytecodeProc::ROOT;
-      }
-      auto fun = find_call_fun(cg, ident, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
-      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
-      return;
-    }
-    case BOT_LQ:
-    {
-      int c = GET_REG(cg);
-      int x = GET_REG(cg);
-      int k = GET_REG(cg);
-      int z = bind_cst(0, cg, frag);
-      OPEN_OTHER(cg, frag);
-      auto fun = find_call_fun(cg, {"op_minus"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
-      assert(fun.second == BytecodeProc::FUN);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
-      CLOSE_AGG(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
-      fun = find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
-      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(c), CG::r(x), CG::r(k));
-      return;
-    }
-    case BOT_LE:
-    {
-      int c = GET_REG(cg);
-      int x = GET_REG(cg);
-      int k = GET_REG(cg);
-      int z = bind_cst(-1, cg, frag);
-      OPEN_OTHER(cg, frag);
-      auto fun = find_call_fun(cg, {"op_minus"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
-      assert(fun.second == BytecodeProc::FUN);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
-      CLOSE_AGG(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
-      fun = find_call_fun(cg, {"int_lin_le"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, ctx);
-      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(c), CG::r(x), CG::r(k));
-      return;
-    }
-    case BOT_IN: {
-      auto fun = find_call_fun(cg, {"'in'"}, Type::varint(), {Type::varint(), Type::varsetint()}, BytecodeProc::FUN);
-      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
-      return;
-    }
     case BOT_PLUS: {
       if (ENABLE_PLUS) {
         auto fun = find_call_fun(cg, {"op_plus"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
@@ -298,24 +241,7 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
     }
-    // Normalisation
-    case BOT_NQ:
-      call_binop(cg, frag, -ctx, BOT_EQ, r_lhs, r_rhs);
-      return;
-    case BOT_GR:
-      call_binop(cg, frag, ctx, BOT_LE, r_rhs, r_lhs);
-      return;
-    case BOT_GQ:
-      call_binop(cg, frag, ctx, BOT_LQ, r_rhs, r_lhs);
-      return;
-
-    case BOT_XOR:
-      call_binop(cg, frag, -ctx, BOT_EQUIV, r_lhs, r_rhs);
-      return;
-    case BOT_RIMPL:
-      call_binop(cg, frag, ctx, BOT_IMPL, r_rhs, r_lhs);
-      return;
-    case BOT_DOTDOT:
+    case BOT_DOTDOT: {
       // The values in r_lhs and r_rhs had better be IMMIs.
       OPEN_OTHER(cg, frag);
       OPEN_VEC(cg, frag);
@@ -324,6 +250,7 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       return;
+    }
     case BOT_PLUSPLUS:
     {
       int r_one(bind_cst(1, cg, frag));
@@ -362,15 +289,9 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       return;
     }
     default:
-      TODO();
-    // BOT_PLUS, BOT_MINUS, BOT_MULT, BOT_DIV, BOT_IDIV, BOT_MOD, BOT_POW,
-    // BOT_LE, BOT_LQ, BOT_GR, BOT_GQ, BOT_EQ, BOT_NQ,
-    // BOT_IN, BOT_SUBSET, BOT_SUPERSET, BOT_UNION, BOT_DIFF, BOT_SYMDIFF,
-    // BOT_INTERSECT,
-    // BOT_PLUSPLUS,
-    // BOT_EQUIV, BOT_IMPL, BOT_RIMPL, BOT_OR, BOT_AND, BOT_XOR,
-    // BOT_DOTDOT
+      break;
   }
+  throw InternalError("Unexpected fall-through in bind_binop_var.");
 }
 
 int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r_rhs) {
@@ -3771,40 +3692,44 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  std::vector<CG_Cond::T> partial;
-  int r_lhs = CG::force_or_bind(b->lhs(), ctx, partial, cg, frag);
-  int r_rhs = CG::force_or_bind(b->rhs(), ctx, partial, cg, frag);
+  if(b->type().ispar()) {
+    CG::Binding b_lhs(CG::force_or_bind(b->lhs(), ctx, cg, frag));
+    CG::Binding b_rhs(CG::force_or_bind(b->rhs(), ctx, cg, frag));
 
-  int r;
-  if(b->type().isvar()) {
-    OPEN_OTHER(cg, frag);
-    call_binop(cg, frag, BytecodeProc::FUN, b->op(), r_lhs, r_rhs);
-    CLOSE_AGG(cg, frag);
-    r = GET_REG(cg);
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-  } else {
-    r = bind_binop_par(cg, frag, b->op(), r_lhs, r_rhs);
-  }
+    int r_cond(GET_REG(cg));
+    int l_skip(GET_LABEL(cg));
+    PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(CG::force(b_lhs.second, ctx, cg, frag)), CG::r(CG::force(b_rhs.second, ctx, cg, frag)), CG::r(r_cond));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_skip));
 
-  if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
-    // These all require rhs() != 0. Which means we need to evaluate the rhs,
-    // and put it in a register.
-    // int r_zero(CG::locate_immi(0, cg, frag));
-    int r_zero(bind_cst(0, cg, frag));
-    if(b->rhs()->type().ispar()) {
-      /*
-      int r_nz(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(b_rhs.first), CG::r(r_zero), CG::r(r_nz));
-      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_nz), CG::r(r_nz));
-      partial.push_back(CG_Cond::reg(r_nz));
-      */
-      // FIXME: Will currently abort if div/mod is called with a zero rhs.
-    } else {
-      GCLock lock;
-      partial.push_back(~CG_Cond::call({"op_equals"}, -ctx, {Type::varbool(), Type::varint(), Type::varint()}, {CG::r(r_rhs), CG::r(r_zero)}));
+    if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
+      int r_zero(bind_cst(0, cg, frag));
+      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(b_rhs.first), CG::r(r_zero), CG::r(r_cond));
+      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_cond), CG::r(r_cond));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_skip));
     }
+    int r = bind_binop_par(cg, frag, b->op(), b_lhs.first, b_rhs.first);
+    PUSH_LABEL(frag, l_skip);
+
+    return {r, CG_Cond::reg(r_cond)};
+  } else {
+    std::vector<CG_Cond::T> partial;
+    int r_lhs = CG::force_or_bind(b->lhs(), ctx, partial, cg, frag);
+    int r_rhs = CG::force_or_bind(b->rhs(), ctx, partial, cg, frag);
+
+    int r = GET_REG(cg);
+    OPEN_OTHER(cg, frag);
+    bind_binop_var(cg, frag, BytecodeProc::FUN, b->op(), r_lhs, r_rhs);
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+
+    if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
+      // These all require rhs() != 0. Which means we need to evaluate the rhs,
+      // and put it in a register.
+      int r_zero(bind_cst(0, cg, frag));
+      partial.push_back(~linear_cond(cg, frag, BOT_EQ, -ctx, r_rhs, r_zero));
+    }
+    return {r, CG_Cond::forall(ctx, partial)};
   }
-  return {r, CG_Cond::forall(ctx, partial)};
 }
 
 CG::Binding CG::bind(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -4231,7 +4156,6 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     case BOT_EQ:
     case BOT_NQ: {
       // Potentially partial.
-      // Converted into canonical form by binop_cond.
       int r_lhs = CG::force_or_bind(b->lhs(), ctx, cond, cg, frag);
       int r_rhs = CG::force_or_bind(b->rhs(), ctx, cond, cg, frag);
       cond.push_back(linear_cond(cg, frag, b->op(), ctx, r_lhs, r_rhs));
