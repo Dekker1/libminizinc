@@ -201,6 +201,9 @@ void call_binop(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r_lhs
       ASTString ident = {"op_equals"};
       if (ctx == BytecodeProc::ROOT) {
         ident = { "int_eq" };
+      } else if (ctx == BytecodeProc::ROOT_NEG) {
+        ident = { "int_ne" };
+        ctx = BytecodeProc::ROOT;
       }
       auto fun = find_call_fun(cg, ident, Type::varbool(), {Type::varint(), Type::varint()}, ctx);
       assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
@@ -587,6 +590,11 @@ CG_Cond::T binop_cond(CodeGen& cg, BinOpType op, Mode ctx, int r_lhs, int r_rhs)
       ASTString ident = {"op_equals"};
       if (ctx == BytecodeProc::ROOT) {
         ident = { "int_eq" };
+      } else if (ctx == BytecodeProc::ROOT_NEG) {
+        ident = { "int_ne" };
+        ctx = BytecodeProc::ROOT;
+        // Negated for context reversal in post_cond
+        return ~CG_Cond::call(ident, ctx, {Type::varbool(), Type::varint(), Type::varint()}, {CG::r(r_lhs), CG::r(r_rhs)});
       }
       return CG_Cond::call(ident, ctx, {Type::varbool(), Type::varint(), Type::varint()}, {CG::r(r_lhs), CG::r(r_rhs)});
     }
