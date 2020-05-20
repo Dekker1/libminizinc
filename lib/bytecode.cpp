@@ -2211,6 +2211,12 @@ namespace MiniZinc {
 execute_ret:
           if (_stack.size()==1) {
             // Always leave final frame on the stack
+            // Copy remaining constraints into toplevel
+            assert(_agg.size()==1);
+            for (Constraint* c : _agg[0].constraints) {
+              root()->addDefinition(this, c);
+            }
+            _agg[0].constraints.clear();
             return;
           }
           assert(!frame->cse_info.empty());

@@ -887,31 +887,24 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         }
       } else {
         interpreter->solutions.clear();
-        /// TODO
-//        Definition* head = interpreter->_agg[0].def_stack;
-//        Definition* d = head->next(); //ignore dummy head
-//        bool first = true;
-//        ss << "{" << std::endl;
-//        while (d != head) {
-//          if (d->pred() == 0) {
-//            d = d->next();
-//            continue;
-//          }
-//          int timestamp = d->timestamp();
-//          if (timestamp >= 0) {
-//            if (!first) {
-//              ss << "," << std::endl;
-//            }
-//            ss << "    \"" << timestamp << "\"" << ": ";
-//            ss << si->getSolutionValue(d).toString();
-//            first = false;
-//
-//            // Set output for sol() builtin
-//            interpreter->solutions.emplace(timestamp, si->getSolutionValue(d)());
-//          }
-//
-//          d = d->next();
-//        }
+        bool first = true;
+        ss << "{" << std::endl;
+        for (Variable* v = interpreter->root()->next(); v != interpreter->root(); v = v->next()) {
+          int timestamp = v->timestamp();
+          if (timestamp >= 0) {
+            /// TODO: all timestamps >= 0 ?
+            if (!first) {
+              ss << "," << std::endl;
+            }
+            ss << "    \"" << timestamp << "\"" << ": ";
+            Val sv = si->getSolutionValue(v);
+            ss << sv.toString();
+            first = false;
+            // Set output for sol() builtin
+            interpreter->solutions.emplace(timestamp, sv());
+          }
+
+        }
         ss << std::endl << "}" << std::endl;
       }
     }
@@ -1021,7 +1014,11 @@ void MznSolver::addDefinitions() {
   Variable* v = interpreter->root();
   do {
     for (Constraint* c : v->definitions()) {
-      si->addConstraint(interpreter->_procs, c);
+      if (interpreter->_procs[c->pred()].name == "output_this") {
+        output = c;
+      } else {
+        si->addConstraint(interpreter->_procs, c);
+      }
     }
     v = v->next();
   } while (v != interpreter->root());
