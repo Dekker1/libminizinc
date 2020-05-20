@@ -196,17 +196,31 @@ namespace MiniZinc {
   FZNSolverInstance::~FZNSolverInstance(void) {}
 
   void FZNSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
-//    GCLock lock;
-//    Definition::toFZNItem(def, bs, _model, vdmap);
-//    if (def->timestamp() >= 0) {
-//      auto ti = new TypeInst(Location().introduce(), Type::parint(), nullptr);
-//      auto vd = new VarDecl(Location().introduce(), ti, def->timestamp());
-//      env.output()->addItem(new VarDeclI(Location().introduce(), vd));
-//    }
+    GCLock lock;
+    const BytecodeProc& proc = bs[c->pred()];
+    std::string name = proc.name;
+    std::vector<Expression*> args(proc.nargs);
+    for (int i = 0; i < proc.nargs; ++i) {
+      Val v = Val::follow_alias(c->arg(i));
+      args[i] = v.toFZN(vdmap);
+    }
+    auto call = new Call(Location().introduce(), name, args);
+    auto ci = new ConstraintI(Location().introduce(), call);
+    _model->addItem(ci);
   };
 
   void FZNSolverInstance::addVariable(Variable* var) {
-    /// TODO
+    GCLock lock;
+    VarDecl* vd = var->varDecl();
+    vdmap.emplace(var->timestamp(), vd);
+    auto vdi = new VarDeclI(Location().introduce(), vd);
+    _model->addItem(vdi);
+    if (var->timestamp() >= 0) {
+      /// TODO: all variables have timestamp >=0 ? Handle output properly
+      auto ti = new TypeInst(Location().introduce(), Type::parint(), nullptr);
+      auto vd = new VarDecl(Location().introduce(), ti, var->timestamp());
+      env.output()->addItem(new VarDeclI(Location().introduce(), vd));
+    }
   }
 
   Val FZNSolverInstance::getSolutionValue(Variable* var) {

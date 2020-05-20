@@ -669,6 +669,7 @@ namespace MiniZinc {
     Constraint* defined_by() {
       return (_definitions.size()==1) ? _definitions[0] : nullptr;
     }
+    const std::vector<Constraint*>& definitions(void) const { return _definitions; }
     void addDefinition(Interpreter* interpreter, Constraint* c);
     
     static Variable* a(Interpreter* interpreter, Val domain, bool binding, int ident, Val ann=IntVal(0)) {
@@ -695,8 +696,8 @@ namespace MiniZinc {
     Variable* prev(void) const { return _prev; }
     Variable* next(void) const { return _next; }
 
-    static void dump(Variable* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
-    static VarDecl* varDecl(Variable* d);
+    static void dump(Variable* d, const std::vector<BytecodeProc>& bs, std::ostream& os);
+    VarDecl* varDecl(void);
     static void toFZN(Variable* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
     static void toFZNItem(Variable* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
     static void addToSolver(Interpreter* interpreter, Variable* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
@@ -713,169 +714,6 @@ namespace MiniZinc {
     void unsubscribe(Constraint* c);
 
   };
-
-//  class Definition : public RefCountedObject {
-//    friend class Trail;
-//    friend void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
-//  public:
-//    enum SubscriptionEvent { SEV_VAL, SEV_UNIFY, SEV_DOM, SEV };
-//    /// Event sets propagators can subscribe to: only value events, value+unification, or any change
-//    enum SubscriptionEventSet { SES_VAL, SES_VALUNIFY, SES_ANY };
-//    typedef std::unordered_map<Definition*, SubscriptionEventSet> Subscriptions;
-//  protected:
-//    Definition* _prev;
-//    Definition* _next;
-//    Vec* _domain;
-//    Val _ann;
-//    Definition* _defs;
-//    int _pred : 32;
-//    int _size : 31;
-//    unsigned int _flag : 1;
-//    /// Whether current domain is binding
-//    unsigned int _binding : 1;
-//    char _mode : 8;
-//    Subscriptions _subscriptions;
-//    Val _args[1];
-//    Definition(Interpreter* interpreter,Vec* domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann);
-//  public:
-//    Vec* domain(void) const { return _domain; }
-//    IntVal lb() const {
-//      assert((*_domain)[0].isInt());
-//      return (*_domain)[0]();
-//    }
-//    IntVal ub() const {
-//      assert((*_domain)[_domain->size()-1].isInt());
-//      return (*_domain)[_domain->size()-1]();
-//    }
-//    bool isBounded() const {
-//      return lb().isFinite() && ub().isFinite();
-//    }
-//
-//    /// Set new minimum value included in the domain
-//    bool setMin(Interpreter* interpreter, IntVal i, bool binding=true);
-//    /// Set new maximum value included in the domain
-//    bool setMax(Interpreter* interpreter, IntVal i, bool binding=true);
-//    /// Restrict domain to a single value
-//    bool setVal(Interpreter* interpreter, IntVal i, bool binding=true);
-//    /// Intersect current domain with given domain
-//    bool intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding=true);
-//    bool intersectDom(Interpreter* interpreter, Val dom, bool binding=true);
-//    /// Set domain to \a newDomain, schedule propagators
-//    void domain(Interpreter* interpreter, const Val& newDomain, bool binding);
-//    /// Set domain to \a newDomain, schedule propagators
-//    void domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding);
-//    Val ann(void) const { return _ann; }
-//    int pred(void) const { return _pred; }
-//    char mode(void) const { return _mode; }
-//    int size(void) const { return _size; }
-//    Val arg(int i) const { assert(i < _size); return _args[i]; }
-//    void arg(Interpreter* interpreter, int i, Val nv) {
-//      assert(i < _size);
-//      _args[i].destroy(interpreter);
-//      _args[i] = nv;
-//      _args[i].construct(interpreter);
-//    }
-//    Definition* defs(void) const { return _defs; }
-//    void defs(Interpreter* interpreter, Definition* defs) {
-//      if (!_defs) {
-//        _defs = Definition::a(interpreter, nullptr,false,0,0,{},-1); // Empty Head
-//      }
-//      if (_defs->next()->timestamp() < 0 || (defs->timestamp() > 0 && defs->timestamp() < _defs->next()->timestamp())) {
-//        _defs->next()->appendBefore(interpreter, defs);
-//      } else {
-//        _defs->appendBefore(interpreter, defs);
-//      }
-//    }
-//    Definition* defined_by() {
-//      if (!_defs) {
-//        return nullptr;
-//      }
-//      // Ignore empty head
-//      Definition* d = _defs->next();
-//      // If defined using only one definition
-//      if (d->next() == _defs) {
-//        return d;
-//      }
-//      return nullptr;
-//    }
-//    static Definition* a(Interpreter* interpreter,Vec* domain,bool binding,int pred,char mode,const std::vector<Val>& args,int ident,Val ann=IntVal(0)) {
-//      Definition* d = static_cast<Definition*>(::malloc(sizeof(Definition)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
-//      new (d) Definition(interpreter,domain,binding,pred,mode,args,ident,ann);
-//      return d;
-//    }
-//    static void free(Definition* def) {
-//      // INVARIANT: def->destroy() should be called before free(def);
-//      assert(def->_ref_count == 0 && def->_weak_ref_count == 0);
-//      if (def->_defs) {
-//        // destroy all linked definitions
-//        Definition* d = def->_defs;
-//        bool finished = false;
-//        while (!finished) {
-//          Definition* cur = d;
-//          d = d->next();
-//          finished = (cur == d);
-//          // INVARIANT: def->destroy() should ensure that no children with reference counts are still linked
-//          assert(cur->_ref_count == 0 && cur->_weak_ref_count == 0);
-//          Definition::free(cur);
-//        }
-//      }
-//      ::free(def);
-//    }
-//    ~Definition(void) = delete;
-//    /// Destroy and unlink this definition
-//    void destroy(Interpreter* interpreter);
-//    void reconstruct(Interpreter* interpreter);
-//    /// Insert singleton element into list before \a d
-//    void insertBefore(Interpreter* interpreter, Definition* d);
-//    /// Append list to other list before \a d
-//    void appendBefore(Interpreter* interpreter, Definition* d);
-//    void unlink(Interpreter* interpreter);
-//    /// Set the reference count to 1
-//    void makeUniqueReference(void) { _ref_count = 1; }
-//    void alias(Interpreter* interpreter, Val v);
-//    void unalias(Interpreter* interpreter, int proc, int size, const Val& arg0);
-//    Definition* prev(void) const { return _prev; }
-//    Definition* next(void) const { return _next; }
-//    int listSize(void) const {
-//      int i=1;
-//      if (_next != this) {
-//        for (Definition* d = _next; d != this; d = d->next()) {
-//          i++;
-//        }
-//      }
-//      return i;
-//    }
-//    bool attached() { return !(this == _prev); }
-//
-//    static void dump(Definition* d, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent=0);
-//    static VarDecl* varDecl(Definition* d);
-//    static void toFZN(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
-//    static void toFZNItem(Definition* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
-//    static void addToSolver(Interpreter* interpreter, Definition* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
-//
-//    // Propagation interface
-//
-//    /// Flag whether definition is currently scheduled
-//    bool flag(void) const { return _flag==1; }
-//    /// Set flag whether definition is currently scheduled
-//    void flag(bool f) { _flag = f; }
-//    /// Flag whether definition's domain is binding
-//    bool binding(void) const { return _binding==1; }
-//    /// Set flag whether definition's domain is binding
-//    void binding(Interpreter* interpreter, bool f);
-//    /// Add \a d to set of subscribed constraints
-//    void subscribe(Definition* d, const SubscriptionEventSet& events);
-//    /// Remove \a d from set of subscribed constraints
-//    void unsubscribe(Definition* d);
-//    /// Return subscribed definitions
-//    const Subscriptions& subscriptions(void) const {
-//      return _subscriptions;
-//    }
-//    /// Return subscribed definitions
-//    Subscriptions& subscriptions(void) {
-//      return _subscriptions;
-//    }
-//  };
 
   void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
   std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v);

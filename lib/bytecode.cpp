@@ -390,45 +390,45 @@ namespace MiniZinc {
     }
   }
 
-//  void
-//  Variable::dump(Variable* head, const std::vector<BytecodeProc>& bs, std::ostream& os) {
-//    Variable* d = head;
-//    do {
-//      if (d->timestamp() >=0) {
-//        os << d->timestamp() << "(";
-//      }
-//      os << d << "." << d->_ref_count;
-//      if (d->timestamp() >=0) {
-//        os << ")";
-//      }
-//      os << ":\t";
-//      if (d->domain()) {
-//        if (d->_binding) {
-//          os << " binding";
-//        }
-//        os << " domain: " << Val(d->domain()).toString();
-//      }
-//      os << "\n";
-//      if (!d->subscriptions().empty()) {
-//        os << "    subscriptions: ";
-//        for (auto& s : d->subscriptions()) {
-//          os << s.first << " ";
-//        }
-//        os << "\n";
-//      }
-//      for (Constraint* c : d->_definitions) {
-//        os << "    ";
-//        os << bs[c->pred()].name << "(";
-//        for (int i=0; i<c->size(); i++) {
-//          os << c->arg(i).toString();
-//          if (i<c->size()-1)
-//            os << ", ";
-//        }
-//        os << ")";
-//      }
-//      d = d->next();
-//    } while (d != head);
-//  }
+  void
+  Variable::dump(Variable* head, const std::vector<BytecodeProc>& bs, std::ostream& os) {
+    Variable* d = head;
+    do {
+      if (d->timestamp() >=0) {
+        os << d->timestamp() << "(";
+      }
+      os << d << "." << d->_ref_count;
+      if (d->timestamp() >=0) {
+        os << ")";
+      }
+      os << ":\t";
+      if (d->domain()) {
+        if (d->_binding) {
+          os << " binding";
+        }
+        os << " domain: " << Val(d->domain()).toString();
+      }
+      os << "\n";
+      if (!d->_subscriptions.empty()) {
+        os << "    subscriptions: ";
+        for (auto& s : d->_subscriptions) {
+          os << s.first << " ";
+        }
+        os << "\n";
+      }
+      for (Constraint* c : d->_definitions) {
+        os << "    ";
+        os << bs[c->pred()].name << "(";
+        for (int i=0; i<c->size(); i++) {
+          os << c->arg(i).toString();
+          if (i<c->size()-1)
+            os << ", ";
+        }
+        os << ")\n";
+      }
+      d = d->next();
+    } while (d != head);
+  }
 
   std::map<const std::string, const std::string> negated_constraints = {
     {"int_eq", "int_ne"},
@@ -439,18 +439,18 @@ namespace MiniZinc {
     {"int_lin_lt", "int_lin_ge"},
   };
 
-  VarDecl* Variable::varDecl(Variable* v) {
-//    Vec* dom = v->domain();
-//    assert(dom->size() >= 2 && dom->size() % 2 == 0);
-//    std::vector<IntSetVal::Range> ranges;
-//    for (int i = 0; i < dom->size(); i += 2) {
-//      ranges.emplace_back((*dom)[i](), (*dom)[i+1]());
-//    }
-//    SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
-//    auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-//    auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
-//    vd->addAnnotation(constants().ann.output_var);
-//    return vd;
+  VarDecl* Variable::varDecl(void) {
+    Vec* dom = domain();
+    assert(dom->size() >= 2 && dom->size() % 2 == 0);
+    std::vector<IntSetVal::Range> ranges;
+    for (int i = 0; i < dom->size(); i += 2) {
+      ranges.emplace_back((*dom)[i](), (*dom)[i+1]());
+    }
+    SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+    auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
+    auto vd = new VarDecl(Location().introduce(), ti, timestamp());
+    vd->addAnnotation(constants().ann.output_var);
+    return vd;
   }
 
 //  void Variable::toFZN(Variable* head, const std::vector<BytecodeProc>& bs, Model* model,
@@ -2526,6 +2526,7 @@ execute_ret:
                   }
                 }
                 if (isFalse || args.empty()) {
+                  /// TODO: check, what if _agg.size()==2 as below?
                   // Conjunction is constant true or false
                   pushAgg(IntVal(!isFalse),-2);
                 } else if (_agg.size()==2) {
@@ -2632,9 +2633,16 @@ execute_ret:
               }
             }
             if (!_agg.back().constraints.empty()) {
-              // Move definitions to parent aggregation
-              for (Constraint* c : _agg.back().constraints) {
-                _agg[_agg.size()-2].constraints.push_back(c);
+              if (_agg.size()==2) {
+                // only one frame left, so move all constraints into root context
+                for (Constraint* c : _agg.back().constraints) {
+                  root()->addDefinition(this, c);
+                }
+              } else {
+                // Move definitions to parent aggregation
+                for (Constraint* c : _agg.back().constraints) {
+                  _agg[_agg.size()-2].constraints.push_back(c);
+                }
               }
               _agg.back().constraints.clear();
             }
@@ -2649,6 +2657,7 @@ execute_ret:
 
   void
   Interpreter::dumpState(std::ostream& os) {
+    Variable::dump(root(), _procs, os);
 //    if (!_agg.empty()) {
 //      Definition::dump(_agg.back().def_stack, _procs, os, true);
 //    }
@@ -2658,51 +2667,71 @@ execute_ret:
   Interpreter::toFZN() {
     GCLock lock;
     auto fzn = new Model();
-//    if (_status != ROGER) {
-//      std::vector<Expression*> args = {constants().boollit(true), constants().boollit(false)};
-//      auto fail = new Call(Location().introduce(), constants().ids.bool_eq, args);
-//      auto failI = new ConstraintI(Location().introduce(), fail);
-//      fzn->addItem(failI);
-//    } else if (!_agg.empty()) {
-//      std::unordered_map<int, VarDecl*> vdmap;
-//
-//      Variable::toFZN(_agg.back().def_stack, _procs, fzn, vdmap, this);
-//      Env env(fzn);
-//      std::vector<FunctionI*> toAdd;
-//      for (auto ci = fzn->begin_constraints(); ci != fzn->end_constraints(); ++ci) {
-//        auto call = ci->e()->cast<Call>();
-//        FunctionI* fi = fzn->matchFn(env.envi(), call, false);
-//        if (!fi) {
-//          std::vector<VarDecl*> args;
-//          for (int i = 0; i < call->n_args(); ++i) {
-//            TypeInst* ti;
-//            if (call->arg(i)->type().dim() > 0) {
-//              auto al = eval_array_lit(env.envi(), call->arg(i));
-//              std::vector<TypeInst*> ranges(al->dims());
-//              for (auto& range : ranges) {
-//                range = new TypeInst(Location().introduce(), Type::parint(), nullptr);
-//              }
-//              ti = new TypeInst(Location().introduce(), call->arg(i)->type(), ranges, nullptr);
-//            } else {
-//              ti = new TypeInst(Location().introduce(), call->arg(i)->type(), nullptr);
-//            }
-//            args.push_back(new VarDecl(Location().introduce(), ti, i));
-//          }
-//          auto ti = new TypeInst(Location().introduce(), Type::varbool());
-//          fi = new FunctionI(Location().introduce(), call->id().str(), ti, args, nullptr);
-//          fzn->registerFn(env.envi(), fi);
-//          toAdd.push_back(fi);
-//        }
-//        call->decl(fi);
-//      }
-//      env.model(nullptr);
-//      for (const auto& j : toAdd) {
-//        fzn->addItem(j);
-//      }
-//    }
-//
-//    // TODO: What solve item should we add?
-//    fzn->addItem(SolveI::sat(Location().introduce()));
+    if (_status != ROGER) {
+      std::vector<Expression*> args = {constants().boollit(true), constants().boollit(false)};
+      auto fail = new Call(Location().introduce(), constants().ids.bool_eq, args);
+      auto failI = new ConstraintI(Location().introduce(), fail);
+      fzn->addItem(failI);
+    } else {
+      std::unordered_map<int, VarDecl*> vdmap;
+      for (Variable* v = _root_var->next(); v != _root_var; v = v->next()) {
+        VarDecl* vd = v->varDecl();
+        vdmap.emplace(v->timestamp(), vd);
+        auto vdi = new VarDeclI(Location().introduce(), vd);
+        fzn->addItem(vdi);
+      }
+      Variable* v = _root_var;
+      do {
+        for (Constraint* c : v->definitions()) {
+          const BytecodeProc& proc = _procs[c->pred()];
+          std::string name = proc.name;
+          std::vector<Expression*> args(proc.nargs);
+          for (int i = 0; i < proc.nargs; ++i) {
+            Val v = Val::follow_alias(c->arg(i), this);
+            args[i] = v.toFZN(vdmap);
+          }
+          auto call = new Call(Location().introduce(), name, args);
+          auto ci = new ConstraintI(Location().introduce(), call);
+          fzn->addItem(ci);
+        }
+        v = v->next();
+      } while (v != _root_var);
+
+      Env env(fzn);
+      std::vector<FunctionI*> toAdd;
+      for (auto ci = fzn->begin_constraints(); ci != fzn->end_constraints(); ++ci) {
+        auto call = ci->e()->cast<Call>();
+        FunctionI* fi = fzn->matchFn(env.envi(), call, false);
+        if (!fi) {
+          std::vector<VarDecl*> args;
+          for (int i = 0; i < call->n_args(); ++i) {
+            TypeInst* ti;
+            if (call->arg(i)->type().dim() > 0) {
+              auto al = eval_array_lit(env.envi(), call->arg(i));
+              std::vector<TypeInst*> ranges(al->dims());
+              for (auto& range : ranges) {
+                range = new TypeInst(Location().introduce(), Type::parint(), nullptr);
+              }
+              ti = new TypeInst(Location().introduce(), call->arg(i)->type(), ranges, nullptr);
+            } else {
+              ti = new TypeInst(Location().introduce(), call->arg(i)->type(), nullptr);
+            }
+            args.push_back(new VarDecl(Location().introduce(), ti, i));
+          }
+          auto ti = new TypeInst(Location().introduce(), Type::varbool());
+          fi = new FunctionI(Location().introduce(), call->id().str(), ti, args, nullptr);
+          fzn->registerFn(env.envi(), fi);
+          toAdd.push_back(fi);
+        }
+        call->decl(fi);
+      }
+      env.model(nullptr);
+      for (const auto& j : toAdd) {
+        fzn->addItem(j);
+      }
+    }
+    // TODO: What solve item should we add?
+    fzn->addItem(SolveI::sat(Location().introduce()));
     return fzn;
   }
   
@@ -2720,6 +2749,7 @@ execute_ret:
     }
     RefCountedObject::rmRef(this, infinite_dom);
     RefCountedObject::rmRef(this, boolean_dom);
+    RefCountedObject::rmRef(this, true_dom);
   }
   
   void

@@ -1014,25 +1014,18 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
 }
 
 void MznSolver::addDefinitions() {
-//  Definition* head = interpreter->_agg[0].def_stack;
-//  if (def_ptr->next() == head) {
-//    return;
-//  }
-//  do {
-//    def_ptr = def_ptr->next();
-//    if (def_ptr->pred() == 0) {
-//      continue;
-//    }
-//    if (interpreter->_procs[def_ptr->pred()].name == "output_this") {
-//      output = def_ptr;
-//      continue;
-//    }
-//    si->addDefinition(interpreter->_procs, def_ptr);
-//    if (def_ptr->defs()) {
-//      Definition::addToSolver(interpreter, def_ptr->defs(), interpreter->_procs, si);
-//    }
-//  } while(def_ptr->next() != head);
-//  // TODO: Domain Changes
+  /// TODO: currently this will always add all variables and constraints
+  for (Variable* v = interpreter->root()->next(); v != interpreter->root(); v = v->next()) {
+    si->addVariable(v);
+  }
+  Variable* v = interpreter->root();
+  do {
+    for (Constraint* c : v->definitions()) {
+      si->addConstraint(interpreter->_procs, c);
+    }
+    v = v->next();
+  } while (v != interpreter->root());
+  // TODO: Domain Changes
 }
 
 void MznSolver::pushToSolver() {
