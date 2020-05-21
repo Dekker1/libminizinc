@@ -698,7 +698,6 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   bool verbose = flag_compiler_verbose;
   Timer tm01;
   std::ifstream t(filename, std::ifstream::in);
-  /* auto sep = std::find(std::istreambuf_iterator<char>(t), std::istreambuf_iterator<char>(), */ 
   std::string line;
   std::string mzn_defs;
   while (std::getline(t,line)) {
@@ -714,24 +713,6 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   if (assembly.empty()) {
     std::swap(mzn_defs, assembly);
   }
-  // Parse MiniZinc Definitons
-  {
-    GCLock lock;
-    std::vector<SyntaxError> syntaxErrors;
-    Model* m = parse(in_out_defs, {}, data_files, mzn_defs, file, {solver_configs.mznlibDir() + "/std"}, false, false, verbose, std::cerr);
-    if (!m) {
-      throw Error("Unable to parse MiniZinc Declarations");
-    }
-    assert(!in_out_defs.model());
-    in_out_defs.model(m);
-    long long int idn = 0;
-    std::vector<VarDecl*> args = {
-      new VarDecl(Location().introduce(), new TypeInst(Location().introduce(), Type::parint()), idn)
-    };
-    args[0]->toplevel(false);
-    in_out_defs.model()->addItem(new FunctionI(Location().introduce(), constants().ann.global_register, new TypeInst(Location().introduce(), Type::ann()), args));
-  }
-
   // Parse assembly file
   bs = parse_mza(assembly);
   if (verbose) {
@@ -753,7 +734,21 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT]);
   interpreter = new Interpreter(bs, frame);
   // Parse and add data
-  {
+  if (!mzn_defs.empty()) {
+    GCLock lock;
+    std::vector<SyntaxError> syntaxErrors;
+    Model* m = parse(in_out_defs, {}, data_files, mzn_defs, file, {solver_configs.mznlibDir() + "/std"}, false, false, verbose, std::cerr);
+    if (!m) {
+      throw Error("Unable to parse MiniZinc Declarations");
+    }
+    assert(!in_out_defs.model());
+    in_out_defs.model(m);
+    long long int idn = 0;
+    std::vector<VarDecl*> args = {
+      new VarDecl(Location().introduce(), new TypeInst(Location().introduce(), Type::parint()), idn)
+    };
+    args[0]->toplevel(false);
+    in_out_defs.model()->addItem(new FunctionI(Location().introduce(), constants().ann.global_register, new TypeInst(Location().introduce(), Type::ann()), args));
     std::vector<TypeError> typeErrors;
     typecheck(in_out_defs, in_out_defs.model(), typeErrors, false, true, false);
     registerBuiltins(in_out_defs);
@@ -766,38 +761,37 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
       }
       throw Error("multiple type errors");
     }
-  }
-  std::cerr << "Input Data:\n";
-  for (VarDeclIterator it = in_out_defs.model()->begin_vardecls(); it != in_out_defs.model()->end_vardecls(); ++it) {
-    if (it->removed()) {
-      continue;
-    }
-    GCLock lock;
-    Env& env = in_out_defs;
-    Model* m = in_out_defs.model();
+    std::cerr << "Input Data:\n";
+    for (VarDeclIterator it = in_out_defs.model()->begin_vardecls(); it != in_out_defs.model()->end_vardecls(); ++it) {
+      if (it->removed()) {
+        continue;
+      }
+      GCLock lock;
+      Env& env = in_out_defs;
+      Model* m = in_out_defs.model();
 
-    VarDecl* vd = it->e();
-    if(vd->type().isann()) {
-      continue;
-    }
-    assert(vd->e());
-    Call* global_ann = vd->ann().getCall(constants().ann.global_register);
-    if (!global_ann) {
-      throw TypeError(env.envi(), vd->loc(), "Unkown global " + vd->id()->str().str());
-    }
-    IntVal global = eval_int(env.envi(), global_ann->arg(0));
+      VarDecl* vd = it->e();
+      if(vd->type().isann()) {
+        continue;
+      }
+      assert(vd->e());
+      Call* global_ann = vd->ann().getCall(constants().ann.global_register);
+      if (!global_ann) {
+        throw TypeError(env.envi(), vd->loc(), "Unkown global " + vd->id()->str().str());
+      }
+      IntVal global = eval_int(env.envi(), global_ann->arg(0));
 
-    if (vd->type().dim() > 0) {
-      ArrayLit* al = eval_array_lit(env.envi(), vd->e());
-      checkIndexSets(env.envi(), vd, al);
-    }
-    Val v = eval_val(env.envi(), vd->e());
+      if (vd->type().dim() > 0) {
+        ArrayLit* al = eval_array_lit(env.envi(), vd->e());
+        checkIndexSets(env.envi(), vd, al);
+      }
+      Val v = eval_val(env.envi(), vd->e());
 
-    interpreter->globals.assign(interpreter, global.toInt(), v);
-    if (verbose) {
-      std::cerr << " - R" << global  << "("<< vd->id()->str() << ") = " << v.toString() << std::endl;
+      interpreter->globals.assign(interpreter, global.toInt(), v);
+      if (verbose) {
+        std::cerr << " - R" << global  << "("<< vd->id()->str() << ") = " << v.toString() << std::endl;
+      }
     }
-
   }
   // Start interpreter
   if (verbose) {
