@@ -881,20 +881,22 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         bool first = true;
         ss << "{" << std::endl;
         for (Variable* v = interpreter->root()->next(); v != interpreter->root(); v = v->next()) {
-          int timestamp = v->timestamp();
-          if (timestamp >= 0) {
-            /// TODO: all timestamps >= 0 ?
-            if (!first) {
-              ss << "," << std::endl;
+          Val va = Val::follow_alias(Val(v), interpreter);
+          if (va.isVar()) {
+            int timestamp = va.timestamp();
+            if (timestamp >= 0) {
+              /// TODO: all timestamps >= 0 ?
+              if (!first) {
+                ss << "," << std::endl;
+              }
+              ss << "    \"" << timestamp << "\"" << ": ";
+              Val sv = si->getSolutionValue(va.toVar());
+              ss << sv.toString();
+              first = false;
+              // Set output for sol() builtin
+              interpreter->solutions.emplace(timestamp, sv());
             }
-            ss << "    \"" << timestamp << "\"" << ": ";
-            Val sv = si->getSolutionValue(v);
-            ss << sv.toString();
-            first = false;
-            // Set output for sol() builtin
-            interpreter->solutions.emplace(timestamp, sv());
           }
-
         }
         ss << std::endl << "}" << std::endl;
       }

@@ -341,7 +341,8 @@ namespace MiniZinc {
 
   void Variable::alias(Interpreter* interpreter, Val v) {
     assert(!_aliased);
-    // Move defining constraints to toplevel
+    // Move defining constraints to current context
+    
     for (Constraint* c : _definitions) {
       for (int i = 0; i < c->size(); ++i) {
         Val arg = c->arg(i);
@@ -352,7 +353,7 @@ namespace MiniZinc {
         }
       }
       interpreter->trail.trail_rm_def(this,c);
-      interpreter->root()->addDefinition(interpreter, c);
+      interpreter->pushConstraint(c);
     }
     _definitions.clear();
 
@@ -466,7 +467,7 @@ namespace MiniZinc {
         }
         for (Constraint* c : d->_definitions) {
           os << "    ";
-          os << bs[c->pred()].name << "(";
+          os << c << " " << bs[c->pred()].name << "(";
           for (int i=0; i<c->size(); i++) {
             os << c->arg(i).toString();
             if (i<c->size()-1)
@@ -1759,8 +1760,8 @@ execute_ret:
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           DBG_INTERPRETER("TCALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
           // TODO: Avoid creating the args vector
-          std::vector<Val> args(_procs[mode].nargs);
-          bool cse_suited = _procs[mode].nargs < 5 && mode != BytecodeProc::RAW;
+          std::vector<Val> args(_procs[code].nargs);
+          bool cse_suited = _procs[code].nargs < 5 && mode != BytecodeProc::RAW;
           for (int i = 0; i < args.size(); ++i) {
             args[i] = frame->reg[i];
           }
@@ -1878,7 +1879,8 @@ execute_ret:
               frame->pc = frame->bs->size()-1;
             }
             /// TODO: check why this is adding a ref
-            v1.toVar()->addRef(this);
+            /// Shouldn't be necessary
+//            v1.toVar()->addRef(this);
           }
         }
           break;
@@ -1981,6 +1983,7 @@ execute_ret:
                   Constraint* def_c = Constraint::a(this, PrimitiveMap::FORALL, BytecodeProc::ROOT, {Val(arr), Val(result)});
                   result->addDefinition(this, def_c);
                   pushAgg(Val(result),-2);
+                  result->makeUniqueReference();
                 }
               }
                 break;
@@ -2023,6 +2026,7 @@ execute_ret:
                   Constraint* def_c = Constraint::a(this, PrimitiveMap::EXISTS, BytecodeProc::ROOT, {Val(arr), Val(result)});
                   result->addDefinition(this, def_c);
                   pushAgg(Val(result),-2);
+                  result->makeUniqueReference();
                 }
               }
                 break;
@@ -2090,6 +2094,8 @@ execute_ret:
 //      Definition::dump(_agg.back().def_stack, _procs, os, true);
 //    }
   }
+  void
+  Interpreter::dumpState() { dumpState(std::cerr); }
 
   Model*
   Interpreter::toFZN() {

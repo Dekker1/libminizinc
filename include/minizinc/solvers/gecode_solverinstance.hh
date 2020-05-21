@@ -386,7 +386,10 @@ namespace MiniZinc {
 
     /// Inserts variable gv into _variableMap with key id
     inline void insertVar(const Variable* var, GecodeVariable gv) {
-      _variableMap.back().emplace(var->timestamp(), gv);
+      Val va = Val::follow_alias(Val(var));
+      if (va.isVar()) {
+        _variableMap.back().emplace(va.timestamp(), gv);
+      }
     }
 
 
