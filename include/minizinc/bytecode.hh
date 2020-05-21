@@ -222,6 +222,15 @@ namespace MiniZinc {
     bool isVar(void) const {
       return isRCO() && toRCO()->rcoType()==RefCountedObject::VAR;
     }
+    bool containsVar(void) const {
+      if (isInt()) return false;
+      if (isVar()) return true;
+      for (int i=0; i<size(); ++i) {
+        if ((*this)[i].containsVar())
+          return true;
+      }
+      return false;
+    }
     bool operator==(const Val& rhs) const;
     bool operator!=(const Val& rhs) const {
       return !this->operator==(rhs);
@@ -1062,6 +1071,7 @@ namespace MiniZinc {
     int newIdent(void) { return _identCount++; }
     int currentIdent(void) const { return _identCount; }
     void dumpState(std::ostream& os);
+    void dumpState();
     void schedule(Constraint* d, const Variable::SubscriptionEvent& ev);
     void deschedule(Constraint* d);
     void propagate(void);

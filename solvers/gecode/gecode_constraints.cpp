@@ -775,7 +775,7 @@ namespace MiniZinc {
       GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
       IntVar selector = gi.arg2intvar(call->arg(0));
       rel(*gi._current_space, selector > 0);
-      if (call->arg(1).isVar()) {
+      if (call->arg(1).containsVar()) {
         IntVarArgs iv = gi.arg2intvarargs(call->arg(1), 1);
         element(*gi._current_space, iv, selector, gi.arg2intvar(call->arg(2)), gi.ann2icl(ann));
       } else {
