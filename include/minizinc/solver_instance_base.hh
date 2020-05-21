@@ -75,7 +75,8 @@ namespace MiniZinc {
     /// return reason for status given by solve
     virtual StatusReason reason(void) {return _status_reason;}
     virtual Status status(void) {return _status;}
-    
+
+    virtual void addFunction(FunctionI* fi) {};
     virtual void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) = 0;
     virtual void addVariable(Variable* var) = 0;
     virtual Val getSolutionValue(Variable* var) = 0;

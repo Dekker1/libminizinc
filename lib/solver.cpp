@@ -194,6 +194,18 @@ void MznSolver::addSolverInterface(SolverFactory* sf)
 {
   si = sf->createSI(log, si_opt);
   assert(si);
+  Model* m = in_out_defs.model();
+  if (m) {
+    for (FunctionIterator it = m->begin_functions(); it != m->end_functions(); ++it) {
+      if(!it->removed()) {
+        FunctionI& fi = *it;
+        if (fi.from_stdlib() || fi.ti()->type().isann() || fi.e()) {
+          continue;
+        }
+        si->addFunction(&fi);
+      }
+    }
+  }
   // if (s2out.getEnv()==NULL)
   //   s2out.initFromEnv( flt.getEnv() );
   // si->setSolns2Out( &s2out );

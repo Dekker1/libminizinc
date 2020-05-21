@@ -45,10 +45,18 @@ namespace MiniZinc {
     std::vector<MZNFZNSolverFlag> fzn_solver_flags;
   };
 
+  struct VarStore {
+    KeepAlive int_var = nullptr;
+    KeepAlive bool_var = nullptr;
+    bool used_int = false;
+    bool used_bool = false;
+    VarStore(KeepAlive iv, KeepAlive bv, bool ui, bool ub) : int_var(iv), bool_var(bv), used_int(ui), used_bool(ub) {};
+  };
+
   class FZNSolverInstance : public SolverInstanceBase, public TrailableSolverInstance {
     private:
       std::string _fzn_solver;
-      std::unordered_map<int, VarDecl*> vdmap;
+      std::unordered_map<int, VarStore> vdmap;
       Model* _model;
       Env env;
       std::vector<unsigned int> stack;
@@ -63,6 +71,7 @@ namespace MiniZinc {
 
       void processFlatZinc(void) override;
 
+      void addFunction(FunctionI* fi) override;
       void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override;
       void addVariable(Variable* var) override;
       Val getSolutionValue(Variable* var) override;
@@ -86,6 +95,7 @@ namespace MiniZinc {
     protected:
     void createFunctionItems();
     Expression* getSolutionValue(Id* id);
+    Expression* val_to_expr(Type ty, Val v);
   };
 
   class FZN_SolverFactory: public SolverFactory {

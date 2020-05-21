@@ -32,6 +32,7 @@ namespace MiniZinc {
   /// A MiniZinc model
   class Model {
     friend class GC;
+    friend class FZNSolverInstance;
     friend Model* copy(EnvI& env, CopyMap& cm, Model* m, bool isFlatModel);
 
   protected:

@@ -195,14 +195,114 @@ namespace MiniZinc {
 
   FZNSolverInstance::~FZNSolverInstance(void) {}
 
+  void FZNSolverInstance::addFunction(FunctionI* fi) {
+    _model->addItem(fi);
+    _model->registerFn(env.envi(), fi);
+  }
+
+  Expression* FZNSolverInstance::val_to_expr(Type ty, Val v) {
+    v = Val::follow_alias(v);
+    if (v.isInt()) {
+      if (ty.isbool()) {
+        return v() == 0 ? constants().lit_true : constants().lit_false;
+      }
+      return IntLit::a(v());
+    } else if (v.isVar()) {
+      auto it = vdmap.find(v.timestamp());
+      assert(it != vdmap.end());
+      VarStore& vs = it->second;
+      if (ty.isbool()) {
+        if (vs.used_bool) {
+          return vs.bool_var()->cast<VarDecl>()->id();
+        }
+        vs.used_bool = true;
+
+        auto ti = new TypeInst(Location().introduce(), Type::varbool());
+        if (vs.used_int) {
+          vs.bool_var = new VarDecl(Location().introduce(), ti, "view_" + std::to_string(v.timestamp()));
+        } else {
+          vs.bool_var = new VarDecl(Location().introduce(), ti, v.timestamp());
+        }
+        auto vdi = new VarDeclI(Location().introduce(), vs.bool_var()->cast<VarDecl>());
+        _model->addItem(vdi);
+
+        if (vs.used_int) {
+          _model->addItem(new ConstraintI(Location().introduce(), new Call(Location().introduce(), constants().ids.bool2int, {vs.bool_var()->cast<VarDecl>()->id(), vs.int_var()->cast<VarDecl>()->id()})));
+        } else {
+          auto output_ti = new TypeInst(Location().introduce(), Type::parbool());
+          auto output_vd = new VarDecl(Location().introduce(), output_ti, v.timestamp());
+          env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
+        }
+
+        return vs.bool_var()->cast<VarDecl>()->id();
+      }
+      if (vs.used_int) {
+        return vs.int_var()->cast<VarDecl>()->id();
+      }
+      vs.used_int = true;
+
+      SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(0,1));
+      auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
+      if (vs.used_bool) {
+        vs.int_var = new VarDecl(Location().introduce(), ti, "view_" + std::to_string(v.timestamp()));
+      } else {
+        vs.int_var = new VarDecl(Location().introduce(), ti, v.timestamp());
+      }
+      auto vdi = new VarDeclI(Location().introduce(), vs.int_var()->cast<VarDecl>());
+      _model->addItem(vdi);
+
+      if (vs.used_bool) {
+        _model->addItem(new ConstraintI(Location().introduce(), new Call(Location().introduce(), constants().ids.bool2int, {vs.bool_var()->cast<VarDecl>()->id(), vs.int_var()->cast<VarDecl>()->id()})));
+      } else {
+        auto output_ti = new TypeInst(Location().introduce(), Type::parint());
+        auto output_vd = new VarDecl(Location().introduce(), output_ti, v.timestamp());
+        env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
+      }
+      return vs.int_var()->cast<VarDecl>()->id();
+    } else {
+      // Expected [[actual array], [indexes]]
+      assert(v.isVec());
+      if (v.size() == 2 && v[0].isVec() && v[1].isVec()) {
+        // this is an array
+        Val vec = v[0];
+        std::vector<Expression*> evec(vec.size());
+        bool par = true;
+        for (int i = 0; i < vec.size(); ++i) {
+          assert(!vec[i].isVec());
+          Type nty = ty;
+          nty.dim(0);
+          evec[i] = val_to_expr(nty, vec[i]);
+          par = par && evec[i]->type().ispar();
+        }
+        auto al = new ArrayLit(Location().introduce(), evec);
+        al->type(par ? Type::parint(1) : Type::varint(1));
+        assert(v[1].size() == 2 && v[1][0]() == 1 && v[1][1]() == vec.size());
+        return al;
+      } else {
+        // this is a set
+        std::vector<IntSetVal::Range> ranges;
+        Vec* vec = v.toVec();
+        for (int i=0; i<vec->size(); i+=2) {
+          ranges.push_back(IntSetVal::Range((*vec)[i](),(*vec)[i+1]()));
+        }
+        auto sl = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+        return sl;
+      }
+    }
+  }
+
   void FZNSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
     GCLock lock;
     const BytecodeProc& proc = bs[c->pred()];
     std::string name = proc.name;
+    auto fnit = _model->fnmap.find(ASTString(name));
+    assert(fnit != _model->fnmap.end());
+    assert(fnit->second.size() == 1);
+    std::vector<Type>& tys = fnit->second[0].t;
+    assert(tys.size() == c->size());
     std::vector<Expression*> args(proc.nargs);
     for (int i = 0; i < proc.nargs; ++i) {
-      Val v = Val::follow_alias(c->arg(i));
-      args[i] = v.toFZN(vdmap);
+      args[i] = val_to_expr(tys[i], c->arg(i));
     }
     auto call = new Call(Location().introduce(), name, args);
     auto ci = new ConstraintI(Location().introduce(), call);
@@ -211,16 +311,29 @@ namespace MiniZinc {
 
   void FZNSolverInstance::addVariable(Variable* var) {
     GCLock lock;
-    VarDecl* vd = var->varDecl();
-    vdmap.emplace(var->timestamp(), vd);
+    Vec* dom = var->domain();
+    assert(dom->size() >= 2 && dom->size() % 2 == 0);
+
+    if (dom->size() == 2 && (*dom)[0]() == 0 && (*dom)[1]() == 1) {
+      vdmap.emplace(std::piecewise_construct, std::forward_as_tuple(var->timestamp()), std::forward_as_tuple(nullptr, nullptr, false, false));
+    }
+
+    std::vector<IntSetVal::Range> ranges;
+    for (int i = 0; i < dom->size(); i += 2) {
+      ranges.emplace_back((*dom)[i](), (*dom)[i+1]());
+    }
+    SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+    auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
+    auto vd = new VarDecl(Location().introduce(), ti, var->timestamp());
+    vd->addAnnotation(constants().ann.output_var);
+
     auto vdi = new VarDeclI(Location().introduce(), vd);
     _model->addItem(vdi);
-    if (var->timestamp() >= 0) {
-      /// TODO: all variables have timestamp >=0 ? Handle output properly
-      auto ti = new TypeInst(Location().introduce(), Type::parint(), nullptr);
-      auto vd = new VarDecl(Location().introduce(), ti, var->timestamp());
-      env.output()->addItem(new VarDeclI(Location().introduce(), vd));
-    }
+    vdmap.emplace(std::piecewise_construct, std::forward_as_tuple(var->timestamp()), std::forward_as_tuple(vd, nullptr, true, false));
+
+    auto output_ti = new TypeInst(Location().introduce(), Type::parint(), nullptr);
+    auto output_vd = new VarDecl(Location().introduce(), output_ti, var->timestamp());
+    env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
   }
 
   Val FZNSolverInstance::getSolutionValue(Variable* var) {

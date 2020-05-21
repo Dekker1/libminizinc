@@ -762,6 +762,8 @@ namespace MiniZinc {
               loc.filename().endsWith("/builtins.mzn") ||
               loc.filename() == "stdlib.mzn" ||
               loc.filename().endsWith("/stdlib.mzn") ||
+              loc.filename() == "mzncc_builtins.mzn" ||
+              loc.filename().endsWith("/mzncc_builtins.mzn") ||
               loc.filename() == "flatzinc_builtins.mzn" ||
               loc.filename().endsWith("/flatzinc_builtins.mzn"));
   }
@@ -786,6 +788,8 @@ namespace MiniZinc {
                     loc.filename().endsWith("/builtins.mzn") ||
                     loc.filename() == "stdlib.mzn" ||
                     loc.filename().endsWith("/stdlib.mzn") ||
+                    loc.filename() == "mzncc_builtins.mzn" ||
+                    loc.filename().endsWith("/mzncc_builtins.mzn") ||
                     loc.filename() == "flatzinc_builtins.mzn" ||
                     loc.filename().endsWith("/flatzinc_builtins.mzn"));
   }
