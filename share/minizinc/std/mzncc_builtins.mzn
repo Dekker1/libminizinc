@@ -13,6 +13,47 @@ function var bool: op_not(var bool: x) ::promise_total =
     constraint bool_not(x, y);
   } in y;
 
+/** @group builtins.compare Return if array \a x is equal to array \a y */
+function bool: op_equals(array[$T] of int: x,array[$T] of int: y) =
+    let {
+        array[int] of int: xx = array1d(x);
+        array[int] of int: yy = array1d(y);
+    } in
+    assert(index_sets_agree(x,y), "array index sets do not match",
+      forall (i in index_set(xx)) (xx[i]=yy[i])
+    );
+
+/** @group builtins.compare Return if array \a x is equal to array \a y */
+function var bool: op_equals(array[$T] of var int: x, array[$T] of var int: y) =
+    let {
+        array[int] of var int: xx = array1d(x);
+        array[int] of var int: yy = array1d(y);
+    } in
+    assert(index_sets_agree(x,y), "array index sets do not match",
+      forall (i in index_set(xx)) (xx[i]=yy[i])
+    );
+
+/** @group builtins.compare Return if array \a x is equal to array \a y */
+function bool: op_equals(array[$T] of bool: x, array[$T] of bool: y) =
+    let {
+        array[int] of bool: xx = array1d(x);
+        array[int] of bool: yy = array1d(y);
+    } in
+    assert(index_sets_agree(x,y), "array index sets do not match",
+      forall (i in index_set(xx)) (xx[i]=yy[i])
+    );
+
+/** @group builtins.compare Return if array \a x is equal to array \a y */
+function var bool: op_equals(array[$T] of var bool: x,array[$T] of var bool: y) =
+    let {
+        array[int] of var bool: xx = array1d(x);
+        array[int] of var bool: yy = array1d(y);
+    } in
+    assert(index_sets_agree(x,y), "array index sets do not match",
+      forall (i in index_set(xx)) (xx[i]=yy[i])
+    );
+
+
 /***
   @groupdef builtins.arithmetic Arithmetic Builtins
 
