@@ -4156,6 +4156,12 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       return CG_Cond::forall(ctx, cond);
     }
     break;
+    case BOT_XOR: {
+      CG_Cond::T c_lhs = CG::compile(b->lhs(), cg, frag);
+      CG_Cond::T c_rhs = CG::compile(b->rhs(), cg, frag);
+      return CG_Cond::forall(ctx, CG_Cond::exists(ctx, c_lhs, c_rhs), CG_Cond::exists(ctx, ~c_lhs, ~c_rhs));
+    }
+    break;
     case BOT_AND: {
       cond.push_back(CG::compile(b->lhs(), cg, frag));
       cond.push_back(CG::compile(b->rhs(), cg, frag));
