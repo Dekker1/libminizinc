@@ -273,26 +273,16 @@ namespace MiniZinc {
     }
 
     void p_int_lin_eq(SolverInstanceBase& s, const Constraint* call) {
-      switch (static_cast<BytecodeProc::Mode>(call->mode())) {
-        case BytecodeProc::ROOT:
-          p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
-          break;
-        case BytecodeProc::ROOT_NEG:
-          p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_NQ, call);
-          break;
-        case BytecodeProc::IMP:
-          p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_IMP, call);
-          break;
-        case BytecodeProc::IMP_NEG:
-          p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_IMP, call);
-          break;
-        case BytecodeProc::FUN:
-          p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_EQV, call);
-          break;
-        case BytecodeProc::FUN_NEG:
-          p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_EQV, call);
-          break;
-      }
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      p_int_lin_CMP(static_cast<GecodeSolverInstance&>(s), IRT_EQ, call);
+    }
+    void p_int_lin_eq_reif(SolverInstanceBase& s, const Constraint* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_EQV, call);
+    }
+    void p_int_lin_eq_imp(SolverInstanceBase& s, const Constraint* call) {
+      assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);
+      p_int_lin_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_EQ, RM_IMP, call);
     }
     void p_int_lin_le(SolverInstanceBase& s, const Constraint* call) {
       assert(static_cast<BytecodeProc::Mode>(call->mode()) == BytecodeProc::ROOT);

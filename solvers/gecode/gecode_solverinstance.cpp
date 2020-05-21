@@ -198,6 +198,8 @@ namespace MiniZinc {
       registerConstraint("int_le_imp", GecodeConstraints::p_int_le_imp);
       registerConstraint("int_lt_imp", GecodeConstraints::p_int_lt_imp);
       registerConstraint("int_lin_eq", GecodeConstraints::p_int_lin_eq);
+      registerConstraint("int_lin_eq_reif", GecodeConstraints::p_int_lin_eq_reif);
+      registerConstraint("int_lin_eq_imp", GecodeConstraints::p_int_lin_eq_imp);
       registerConstraint("int_lin_le", GecodeConstraints::p_int_lin_le);
       registerConstraint("int_lin_le_reif", GecodeConstraints::p_int_lin_le_reif);
       registerConstraint("int_lin_le_imp", GecodeConstraints::p_int_lin_le_imp);
@@ -223,6 +225,7 @@ namespace MiniZinc {
       registerConstraint("bool_eq", GecodeConstraints::p_bool_eq);
       registerConstraint("bool_eq_reif", GecodeConstraints::p_bool_eq_reif);
       registerConstraint("bool_eq_imp", GecodeConstraints::p_bool_eq_imp);
+      registerConstraint("bool_not", GecodeConstraints::p_bool_ne);
       registerConstraint("bool_ne", GecodeConstraints::p_bool_ne);
       registerConstraint("bool_ne_reif", GecodeConstraints::p_bool_ne_reif);
       registerConstraint("bool_ne_imp", GecodeConstraints::p_bool_ne_imp);

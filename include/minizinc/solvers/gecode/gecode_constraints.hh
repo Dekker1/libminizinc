@@ -53,6 +53,8 @@ namespace GecodeConstraints {
       void p_int_lin_CMP(GecodeSolverInstance& s, Gecode::IntRelType irt, const Constraint* call) ;
       void p_int_lin_CMP_reif(GecodeSolverInstance& s, Gecode::IntRelType irt, Gecode::ReifyMode rm, const Constraint* call);
       PosterImpl(p_int_lin_eq);
+      PosterImpl(p_int_lin_eq_reif);
+      PosterImpl(p_int_lin_eq_imp);
       PosterImpl(p_int_lin_le) ;
       PosterImpl(p_int_lin_le_reif);
       PosterImpl(p_int_lin_le_imp);
