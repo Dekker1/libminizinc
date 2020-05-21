@@ -36,6 +36,7 @@ using namespace std;
 
 #include <minizinc/solver.hh>
 #include <minizinc/support/mza_parser.hh>
+#include <minizinc/flat_exp.hh>
 
 using namespace MiniZinc;
 
@@ -649,6 +650,45 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
   
 }
 
+Val MznSolver::eval_val(EnvI& env, Expression* e) {
+  if (e->type().dim() > 0) {
+    ArrayLit* al = eval_array_lit(env, e);
+    std:vector<Val> content(al->size());
+    for (size_t i = 0; i < al->size(); ++i) {
+      content[i] = eval_val(env, (*al)[i]);
+    }
+    Vec* vc = Vec::a(interpreter, interpreter->newIdent(), content);
+
+    std::vector<Val> idxs(al->dims()*2);
+    for (size_t i = 0; i < al->dims(); ++i) {
+      idxs[i*2] = Val(al->min(i));
+      idxs[i*2+1] = Val(al->max(i));
+    }
+    Vec* ranges = Vec::a(interpreter, interpreter->newIdent(), idxs);
+
+    return Val(Vec::a(interpreter, interpreter->newIdent(), {Val(vc), Val(ranges)}));
+  }
+  if (e->type().is_set()) {
+    //TODO: Might not be int
+    IntSetVal* sl = eval_intset(env, e); 
+    std::vector<Val> vranges(sl->size()*2);
+    for (size_t i = 0; i < sl->size(); ++i) {
+      vranges[i*2] = Val(sl->min(i));
+      vranges[i*2+1] = Val(sl->max(i));
+    }
+    return Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
+  }
+  if (e->type().isbool()) {
+    bool b(eval_bool(env, e));
+    return Val(b);
+  }
+  if (e->type().isfloat()) {
+    throw InternalError("Unsupported Type");
+  }
+  IntVal iv(eval_int(env, e));
+  return Val(iv);
+}
+
 void MznSolver::flatten(const std::string& filename, const std::string& modelName)
 {
   if (!FileUtils::file_exists(filename)) {
@@ -658,10 +698,42 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   bool verbose = flag_compiler_verbose;
   Timer tm01;
   std::ifstream t(filename, std::ifstream::in);
-  std::string str((std::istreambuf_iterator<char>(t)),
-                  std::istreambuf_iterator<char>());
+  /* auto sep = std::find(std::istreambuf_iterator<char>(t), std::istreambuf_iterator<char>(), */ 
+  std::string line;
+  std::string mzn_defs;
+  while (std::getline(t,line)) {
+    if (line == "@@@@@@@@@@") {
+      break;
+    }
+    mzn_defs += line + "\n";
+  }
+  std::string assembly;
+  while (std::getline(t,line)) {
+    assembly += line + "\n";
+  }
+  if (assembly.empty()) {
+    std::swap(mzn_defs, assembly);
+  }
+  // Parse MiniZinc Definitons
+  {
+    GCLock lock;
+    std::vector<SyntaxError> syntaxErrors;
+    Model* m = parse(in_out_defs, {}, data_files, mzn_defs, file, {solver_configs.mznlibDir() + "/std"}, false, false, verbose, std::cerr);
+    if (!m) {
+      throw Error("Unable to parse MiniZinc Declarations");
+    }
+    assert(!in_out_defs.model());
+    in_out_defs.model(m);
+    long long int idn = 0;
+    std::vector<VarDecl*> args = {
+      new VarDecl(Location().introduce(), new TypeInst(Location().introduce(), Type::parint()), idn)
+    };
+    args[0]->toplevel(false);
+    in_out_defs.model()->addItem(new FunctionI(Location().introduce(), constants().ann.global_register, new TypeInst(Location().introduce(), Type::ann()), args));
+  }
+
   // Parse assembly file
-  std::tie(bs, globals) = parse_mza(str);
+  bs = parse_mza(assembly);
   if (verbose) {
     std::cerr << "Disassembled code:\n";
     for (auto& b : bs) {
@@ -681,126 +753,51 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT]);
   interpreter = new Interpreter(bs, frame);
   // Parse and add data
-  if (!data_files.empty()) {
-    GCLock lock;
-    Env env(new Model);
-    Model* m = parseData(env, env.model(), data_files, {}, true, false, verbose, std::cerr);
-    for (auto it : *m) {
-      if (auto ai = it->dyn_cast<AssignI>()) {
-        auto glob = globals.find(ai->id().str());
-        if (glob != globals.end()) {
-          Expression* expr = ai->e();
-          Vec* ranges = nullptr;
-          if (expr->isa<Call>()) {
-            Call* c = expr->cast<Call>();
-            if (c->id() == "array1d") {
-              if (c->n_args() == 1) {
-                expr = c->arg(0);
-              } else {
-                expr = c->arg(1);
-                IntSetVal* sl = eval_intset(env.envi(), c->arg(0));
-                /* assert(sl->size() == 1); // Index Set should be continuous */
-                std::vector<Val> vranges = {Val(sl->min()), Val(sl->max())};
-                ranges = Vec::a(interpreter, interpreter->newIdent(), vranges);
-              }
-            } else if (c->id() == "array2d") {
-                expr = c->arg(2);
-                IntSetVal* sl1 = eval_intset(env.envi(), c->arg(0));
-                /* assert(sl1->size() == 1); // Index Set should be continuous */
-                IntSetVal* sl2 = eval_intset(env.envi(), c->arg(1));
-                /* assert(sl2->size() == 1); // Index Set should be continuous */
-                std::vector<Val> vranges = {Val(sl1->min()), Val(sl1->max()), Val(sl2->min()), Val(sl2->max())};
-                ranges = Vec::a(interpreter, interpreter->newIdent(), vranges);
-            }
-          }
-          Val v;
-          switch (expr->eid()) {
-            case Expression::E_INTLIT:
-            {
-              IntVal iv(eval_int(env.envi(), expr));
-              v = Val(iv);
-            }
-            break;
-            case Expression::E_BOOLLIT:
-            {
-              bool b(eval_bool(env.envi(), expr));
-              v = Val(b);
-            }
-            break;
-            case Expression::E_ARRAYLIT:
-            {
-              ArrayLit* al = eval_array_lit(env.envi(), expr);
-              std:vector<Val> content(al->size());
-              for (size_t i = 0; i < al->size(); ++i) {
-                if ((*al)[i]->eid() == Expression::E_BOOLLIT) {
-                  bool b(eval_bool(env.envi(), (*al)[i]));
-                  content[i] = Val(b);
-                } else if ((*al)[i]->eid() == Expression::E_SETLIT) {
-                  IntSetVal* sl = eval_intset(env.envi(), (*al)[i]);
-                  std::vector<Val> vranges(sl->size()*2);
-                  for (size_t i = 0; i < sl->size(); ++i) {
-                    vranges[i*2] = Val(sl->min(i));
-                    vranges[i*2+1] = Val(sl->max(i));
-                  }
-                  content[i] = Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
-                } else {
-                  assert((*al)[i]->eid() == Expression::E_INTLIT);
-                  IntVal iv(eval_int(env.envi(), (*al)[i]));
-                  content[i] = Val(iv);
-                }
-              }
-              Vec* vc = Vec::a(interpreter, interpreter->newIdent(), content);
-
-              if (!ranges) {
-                std::vector<Val> idxs(al->dims()*2);
-                for (size_t i = 0; i < al->dims(); ++i) {
-                  idxs[i*2] = Val(al->min(i));
-                  idxs[i*2+1] = Val(al->max(i));
-                }
-                ranges = Vec::a(interpreter, interpreter->newIdent(), idxs);
-              }
-
-              v = Val(Vec::a(interpreter, interpreter->newIdent(), {Val(vc), Val(ranges)}));
-            }
-            break;
-            case Expression::E_SETLIT:
-            {
-              //TODO: Might not be int
-              IntSetVal* sl = eval_intset(env.envi(), expr); 
-              std::vector<Val> vranges(sl->size()*2);
-              for (size_t i = 0; i < sl->size(); ++i) {
-                vranges[i*2] = Val(sl->min(i));
-                vranges[i*2+1] = Val(sl->max(i));
-              }
-              v = Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
-            }
-            break;
-            default:
-            {
-              interpreter_status = SolverInstance::ERROR;
-              std::cerr << "Error: Unable to use data expression: " << *expr << std::endl;
-              return;
-            }
-          }
-          interpreter->globals.assign(interpreter, glob->second, v);
-          globals.erase(glob);
-        } else {
-          std::cerr << "Warning: Unused data in data file: " << ai << std::endl;
-        }
-      } else {
-        interpreter_status = SolverInstance::ERROR;
-        std::cerr << "Error: Non Assignment item in data file: " << it << std::endl;
-        return;
+  {
+    std::vector<TypeError> typeErrors;
+    typecheck(in_out_defs, in_out_defs.model(), typeErrors, false, true, false);
+    registerBuiltins(in_out_defs);
+    if (typeErrors.size() > 0) {
+      for (unsigned int i=0; i<typeErrors.size(); i++) {
+        if (flag_verbose)
+          log << std::endl;
+        log << typeErrors[i].loc() << ":" << std::endl;
+        log << typeErrors[i].what() << ": " << typeErrors[i].msg() << std::endl;
       }
+      throw Error("multiple type errors");
     }
   }
-  if (!globals.empty()) {
-    interpreter_status = SolverInstance::ERROR;
-    std::cerr << "Error: Missing the following data: " << std::endl;
-    for (auto g : globals) {
-      std::cerr << " - " << g.first << std::endl;
+  std::cerr << "Input Data:\n";
+  for (VarDeclIterator it = in_out_defs.model()->begin_vardecls(); it != in_out_defs.model()->end_vardecls(); ++it) {
+    if (it->removed()) {
+      continue;
     }
-    return;
+    GCLock lock;
+    Env& env = in_out_defs;
+    Model* m = in_out_defs.model();
+
+    VarDecl* vd = it->e();
+    if(vd->type().isann()) {
+      continue;
+    }
+    assert(vd->e());
+    Call* global_ann = vd->ann().getCall(constants().ann.global_register);
+    if (!global_ann) {
+      throw TypeError(env.envi(), vd->loc(), "Unkown global " + vd->id()->str().str());
+    }
+    IntVal global = eval_int(env.envi(), global_ann->arg(0));
+
+    if (vd->type().dim() > 0) {
+      ArrayLit* al = eval_array_lit(env.envi(), vd->e());
+      checkIndexSets(env.envi(), vd, al);
+    }
+    Val v = eval_val(env.envi(), vd->e());
+
+    interpreter->globals.assign(interpreter, global.toInt(), v);
+    if (verbose) {
+      std::cerr << " - R" << global  << "("<< vd->id()->str() << ") = " << v.toString() << std::endl;
+    }
+
   }
   // Start interpreter
   if (verbose) {

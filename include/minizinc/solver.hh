@@ -118,8 +118,8 @@ namespace MiniZinc {
     SolverConfigs solver_configs;
     Constraint* output = nullptr;
     std::vector<BytecodeProc> bs;
-    std::unordered_map<std::string, int> globals;
     std::vector<std::string> data_files;
+    Env in_out_defs;
     SolverInstanceBase* si=0;
     SolverInstanceBase::Options* si_opt=0;
     SolverFactory* sf=0;
@@ -166,6 +166,7 @@ namespace MiniZinc {
 
   private:
     void addDefinitions();
+    Val eval_val(EnvI& env, Expression* e);
     void printHelp(const std::string& selectedSolver=std::string());
     /// Flatten model
     void flatten(const std::string& filename = std::string(), const std::string& modelName = std::string("stdin"));

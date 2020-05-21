@@ -35,8 +35,14 @@ int main(int argc, const char** argv) {
     MznSolver slv(args);
     auto result = slv.run();
     std::cout << result.second;
-  } catch (Error& e) {
-    std::cerr << e.msg() << "\n";
+  } catch (const LocationException& e) {
+    std::cerr << std::endl;
+    std::cerr << e.loc() << ":" << std::endl;
+    std::cerr << e.what() << ": " << e.msg() << std::endl;
+  } catch (const Exception& e) {
+    std::cerr << std::endl;
+    std::string what = e.what();
+    std::cerr << what << (what.empty() ? "" : ": ") << e.msg() << std::endl;
   }
   return 0;
   

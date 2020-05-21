@@ -1123,7 +1123,7 @@ namespace MiniZinc {
     /// Constructor
     VarDecl(const Location& loc,
             TypeInst* ti, const ASTString& id, Expression* e=NULL);
-    /// Constructor
+    // Constructor
     VarDecl(const Location& loc,
             TypeInst* ti, long long int idn, Expression* e=NULL);
     /// Constructor
@@ -1778,6 +1778,7 @@ namespace MiniZinc {
         Id* mzn_break_here;
         Id* rhs_from_assignment;
         Id* domain_change_constraint;
+        ASTString global_register;
       } ann;
 
       /// Command line options

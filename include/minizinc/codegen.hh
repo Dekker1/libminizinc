@@ -812,15 +812,16 @@ struct CodeGen {
 
   CG_Env<Binding>* current_env; // Where are things in scope?
   // Id -> <Register, input?>
-  ASTStringMap<std::pair<int,bool>>::t globals_env;
+  std::unordered_map<VarDecl*, std::pair<int,bool>> globals_env;
   int num_globals;
+  std::vector<FunctionI*> req_solver_predicates;
 
-  int add_global(ASTString str, bool input=false) {
-    globals_env.insert(std::make_pair(str, std::make_pair(num_globals, input)));
+  int add_global(VarDecl* vd, bool input=false) {
+    globals_env.insert(std::make_pair(vd, std::make_pair(num_globals, input)));
     return num_globals++;
   }
 
-  int find_global(ASTString str) {
+  int find_global(VarDecl* str) {
     auto pair = globals_env.at(str);
     return pair.first;
   }

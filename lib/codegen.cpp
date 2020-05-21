@@ -1498,7 +1498,7 @@ private:
       if(vd->type().ispar()) {
         if(!vd->e()) {
           // cg.env().bind(vd->id()->v(), Loc::global(cg.num_globals));
-          int g = cg.add_global(vd->id()->v(), true);
+          int g = cg.add_global(vd, true);
         }
       } else {
         // If it's a var with a body, feed it into the mode analyser.
@@ -1622,11 +1622,22 @@ void show_frag(O& out, CodeGen& cg, std::vector<CG_Instr>& frag) {
 
 template<class O>
 void show(O& out, CodeGen& cg) {
-  for (auto g : cg.globals_env ) {
-    if (g.second.second) {
-      out << "GLOBAL " << g.second.first << " " << g.first << std::endl;
+  {
+    GCLock lock;
+    Model m;
+    for (auto g : cg.globals_env) {
+      if (g.second.second) {
+        g.first->ann().add(new Call(Location().introduce(), constants().ann.global_register, {IntLit::a(g.second.first)}));
+        m.addItem(new VarDeclI(Location().introduce(), g.first));
+      }
     }
+    for (auto fun : cg.req_solver_predicates) {
+      m.addItem(fun);
+    }
+    MiniZinc::Printer p(out, 0);
+    p.print(&m);
   }
+  out << "@@@@@@@@@@" << std::endl;
   for(auto b : cg._builtins) {
     out << ":" << b.first << ": " << b.second << std::endl;
   }
@@ -1868,7 +1879,7 @@ private:
         PUSH_INSTR(root_frag, BytecodeStream::POP, CG::r(r_var));
       }
       // Now copy it into a global, and add it to the env.
-      int g = cg.add_global(vd->id()->v(), false);
+      int g = cg.add_global(vd, false);
       PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r_var), CG::g(g));
 
       // Since it's still in a register, add it to the current env as well.
@@ -1887,7 +1898,7 @@ private:
           post_cond(cg, root_frag, b_d.second);
           r = b_d.first;
         }
-        int g = cg.add_global(vd->id()->v(), false);
+        int g = cg.add_global(vd, false);
         PUSH_INSTR(root_frag, BytecodeStream::STORE_GLOBAL, CG::r(r), CG::g(g));
 
         cg.env().bind(vd->id()->str(), CG::Binding(r, CG_Cond::ttt()));
@@ -2083,6 +2094,7 @@ public:
         CG_ProcID proc(cg.resolve_fun(fun));
         CG_Builder frag;
         cg.append(proc.id(), call_mode, frag);
+        cg.req_solver_predicates.push_back(fun);
       }
     }
 
@@ -3238,7 +3250,8 @@ CG::Binding CG::bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   try {
     return CG::Binding(cg.env().lookup(x->v()).first, CG_Cond::ttt());
   } catch(const CG_Env<CodeGen::Binding>::NotFound& exn) {
-    int g = cg.find_global(x->v());
+    VarDecl* vd = follow_id_to_decl(x)->cast<VarDecl>();
+    int g = cg.find_global(vd);
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(g), CG::r(r));
     return CG::Binding(r, CG_Cond::ttt());
@@ -3987,7 +4000,8 @@ CG_Cond::T CG::compile(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       return CG_Cond::reg(b.first);
     }
   } catch(const CG_Env<Binding>::NotFound& exn) {
-    int g = cg.find_global(x->v());
+    VarDecl* vd = follow_id_to_decl(x)->cast<VarDecl>();
+    int g = cg.find_global(vd);
     int r(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::LOAD_GLOBAL, CG::g(g), CG::r(r));
     return CG_Cond::reg(r);
