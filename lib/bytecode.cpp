@@ -975,6 +975,17 @@ namespace MiniZinc {
           oss << "GET_VEC R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
         }
           break;
+        case BytecodeStream::GET_VEC_NDIM:
+        {
+          oss << "GET_VEC_NDIM ";
+          IntVal n=intval(pc);
+          oss << n << " R" << reg(pc);
+          for (int i=0; i<n; i++) {
+            oss << " R" << reg(pc);
+          }
+          oss << " R" << reg(pc) << "\n";
+        }
+          break;
         case BytecodeStream::LB:
         {
           oss << "LB R" << reg(pc) << " R" << reg(pc) << "\n";
@@ -1438,6 +1449,49 @@ namespace MiniZinc {
           Val v = Val::follow_alias(frame->reg[r1][frame->reg[r2]().toInt()-1], this);
           frame->reg.assign(this, r3, v);
           DBG_INTERPRETER(" R" << r3 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
+        }
+          break;
+        case BytecodeStream::GET_VEC_NDIM:
+        {
+          IntVal n = frame->bs->intval(frame->pc);
+          int r1 = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("GET_VEC_NDIM " << n << "R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
+          std::vector<IntVal> idx(n.toInt());
+          for (int i=0; i<n; i++) {
+            int rr = frame->bs->reg(frame->pc);
+            DBG_INTERPRETER(" R" << rr  << "(" << frame->reg[rr].toString(DBG_TRIM_OUTPUT) << ")");
+            idx[i] = frame->reg[rr]();
+          }
+          int r2 = frame->bs->reg(frame->pc);
+          assert(frame->reg[r1].isVec());
+          assert(frame->reg[r1].size()==2);
+          assert(frame->reg[r1][0].isVec());
+          assert(frame->reg[r1][1].isVec());
+          std::vector<std::pair<IntVal,IntVal>> dimensions;
+          IntVal realdim = 1;
+          for (int i=0; i<frame->reg[r1][1].size(); i+=2) {
+            IntVal a = frame->reg[r1][1][i]();
+            IntVal b = frame->reg[r1][1][i+1]();
+            dimensions.emplace_back(a,b);
+            realdim *= b-a+1;
+          }
+
+          bool success = true;
+          IntVal realidx = 0;
+          for (int i=0; i<idx.size(); i++) {
+            IntVal ix = idx[i];
+            if (ix < dimensions[i].first || ix > dimensions[i].second) {
+              success = false;
+              break;
+            }
+            realdim /= dimensions[i].second-dimensions[i].first+1;
+            realidx += (ix-dimensions[i].first)*realdim;
+          }
+          assert(realidx >= 0 && realidx < frame->reg[r1][0].size());
+          
+          Val v = Val::follow_alias(frame->reg[r1][0][realidx.toInt()], this);
+          frame->reg.assign(this, r2, v);
+          DBG_INTERPRETER(" R" << r2 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LB:

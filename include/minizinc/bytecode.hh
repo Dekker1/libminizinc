@@ -68,7 +68,8 @@ namespace MiniZinc {
       ISEMPTY, // R1 -> R2: put whether vector in R1 is empty into R2
       LENGTH,  // R1 -> R2: put length of vector in R1 into R2
       GET_VEC, // R1, R2 -> R3: put element R2 of vector in R1 into R3
-      
+      GET_VEC_NDIM, // n, R1, R2, ... Rn -> Rn+1: put element [R2,...,Rn] of n-dimensional vector in R1 into R3
+
       LB, // R1 -> R2: put lower bound of value in R1 into R2
       UB, // R1 -> R2: put upper bound of value in R1 into R2
       DOM, // R1 -> R2: put domain of value in R1 into R2

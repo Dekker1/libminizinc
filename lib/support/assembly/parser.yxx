@@ -100,6 +100,7 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
 %token<bValue> MZA_ISEMPTY
 %token<bValue> MZA_LENGTH
 %token<bValue> MZA_GET_VEC
+%token<bValue> MZA_GET_VEC_NDIM
 
 %token<bValue> MZA_LB
 %token<bValue> MZA_UB
@@ -337,6 +338,16 @@ instruction:
       ctx.proc_body.addInstr($1);
       ctx.proc_body.addReg($2);
       ctx.proc_body.addReg($3);
+    }
+  | MZA_GET_VEC_NDIM MZA_INT registers
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addIntVal($2);
+      for (auto arg : *$3) {
+        ctx.proc_body.addReg(arg);
+      }
+      delete $3;
     }
 
 instrIR:

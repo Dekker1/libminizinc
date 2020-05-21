@@ -68,6 +68,7 @@ const char* instr_names[] = {
       "ISEMPTY",
       "LENGTH",
       "GET_VEC",
+      "GET_VEC_NDIM",
 
       "LB",
       "UB",
@@ -3491,13 +3492,18 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     return {r, CG_Cond::forall(ctx, cond)};
+  } else {
+    int r = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC_NDIM, CG::i(sz), CG::r(r_A));
+    std::vector<CG_Value> r_args(sz+1);
+    for (int ii = 0; ii < sz; ++ii) {
+      r_args[ii] = CG::r(r_idxs[ii]);
+    }
+    r_args[sz] = CG::r(r);
+    CG_Instr &i = frag.instrs.back();
+    PUSH_INSTR_OPERAND(i, r_args);
+    return {r, CG_Cond::forall(ctx, cond)};
   }
-  // Just read the vector, and get the appropriate element.
-  int r;
-  CG_Cond::T ncond;
-  std::tie(r, ncond) = execute_array_access(r_A, r_idxs, cg, frag);
-  cond.push_back(ncond);
-  return {r, CG_Cond::forall(ctx, cond)};
 }
 
 int make_vec(CodeGen& cg, CG_Builder& frag, const std::vector<int>& regs) {
@@ -4052,6 +4058,7 @@ CG_Cond::T CG::compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) 
     return CG_Cond::forall(ctx, cond);
   } else {
     // Just read the vector, and get the appropriate element.
+    /// TODO: this is still incorrect! Need to replace with GET_VEC_NDIM
     int r;
     CG_Cond::T ncond;
     std::tie(r, ncond) = execute_array_access(r_A, r_idxs, cg, frag);

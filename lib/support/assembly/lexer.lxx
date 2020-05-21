@@ -65,6 +65,7 @@ using namespace MiniZinc;
 "ISEMPTY"   { yylval->bValue = BytecodeStream::ISEMPTY; return MZA_ISEMPTY; }
 "LENGTH"    { yylval->bValue = BytecodeStream::LENGTH; return MZA_LENGTH; }
 "GET_VEC"   { yylval->bValue = BytecodeStream::GET_VEC; return MZA_GET_VEC; }
+"GET_VEC_NDIM"   { yylval->bValue = BytecodeStream::GET_VEC_NDIM; return MZA_GET_VEC_NDIM; }
 
 "LB"        { yylval->bValue = BytecodeStream::LB; return MZA_LB; }
 "UB"        { yylval->bValue = BytecodeStream::UB; return MZA_UB; }
