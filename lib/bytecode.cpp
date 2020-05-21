@@ -29,6 +29,49 @@
 
 namespace MiniZinc {
 
+  Expression* const Val::toFZN(const std::unordered_map<int, VarDecl*>& vdmap) {
+    GCLock lock;
+    if (this->isInt()) {
+      return IntLit::a((*this)());
+    } else if (this->isVar()) {
+      auto it = vdmap.find(this->timestamp());
+      assert(it != vdmap.end());
+      VarDecl* vd = it->second;
+      auto id = new Id(Location().introduce(), this->timestamp(), vd);
+      id->type(vd->type());
+      return id;
+    } else {
+      // Expected [[actual array], [indexes]]
+      assert(this->isVec());
+      if (this->size() == 2 && (*this)[0].isVec() && (*this)[1].isVec()) {
+        // this is an array
+        Val vec = (*this)[0];
+        std::vector<Expression*> evec(vec.size());
+        bool par = true;
+        for (int i = 0; i < vec.size(); ++i) {
+          Val v = follow_alias(vec[i]);
+          assert(!v.isVec());
+          evec[i] = v.toFZN(vdmap);
+          par = par && evec[i]->type().ispar();
+        }
+        auto al = new ArrayLit(Location().introduce(), evec);
+        al->type(par ? Type::parint(1) : Type::varint(1));
+        assert((*this)[1].size() == 2 && (*this)[1][0]() == 1 && (*this)[1][1]() == vec.size());
+        return al;
+      } else {
+        // this is a set
+        std::vector<IntSetVal::Range> ranges;
+        Vec* vec = this->toVec();
+        for (int i=0; i<vec->size(); i+=2) {
+          ranges.push_back(IntSetVal::Range((*vec)[i](),(*vec)[i+1]()));
+        }
+        auto sl = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+        return sl;
+      }
+    }
+  }
+
+
   Val
   AggregationCtx::createVec(Interpreter* interpreter, int timestamp) const {
     return Val(Vec::a(interpreter, timestamp, stack));
@@ -47,6 +90,7 @@ namespace MiniZinc {
 
   bool
   Vec::isPar() const {
+    assert(alive()); 
     for (int i = 0; i < this->size(); ++i) {
       Val v = this->operator[](i);
       if (v.isVec() && (!v.toVec()->isPar())) {
@@ -224,9 +268,10 @@ namespace MiniZinc {
       alias(interpreter, newDomain[0]);
       sev = SEV_VAL;
     } else {
+      Val nd = newDomain;
+      nd.construct(interpreter);
       _domain.destroy(interpreter);
       _domain = newDomain;
-      _domain.construct(interpreter);
       sev = SEV_DOM;
     }
     for (auto& s : _subscriptions) {
@@ -262,7 +307,6 @@ namespace MiniZinc {
     _ref_count = (1u<<31u)-1u;
     _domain.destroy(interpreter);
     _ann.destroy(interpreter);
-    _ref_count = 0;
     interpreter->trail.trail_ptr(_prev, &(_prev->_next));
     _prev->_next = _next;
     interpreter->trail.trail_ptr(_next, &(_next->_prev));
@@ -275,7 +319,8 @@ namespace MiniZinc {
     for (auto c : _definitions) {
       c->destroy(interpreter);
     }
-    
+    _ref_count = 0;
+
   }
 
   void Variable::reconstruct(Interpreter* interpreter) {
@@ -402,42 +447,37 @@ namespace MiniZinc {
         os << ")";
       }
       os << ":\t";
-      if (d->domain()) {
-        if (d->_binding) {
-          os << " binding";
-        }
-        os << " domain: " << Val(d->domain()).toString();
-      }
-      os << "\n";
-      if (!d->_subscriptions.empty()) {
-        os << "    subscriptions: ";
-        for (auto& s : d->_subscriptions) {
-          os << s.first << " ";
+      if (d->aliased()) {
+        os << " alias " << d->alias().toString() << "\n";
+      } else {
+        if (d->domain()) {
+          if (d->_binding) {
+            os << " binding";
+          }
+          os << " domain: " << Val(d->domain()).toString();
         }
         os << "\n";
-      }
-      for (Constraint* c : d->_definitions) {
-        os << "    ";
-        os << bs[c->pred()].name << "(";
-        for (int i=0; i<c->size(); i++) {
-          os << c->arg(i).toString();
-          if (i<c->size()-1)
-            os << ", ";
+        if (!d->_subscriptions.empty()) {
+          os << "    subscriptions: ";
+          for (auto& s : d->_subscriptions) {
+            os << s.first << " ";
+          }
+          os << "\n";
         }
-        os << ")\n";
+        for (Constraint* c : d->_definitions) {
+          os << "    ";
+          os << bs[c->pred()].name << "(";
+          for (int i=0; i<c->size(); i++) {
+            os << c->arg(i).toString();
+            if (i<c->size()-1)
+              os << ", ";
+          }
+          os << ")\n";
+        }
       }
       d = d->next();
     } while (d != head);
   }
-
-  std::map<const std::string, const std::string> negated_constraints = {
-    {"int_eq", "int_ne"},
-    {"int_le", "int_gt"},
-    {"int_lt", "int_ge"},
-    {"int_lin_eq", "int_lin_ne"},
-    {"int_lin_le", "int_lin_gt"},
-    {"int_lin_lt", "int_lin_ge"},
-  };
 
   VarDecl* Variable::varDecl(void) {
     Vec* dom = domain();
@@ -452,624 +492,6 @@ namespace MiniZinc {
     vd->addAnnotation(constants().ann.output_var);
     return vd;
   }
-
-//  void Variable::toFZN(Variable* head, const std::vector<BytecodeProc>& bs, Model* model,
-//                       std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter) {
-//    GCLock lock;
-//    auto fzn = model ? model : new Model();
-//    Definition* d = head;
-//    // Create FZNItems for current hedge
-//    do {
-//      if (d->pred() == 0) {
-//        d = d->next();
-//        continue;
-//      }
-//      toFZNItem(d, bs, fzn, vdmap, interpreter);
-//      if (d->defs()) {
-//        toFZN(d->defs(), bs, fzn, vdmap, interpreter);
-//      }
-//      d = d->next();
-//    } while (d != head);
-//  }
-//
-//  void Variable::toFZNItem(Constraint* d, const std::vector<BytecodeProc>& bs,
-//                             Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter) {
-//    const BytecodeProc& proc = bs[d->pred()];
-//    auto mode = static_cast<BytecodeProc::Mode>(d->mode());
-//    std::string name = proc.name;
-//    if (BytecodeProc::is_neg(mode)) {
-//      auto it = negated_constraints.find(name);
-//      assert(it != negated_constraints.end());
-//      name = it->second;
-//      mode = BytecodeProc::negate(mode);
-//    }
-//
-//    if (proc.name == "mk_intvar") {
-//      GCLock lock;
-//      auto vd = Definition::varDecl(d);
-//      vdmap.emplace(d->timestamp(), vd);
-//      auto vdi = new VarDeclI(Location().introduce(), vd);
-//      model->addItem(vdi);
-//    } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-//      std::vector<Expression*> args(proc.nargs);
-//      for (int i = 0; i < proc.nargs; ++i) {
-//        Val v = Val::follow_alias(d->arg(i), interpreter);
-//        args[i] = v.toFZN(vdmap);
-//      }
-//      auto c = new Call(Location().introduce(), name, args);
-//      auto ci = new ConstraintI(Location().introduce(), c);
-//      model->addItem(ci);
-//    } else {
-//      auto vdit = vdmap.find(d->timestamp());
-//      assert(vdit != vdmap.end());
-//      model->addItem(new VarDeclI(Location().introduce(), vdit->second));
-//      auto ret = vdmap.emplace(d->timestamp(), vdit->second);
-//
-//      std::vector<Expression*> args(proc.nargs + 1);
-//      for (int i = 0; i < proc.nargs; ++i) {
-//        Val v = Val::follow_alias(d->arg(i), interpreter);
-//        args[i] = v.toFZN(vdmap);
-//      }
-//      args.back() = Val(d).toFZN(vdmap);
-//      if (mode == BytecodeProc::FUN) {
-//        name += "_reif";
-//      } else {
-//        assert(mode == BytecodeProc::IMP);
-//        name += "_imp";
-//      }
-//      auto c = new Call(Location().introduce(), name, args);
-//      model->addItem(new ConstraintI(Location().introduce(), c));
-//    }
-//  }
-//
-//
-//  void Variable::addToSolver(Interpreter* interpreter, Variable* head,
-//                             const std::vector<BytecodeProc>& bs, SolverInstanceBase* si) {
-//    Variable* d = head;
-//    do {
-//      si->addDefinition(bs, d);
-//      if (d->defs()) {
-//        addToSolver(interpreter, d->defs(), bs, si);
-//      }
-//      d = d->next();
-//    } while (d != head);
-//  }
-
-
-
-//  void
-//  Definition::dump(Definition* head, const std::vector<BytecodeProc>& bs, std::ostream& os, int indent) {
-//    Definition* d = head->next();
-//    while (d != head) {
-//      for (unsigned int i=0; i<indent; i++) {
-//        os << "  ";
-//      }
-//      if (d->timestamp() >=0) {
-//        os << d->timestamp() << "(";
-//      }
-//      os << d << "." << d->_ref_count;
-//      if (d->timestamp() >=0) {
-//        os << ")";
-//      }
-//      os << ":\t";
-//      os << bs[d->pred()].name << "(";
-//      for (int i=0; i<d->size(); i++) {
-//        os << d->arg(i).toString();
-//        if (i<d->size()-1)
-//          os << ", ";
-//      }
-//      os << ")";
-//      if (d->domain()) {
-//        if (d->_binding) {
-//          os << " binding";
-//        }
-//        os << " domain: " << Val(d->domain()).toString();
-//      }
-//      os << "\n";
-//      if (!d->subscriptions().empty()) {
-//        for (unsigned int i=0; i<indent; i++) {
-//          os << "  ";
-//        }
-//        os << "    subscriptions: ";
-//        for (auto& s : d->subscriptions()) {
-//          os << s.first << " ";
-//        }
-//        os << "\n";
-//      }
-//      if (d->defs())
-//        dump(d->defs(),bs,os,indent+2);
-//      d = d->next();
-//    }
-//  }
-//
-//  Definition::Definition(Interpreter* interpreter, Vec* domain, bool binding, int pred, char mode, const std::vector<Val>& args, int ident, Val ann)
-//  : RefCountedObject(RefCountedObject::DEF,ident), _prev(this), _next(this),
-//  _domain(domain), _ann(ann), _defs(nullptr), _pred(pred), _size(args.size()), _flag(0), _binding(binding), _mode(mode) {
-//    if (_domain) {
-//      _domain->addRef(interpreter);
-//    }
-//    _ann.construct(interpreter);
-//    for (unsigned int i=0; i<args.size(); i++) {
-//      new (&_args[i]) Val(args[i]);
-//      _args[i].construct(interpreter);
-//    }
-//    interpreter->subscribe(this);
-//    if (binding)
-//      addRef(interpreter);
-//  }
-//
-//  void
-//  Definition::binding(Interpreter* interpreter, bool f) {
-//    if (!_binding && f) {
-//      addRef(interpreter);
-//    } else if (_binding && !f) {
-//      RefCountedObject::rmRef(interpreter, this);
-//    }
-//    _binding = f;
-//  }
-//
-//  void Definition::destroy(MiniZinc::Interpreter* interpreter)  {
-//    _ref_count = (1u<<31u)-1u;
-//    if (_defs) {
-//      Definition* cur = _defs->next();
-//      while (cur != _defs) {
-//        Definition* nxt = cur->next();
-//        if (cur->_ref_count > 0) {
-//          // Promote cur to parent level
-//          cur->unlink(interpreter);
-//          cur->insertBefore(interpreter, this->prev());
-//        } else {
-//          cur->destroy(interpreter);
-//          if(cur->_weak_ref_count > 0) {
-//            // Cut cur: it is kept alive for a CSE entry
-//            cur->unlink(interpreter);
-//          } else if (!interpreter->trail.is_trailed(this)) {
-//            // Free cur: it will not be used again
-//            ::free(cur);
-//          }
-//        }
-//        cur = nxt;
-//      }
-//      if (_defs->next() == _defs) {
-//        if (!interpreter->trail.trail_ptr(this, &_defs)) {
-//          ::free(_defs);
-//        }
-//        _defs = nullptr;
-//      }
-//    }
-//    assert(_defs == nullptr || interpreter->trail.is_trailed(this));
-//
-//    if (_domain){
-//      RefCountedObject::rmRef(interpreter, _domain);
-//    }
-//    _ann.destroy(interpreter);
-//    interpreter->unsubscribe(this);
-//    for (unsigned int i=0; i<_size; i++) {
-//      _args[i].destroy(interpreter);
-//    }
-//    _ref_count = 0;
-//    interpreter->trail.trail_ptr(_prev, &(_prev->_next));
-//    _prev->_next = _next;
-//    interpreter->trail.trail_ptr(_next, &(_next->_prev));
-//    _next->_prev = _prev;
-//  }
-//
-//  void Definition::reconstruct(Interpreter* interpreter) {
-//    assert(_ref_count == 0);
-//    for (int i = 0; i < _size; ++i) {
-//      _args[i].construct(interpreter);
-//    }
-//    interpreter->subscribe(this);
-//    _ann.construct(interpreter);
-//    _domain->addRef(interpreter);
-//    _ref_count = 0;
-//  }
-//
-//
-//  void Definition::insertBefore(Interpreter* interpreter, Definition* d) {
-//    assert(_prev==_next);
-//    interpreter->trail.trail_ptr(this, &_prev);
-//    _prev = d->_prev;
-//    interpreter->trail.trail_ptr(this, &_next);
-//    _next = d;
-//    interpreter->trail.trail_ptr(d->_prev, &d->_prev->_next);
-//    d->_prev->_next = this;
-//    interpreter->trail.trail_ptr(d, &d->_prev);
-//    d->_prev = this;
-//  }
-//
-//  void Definition::appendBefore(Interpreter* interpreter, Definition* d) {
-//    Definition* e1 = _prev;
-//    Definition* e2 = d->_prev;
-//    interpreter->trail.trail_ptr(d, &d->_prev);
-//    d->_prev = e1;
-//    interpreter->trail.trail_ptr(e1, &e1->_next);
-//    e1->_next = d;
-//    interpreter->trail.trail_ptr(e2, &e2->_next);
-//    e2->_next = this;
-//    interpreter->trail.trail_ptr(this, &_prev);
-//    _prev = e2;
-//  }
-//
-//  void Definition::unlink(Interpreter* interpreter) {
-//    interpreter->trail.trail_ptr(_prev, &_prev->_next);
-//    _prev->_next = _next;
-//    interpreter->trail.trail_ptr(_prev, &_next->_prev);
-//    _next->_prev = _prev;
-//    interpreter->trail.trail_ptr(this, &_next);
-//    _next = this;
-//    interpreter->trail.trail_ptr(this, &_prev);
-//    _prev = this;
-//  }
-//
-//  std::map<const std::string, const std::string> negated_constraints = {
-//    {"int_eq", "int_ne"},
-//    {"int_le", "int_gt"},
-//    {"int_lt", "int_ge"},
-//    {"int_lin_eq", "int_lin_ne"},
-//    {"int_lin_le", "int_lin_gt"},
-//    {"int_lin_lt", "int_lin_ge"},
-//  };
-//
-//  VarDecl* Definition::varDecl(Definition* d) {
-//    auto mode = static_cast<BytecodeProc::Mode>(d->mode());
-//    assert(mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG);
-//
-//    Vec* dom = d->domain();
-//    assert(dom->size() >= 2 && dom->size() % 2 == 0);
-//    std::vector<IntSetVal::Range> ranges;
-//    for (int i = 0; i < dom->size(); i += 2) {
-//      ranges.emplace_back((*dom)[i](), (*dom)[i+1]());
-//    }
-//    SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
-//    auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-//    auto vd = new VarDecl(Location().introduce(), ti, d->timestamp());
-//    vd->addAnnotation(constants().ann.output_var);
-//
-//    return vd;
-//  }
-//
-//  void Definition::toFZN(Definition* head, const std::vector<BytecodeProc>& bs, Model* model,
-//                         std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter) {
-//    GCLock lock;
-//    auto fzn = model ? model : new Model();
-//    if (head->next()==head)
-//      return;
-//    Definition* d = head->next(); // Ignore dummy head
-//    // Forward-declaration of current hedge variables
-//    while (d != head) {
-//      assert(d != d->next());
-//      if (d->pred() == 0) {
-//        d = d->next();
-//        continue;
-//      }
-//      auto mode = static_cast<BytecodeProc::Mode>(d->mode());
-//      if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
-//        auto vd = varDecl(d);
-//        vdmap.emplace(d->timestamp(), vd);
-//      }
-//      d = d->next();
-//    }
-//
-//    d = head->next(); // Ignore dummy head
-//    // Create FZNItems for current hedge
-//    while (d != head) {
-//      assert(d != d->next());
-//      if (d->pred() == 0) {
-//        d = d->next();
-//        continue;
-//      }
-//      toFZNItem(d, bs, fzn, vdmap, interpreter);
-//      if (d->defs()) {
-//        toFZN(d->defs(), bs, fzn, vdmap, interpreter);
-//      }
-//      d = d->next();
-//    }
-//  }
-//
-//  void Definition::toFZNItem(Definition* d, const std::vector<BytecodeProc>& bs,
-//                             Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter) {
-//    const BytecodeProc& proc = bs[d->pred()];
-//    auto mode = static_cast<BytecodeProc::Mode>(d->mode());
-//    std::string name = proc.name;
-//    if (BytecodeProc::is_neg(mode)) {
-//      auto it = negated_constraints.find(name);
-//      assert(it != negated_constraints.end());
-//      name = it->second;
-//      mode = BytecodeProc::negate(mode);
-//    }
-//
-//    if (proc.name == "mk_intvar") {
-//      GCLock lock;
-//      auto vd = Definition::varDecl(d);
-//      vdmap.emplace(d->timestamp(), vd);
-//      auto vdi = new VarDeclI(Location().introduce(), vd);
-//      model->addItem(vdi);
-//    } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-//      std::vector<Expression*> args(proc.nargs);
-//      for (int i = 0; i < proc.nargs; ++i) {
-//        Val v = Val::follow_alias(d->arg(i), interpreter);
-//        args[i] = v.toFZN(vdmap);
-//      }
-//      auto c = new Call(Location().introduce(), name, args);
-//      auto ci = new ConstraintI(Location().introduce(), c);
-//      model->addItem(ci);
-//    } else {
-//      auto vdit = vdmap.find(d->timestamp());
-//      assert(vdit != vdmap.end());
-//      model->addItem(new VarDeclI(Location().introduce(), vdit->second));
-//      auto ret = vdmap.emplace(d->timestamp(), vdit->second);
-//
-//      std::vector<Expression*> args(proc.nargs + 1);
-//      for (int i = 0; i < proc.nargs; ++i) {
-//        Val v = Val::follow_alias(d->arg(i), interpreter);
-//        args[i] = v.toFZN(vdmap);
-//      }
-//      args.back() = Val(d).toFZN(vdmap);
-//      if (mode == BytecodeProc::FUN) {
-//        name += "_reif";
-//      } else {
-//        assert(mode == BytecodeProc::IMP);
-//        name += "_imp";
-//      }
-//      auto c = new Call(Location().introduce(), name, args);
-//      model->addItem(new ConstraintI(Location().introduce(), c));
-//    }
-//  }
-//
-//
-//  void Definition::addToSolver(Interpreter* interpreter, Definition* head,
-//                   const std::vector<BytecodeProc>& bs, SolverInstanceBase* si) {
-//    if (head->next()==head)
-//      return;
-//    Definition* d = head->next(); // Ignore dummy head
-//    while (d != head) {
-//      assert(d != d->next());
-//      if (d->pred() == 0) {
-//        d = d->next();
-//        continue;
-//      }
-//      si->addDefinition(bs, d);
-//      if (d->defs()) {
-//        addToSolver(interpreter, d->defs(), bs, si);
-//      }
-//      d = d->next();
-//    }
-//  }
-//
-//  void Definition::alias(Interpreter* interpreter, Val v) {
-//    assert(size() >= 1);
-//    // Move constraints in _defs
-//    if (_defs) {
-//      Definition* cur = _defs->next();
-//      while (cur != _defs) {
-//        Definition* nxt = cur->next();
-//        for (int i = 0; i < cur->size(); ++i) {
-//          Val arg = cur->arg(i);
-//          if (arg.isVec()) {
-//            _ref_count += arg.toVec()->count(Val(this));
-//          } else {
-//            _ref_count += (arg == Val(this));
-//          }
-//        }
-//        cur->unlink(interpreter);
-//        cur->insertBefore(interpreter, this->next());
-//        cur = nxt;
-//      }
-//      if (!interpreter->trail.trail_ptr(this, &_defs)) {
-//        ::free(_defs);
-//      }
-//      _defs = nullptr;
-//    }
-//    assert(_defs == nullptr || interpreter->trail.is_trailed(this));
-//
-//    // Destroy old definition
-//    if (_domain) {
-//      RefCountedObject::rmRef(interpreter, _domain);
-//    }
-//    _ann = Val(IntVal(0));
-//    for (unsigned int i=0; i<_size; i++) {
-//      _args[i].destroy(interpreter);
-//    }
-//
-//    if (!_subscriptions.empty()) {
-//      // Transfer subscriptions to new value and schedule propagators
-//      Definition* nv = v.isDef() ? v.toDef() : nullptr;
-//      for (auto& s : _subscriptions) {
-//        if (nv) {
-//          nv->subscribe(s.first, s.second);
-//        }
-//        if (s.second==SES_VALUNIFY || s.second==SES_ANY) {
-//          interpreter->schedule(s.first, SEV_UNIFY);
-//        }
-//      }
-//    }
-//
-//    // Set Alias
-//    interpreter->trail.trail_alias(interpreter, this);
-//    _pred = PrimitiveMap::ALIAS;
-//    _size = 1;
-//    _args[0] = v;
-//    v.construct(interpreter);
-//  }
-//
-//  void Definition::unalias(Interpreter* interpreter, int proc, int size, const Val& arg0) {
-//    auto ref_count = _ref_count;
-//    _pred = proc;
-//    _size = size;
-//    _args[0].destroy(interpreter);
-//    _args[0] = arg0;
-//    for (int i = 0; i < _size; ++i) {
-//      _args[i].construct(interpreter);
-//    }
-//    // TODO: Transfer back subscriptions moved on aliasing?
-//    interpreter->subscribe(this);
-//    _ann.construct(interpreter);
-//    _domain->addRef(interpreter);
-//    _ref_count = ref_count;
-//  }
-//
-//  void
-//  Definition::subscribe(Definition* d, const SubscriptionEventSet& events) {
-//    Definition* sub = this;
-//    while (sub && sub->pred()==PrimitiveMap::ALIAS) {
-//      if (sub->arg(0).isDef()) {
-//        sub = sub->arg(0).toDef();
-//      } else {
-//        sub = nullptr;
-//      }
-//    }
-//    if (sub) {
-//      sub->_subscriptions.insert(std::make_pair(d,events));
-//    }
-//  }
-//  /// Remove \a d from set of subscribed constraints
-//  void
-//  Definition::unsubscribe(Definition* d) {
-//    Definition* sub = this;
-//    while (sub && sub->pred()==PrimitiveMap::ALIAS) {
-//      if (sub->arg(0).isDef()) {
-//        sub = sub->arg(0).toDef();
-//      } else {
-//        sub = nullptr;
-//      }
-//    }
-//    if (sub) {
-//      sub->_subscriptions.erase(d);
-//    }
-//  }
-//
-//  void
-//  Definition::domain(Interpreter* interpreter, const Val& newDomain, bool binding0) {
-//    interpreter->trail.trail_domain(interpreter, this, _domain);
-//    if (newDomain.isInt()) {
-//      alias(interpreter, newDomain);
-//      interpreter->schedule(this, Definition::SEV_VAL);
-//    } else if (newDomain.size() == 2 && newDomain[0]() == newDomain[1]()) {
-//      alias(interpreter, newDomain[0]);
-//      interpreter->schedule(this, Definition::SEV_VAL);
-//    } else {
-//      if (_domain) {
-//        RefCountedObject::rmRef(interpreter, _domain);
-//      }
-//      _domain = newDomain.toVec();
-//      _domain->addRef(interpreter);
-//      interpreter->schedule(this, Definition::SEV_DOM);
-//    }
-//    binding(interpreter,binding0);
-//  }
-//  void
-//  Definition::domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding0) {
-//    if (!isBounded()) {
-//      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), newDomain)), binding0);
-//    } else {
-//      bool did_update = false;
-//      if (newDomain.size() != _domain->size()) {
-//        did_update = true;
-//      } else {
-//        for (int i=0; i<newDomain.size(); i++) {
-//          if (newDomain[i]() != (*_domain)[i]()) {
-//            did_update = true;
-//            break;
-//          }
-//        }
-//      }
-//      if (did_update) {
-//        domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), newDomain)), binding0);
-//      }
-//    }
-//  }
-//
-//  bool Definition::setMin(Interpreter* interpreter, IntVal i, bool binding) {
-//    assert(_domain->size() % 2 == 0);
-//    size_t j = 0;
-//    while (j < _domain->size() && (*_domain)[j]() < i) {
-//      ++j;
-//    }
-//    if (j == 0) {
-//      return true;
-//    }
-//    if (j == _domain->size()) {
-//      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
-//      return false;
-//    }
-//    std::vector<Val> dom;
-//    if (j % 2 == 1) {
-//      dom.emplace_back(i);
-//    }
-//    for (; j < _domain->size(); ++j) {
-//      dom.push_back((*_domain)[j]);
-//    }
-//    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
-//    return true;
-//  }
-//
-//  bool Definition::setMax(Interpreter* interpreter, IntVal i, bool binding) {
-//    assert(_domain->size() % 2 == 0);
-//    size_t j = _domain->size() - 1;
-//    while (j >= 0 && (*_domain)[j]() > i) {
-//      --j;
-//    }
-//    if (j == _domain->size() - 1) {
-//      return true;
-//    }
-//    if (j < 0 ) {
-//      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
-//      return false;
-//    }
-//    std::vector<Val> dom;
-//    for (size_t k = 0; k <= j; ++j) {
-//      dom.push_back((*_domain)[j]);
-//    }
-//    if (j % 2 == 0) {
-//      dom.emplace_back(i);
-//    }
-//    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
-//    return true;
-//  }
-//
-//  bool Definition::setVal(Interpreter* interpreter, IntVal i, bool binding) {
-//    assert(_domain->size() % 2 == 0);
-//    for (int j = 0; j < _domain->size(); j+=2) {
-//      if ((*_domain)[j]() <= i && i <= (*_domain)[j+1]()) {
-//        this->binding(interpreter, binding);
-//        alias(interpreter, Val(i));
-//        return true;
-//      }
-//    }
-//    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
-//    return false;
-//  }
-//
-//  bool Definition::intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding) {
-//    if (!isBounded()) {
-//      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
-//      return true;
-//    }
-//    VecSetRanges vsr1(_domain);
-//    StdVecSetRanges vsr2(&dom);
-//    Ranges::Inter<IntVal,VecSetRanges,StdVecSetRanges> inter(vsr1,vsr2);
-//    std::vector<Val> result;
-//    for (; inter(); ++inter) {
-//      result.emplace_back(inter.min());
-//      result.emplace_back(inter.max());
-//    }
-//    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), result)), binding);
-//    return !result.empty();
-//  }
-//
-//  bool Definition::intersectDom(Interpreter* interpreter, Val dom, bool binding) {
-//    assert(!dom.isDef());
-//    if (dom.isInt()) {
-//      return setVal(interpreter, dom());
-//    }
-//    // TODO: Allocation is not really necessary;
-//    std::vector<Val> vdom(dom.size());
-//    for (int i = 0; i < dom.size(); ++i) {
-//      vdom[i] = dom[i];
-//    }
-//    return intersectDom(interpreter, vdom, binding);
-//  }
 
   std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v) {
     std::vector<Val> coeffs = {Val(1)};
@@ -1252,9 +674,9 @@ namespace MiniZinc {
       }
       if (interpreter && !interpreter->trail.is_trailed(v.toVar())) {
         Val& mut_v = const_cast<Val&>(v);
+        nval.construct(interpreter);
         mut_v.destroy(interpreter);
         mut_v._v = nval._v;
-        mut_v.construct(interpreter);
       }
       return nval;
     } else {
@@ -2681,10 +2103,13 @@ execute_ret:
     } else {
       std::unordered_map<int, VarDecl*> vdmap;
       for (Variable* v = _root_var->next(); v != _root_var; v = v->next()) {
-        VarDecl* vd = v->varDecl();
-        vdmap.emplace(v->timestamp(), vd);
-        auto vdi = new VarDeclI(Location().introduce(), vd);
-        fzn->addItem(vdi);
+        Val va = Val::follow_alias(Val(v),this);
+        if (va.isVar()) {
+          VarDecl* vd = va.toVar()->varDecl();
+          vdmap.emplace(va.timestamp(), vd);
+          auto vdi = new VarDeclI(Location().introduce(), vd);
+          fzn->addItem(vdi);
+        }
       }
       Variable* v = _root_var;
       do {
@@ -2897,9 +2322,10 @@ execute_ret:
       Variable* var;
       Vec* dom;
       std::tie(var, dom) = domain_trail.back();
+      Val nd(dom);
+      nd.construct(interpreter);
       var->_domain.destroy(interpreter);
-      var->_domain = Val(dom);
-      var->_domain.construct(interpreter);
+      var->_domain = nd;
       RefCountedObject::rmWRef(interpreter, dom);
       domain_trail.pop_back();
     }

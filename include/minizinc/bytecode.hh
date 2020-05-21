@@ -183,7 +183,8 @@ namespace MiniZinc {
 
     void addRef(Interpreter* interpreter) { _ref_count++; }
     static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
-    bool exists() { return _ref_count > 0; }
+    bool exists() const { return _ref_count > 0; }
+    bool alive() const { return _ref_count+_weak_ref_count>0; }
 
     void addWRef(Interpreter* interpreter) {
 //      assert(_ref_count > 0); // TODO: Assertion is not true when a new definition is created in CSE. The definition is added to CSE before it is returned to the interpreter
@@ -320,36 +321,7 @@ namespace MiniZinc {
     void assign(Interpreter* interpreter, const Val& v);
     void assign(Interpreter* interpreter, Val&& v);
     std::string toString(bool trim=false) const;
-    Expression* const toFZN(const std::unordered_map<int, VarDecl*>& vdmap = {}) {
-      GCLock lock;
-      if (this->isInt()) {
-        return IntLit::a((*this)());
-      } else if (this->isVar()) {
-        auto it = vdmap.find(this->timestamp());
-        assert(it != vdmap.end());
-        VarDecl* vd = it->second;
-        auto id = new Id(Location().introduce(), this->timestamp(), vd);
-        id->type(vd->type());
-        return id;
-      } else {
-        // Expected [[actual array], [indexes]]
-        assert(this->isVec());
-        assert(this->size() == 2 && (*this)[0].isVec() && (*this)[1].isVec());
-        Val vec = (*this)[0];
-        std::vector<Expression*> evec(vec.size());
-        bool par = true;
-        for (int i = 0; i < vec.size(); ++i) {
-          Val v = follow_alias(vec[i]);
-          assert(!v.isVec());
-          evec[i] = v.toFZN(vdmap);
-          par = par && evec[i]->type().ispar();
-        }
-        auto al = new ArrayLit(Location().introduce(), evec);
-        al->type(par ? Type::parint(1) : Type::varint(1));
-        assert((*this)[1].size() == 2 && (*this)[1][0]() == 1 && (*this)[1][1]() == vec.size());
-        return al;
-      }
-    }
+    Expression* const toFZN(const std::unordered_map<int, VarDecl*>& vdmap = {});
     IntVal lb() const;
     IntVal ub() const;
     bool isFixed() const;
@@ -367,9 +339,9 @@ namespace MiniZinc {
     }
     ~Vec(void) = delete;
   public:
-    int size(void) const { return _size; }
+    int size(void) const { assert(alive()); return _size; }
     // TODO: Should vectors be indexed from 1 internally?
-    const Val& operator [](int i) const { assert(i >= 0 && i<_size); return _data[i]; }
+    const Val& operator [](int i) const { assert(alive()); assert(i >= 0 && i<_size); return _data[i]; }
     static Vec* a(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) {
       Vec* nv = static_cast<Vec*>(::malloc(sizeof(Vec)+sizeof(Val)*std::max(0, static_cast<int>(v.size()-1))));
       new (nv) Vec(interpreter,timestamp,v);
@@ -377,16 +349,18 @@ namespace MiniZinc {
     }
     static Vec* allocate_array(Interpreter* interpreter, int timestamp, const std::vector<Val>& v);
     void destroy(Interpreter* interpreter) {
-      for (unsigned int i=0; i<size(); i++) {
+      for (unsigned int i=0; i<_size; i++) {
         _data[i].destroy(interpreter);
       }
     }
     void reconstruct(Interpreter* interpreter) {
-      for (unsigned int i=0; i<size(); i++) {
+      for (unsigned int i=0; i<_size; i++) {
         _data[i].construct(interpreter);
       }
     }
     inline bool operator==(const Vec& rhs) const {
+      assert(alive());
+      assert(rhs.alive());
       if (_size != rhs._size) {
         return false;
       }
@@ -399,6 +373,7 @@ namespace MiniZinc {
     }
     bool isPar() const;
     std::vector<Val> as_vector() {
+      assert(alive());
       std::vector<Val> nv;
       nv.reserve(size());
       for (int i = 0; i < size(); ++i) {
@@ -407,6 +382,7 @@ namespace MiniZinc {
       return nv;
     }
     int count(Val v) {
+      assert(alive());
       int count = 0;
       for (int i = 0; i < _size; ++i) {
         if (_data[i].isVec()) {
@@ -481,15 +457,17 @@ namespace MiniZinc {
   Val::Val(Val&& v) : _v(v._v) { v._v = nullptr; }
   inline
   void Val::assign(Interpreter* interpreter, const Val& v) {
-    if (this != &v) {
+    if (_v != v._v) {
+      if (v.isRCO()) {
+        v.toRCO()->addRef(interpreter);
+      }
       destroy(interpreter);
       _v = v._v;
-      construct(interpreter);
     }
   }
   inline
   void Val::assign(Interpreter* interpreter, Val&& v) {
-    if (this != &v) {
+    if (_v != v._v) {
       destroy(interpreter);
       _v = v._v;
       v._v = nullptr;
@@ -568,8 +546,8 @@ namespace MiniZinc {
     unsigned int _size : 31;
     /// Whether the constraint is scheduled for propagation
     unsigned int _scheduled : 1;
-    Val _args[1];
     Val _defines;
+    Val _args[1];
     Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines);
   public:
     static Constraint* a(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val defines=IntVal(1), Val ann=IntVal(0)) {
@@ -592,9 +570,10 @@ namespace MiniZinc {
     Val arg(int i) const { assert(i < _size); return _args[i]; }
     void arg(Interpreter* interpreter, int i, Val nv) {
       assert(i < _size);
+      assert(_pred != 8 || i!=1 || nv.isVec());
+      nv.construct(interpreter);
       _args[i].destroy(interpreter);
       _args[i] = nv;
-      _args[i].construct(interpreter);
     }
     
     /// Flag whether constraint is currently scheduled
@@ -1104,6 +1083,7 @@ namespace MiniZinc {
 
   inline
   void RefCountedObject::rmRef(Interpreter* interpreter, RefCountedObject* rco) {
+    assert(rco->_ref_count>0);
     if(--rco->_ref_count==0) {
       switch (rco->rcoType()) {
         case VAR:
@@ -1120,7 +1100,11 @@ namespace MiniZinc {
       } else if (rco->_weak_ref_count==0) {
         // INVARIANT: All children of a definition are already promoted, cut, or freed.
 //        assert(rco->rcoType() != VAR || !static_cast<Variable*>(rco)->constraints().empty());
-        free(rco);
+        if (rco->rcoType()==VAR) {
+          Variable::free(static_cast<Variable*>(rco));
+        } else {
+          ::free(rco);
+        }
       }
     }
   }
