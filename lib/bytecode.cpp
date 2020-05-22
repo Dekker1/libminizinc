@@ -87,6 +87,7 @@ namespace MiniZinc {
 
   Variable::Variable(Interpreter* interpreter, Val domain, int ident)
     : RefCountedObject(RefCountedObject::VAR,ident), _prev(this), _next(this), _domain(domain), _binding(true), _aliased(false) {
+    assert(_domain.isVec());
     _domain.construct(interpreter);
     _ann.construct(interpreter);
     addRef(interpreter);
@@ -94,6 +95,7 @@ namespace MiniZinc {
 
   Variable::Variable(Interpreter* interpreter, Val domain, bool binding, int ident, Val ann)
     : RefCountedObject(RefCountedObject::VAR,ident), _prev(this), _next(this), _domain(domain), _ann(ann), _binding(binding), _aliased(false) {
+    assert(_domain.isVec());
     _domain.construct(interpreter);
     _ann.construct(interpreter);
     if (binding)
@@ -483,16 +485,19 @@ namespace MiniZinc {
             case PrimitiveMap::INT_LIN_EQ: {
               IntVal cur_coeff = 0;
               for (int i = defby->arg(1)[0].size() - 1; i >= 0; --i) {
-                if (defby->arg(1)[0][i] == Val(cur)) {
+                Val arg = Val::follow_alias(defby->arg(1)[0][i]);
+                if (arg == stacktop) {
                   cur_coeff += defby->arg(0)[0][i]();
                   break; // TODO: Can we assume no dumplicates?
                 }
+                assert(i != 0);
               }
               assert(cur_coeff != 0);
               if (std::abs(coeff) == std::abs(cur_coeff)) {
                 IntVal mult = ((coeff > 0) == (cur_coeff > 0)) ? -1 : 1;
                 for (int i = 0; i < defby->arg(0)[0].size(); i++) {
-                  if (defby->arg(1)[0][i] != Val(cur)) {
+                  Val arg = Val::follow_alias(defby->arg(1)[0][i]);
+                  if (arg != stacktop) {
                     defs.emplace_back(mult * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
                   }
                 }
@@ -504,7 +509,8 @@ namespace MiniZinc {
                   coeff = -1 * coeff;
                 }
                 for (int i = 0; i < defby->arg(0)[0].size(); i++) {
-                  if (defby->arg(1)[0][i] != Val(cur)) {
+                  Val arg = Val::follow_alias(defby->arg(1)[0][i]);
+                  if (arg != stacktop) {
                     defs.emplace_back(coeff * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
                   }
                 }
@@ -514,9 +520,11 @@ namespace MiniZinc {
               break;
             }
             case PrimitiveMap::INT_TIMES: {
-              assert(Val(cur) == defby->arg(2));
-              if (defby->arg(0).isInt()) {
-                if (defby->arg(1).isInt()) {
+              assert(stacktop == Val::follow_alias(defby->arg(2)));
+              Val lhs = Val::follow_alias(defby->arg(0));
+              Val rhs = Val::follow_alias(defby->arg(1));
+              if (lhs.isInt()) {
+                if (rhs.isInt()) {
                   // both constants, compute result
                   d += coeff * defby->arg(0)() * defby->arg(1)();
                 } else {
@@ -524,7 +532,7 @@ namespace MiniZinc {
                 }
                 continue;
               }
-              if (defby->arg(1).isInt()) {
+              if (rhs.isInt()) {
                 defs.emplace_back(coeff * defby->arg(1)(), defby->arg(0));
                 continue;
               }
