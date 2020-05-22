@@ -98,7 +98,6 @@ namespace MiniZinc {
     _ann.construct(interpreter);
     if (binding)
       addRef(interpreter);
-      
     // insert into root variable list
     Variable* v = interpreter->root();
     interpreter->trail.trail_ptr(this, &_prev);
@@ -109,7 +108,6 @@ namespace MiniZinc {
     v->_prev->_next = this;
     interpreter->trail.trail_ptr(v, &v->_prev);
     v->_prev = this;
-
   }
 
   bool Variable::setMin(Interpreter* interpreter, IntVal i, bool binding) {
@@ -134,7 +132,10 @@ namespace MiniZinc {
     for (; j < _domain.size(); ++j) {
       dom.push_back(_domain[j]);
     }
-    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
+    Val ndom(Vec::a(interpreter, interpreter->newIdent(),dom));
+    ndom.construct(interpreter);
+    domain(interpreter, ndom, binding);
+    ndom.destroy(interpreter);
     return true;
   }
 
@@ -150,7 +151,10 @@ namespace MiniZinc {
       return true;
     }
     if (j < 0 ) {
-      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
+      Val ndom(Vec::a(interpreter, interpreter->newIdent(), {}));
+      ndom.construct(interpreter);
+      domain(interpreter, ndom, binding);
+      ndom.destroy(interpreter);
       return false;
     }
     std::vector<Val> dom;
@@ -160,7 +164,10 @@ namespace MiniZinc {
     if (j % 2 == 0) {
       dom.emplace_back(i);
     }
-    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
+    Val ndom(Vec::a(interpreter, interpreter->newIdent(),dom));
+    ndom.construct(interpreter);
+    domain(interpreter, ndom, binding);
+    ndom.destroy(interpreter);
     return true;
   }
 
@@ -175,7 +182,10 @@ namespace MiniZinc {
         return true;
       }
     }
-    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
+    Val ndom(Vec::a(interpreter, interpreter->newIdent(), {}));
+    ndom.construct(interpreter);
+    domain(interpreter, ndom, binding);
+    ndom.destroy(interpreter);
     return false;
   }
 
@@ -195,7 +205,10 @@ namespace MiniZinc {
       result.emplace_back(inter.min());
       result.emplace_back(inter.max());
     }
-    domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), result)), binding);
+    Val ndom(Vec::a(interpreter, interpreter->newIdent(), result));
+    ndom.construct(interpreter);
+    domain(interpreter, ndom, binding);
+    ndom.destroy(interpreter);
     return !result.empty();
   }
 
@@ -215,6 +228,7 @@ namespace MiniZinc {
   void
   Variable::domain(Interpreter* interpreter, const Val& newDomain, bool binding0) {
     assert(!aliased());
+    assert(!newDomain.isRCO() || newDomain.toRCO()->alive());
     assert(_domain.isVec());
     interpreter->trail.trail_domain(interpreter, this, _domain.toVec());
     SubscriptionEvent sev;
