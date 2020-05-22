@@ -1650,7 +1650,11 @@ namespace MiniZinc {
           break;
         case BytecodeStream::RET:
         {
-          DBG_INTERPRETER("RET %--" << std::get<0>(frame->cse_info.back()) << "(" << _procs[std::get<0>(frame->cse_info.back())].name << ")" << BytecodeProc::mode_to_string[std::get<1>(frame->cse_info.back())] << "\n");
+          DBG_INTERPRETER("RET");
+          if (!frame->cse_info.empty()) {
+            DBG_INTERPRETER(" %-- " << std::get<0>(frame->cse_info.back()) << " (" << _procs[std::get<0>(frame->cse_info.back())].name << ") " << BytecodeProc::mode_to_string[std::get<1>(frame->cse_info.back())]);
+          }
+          DBG_INTERPRETER("\n");
           assert(!_stack.empty());
 execute_ret:
           if (_stack.size()==1) {
