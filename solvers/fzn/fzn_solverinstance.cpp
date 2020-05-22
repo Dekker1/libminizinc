@@ -204,7 +204,7 @@ namespace MiniZinc {
     v = Val::follow_alias(v);
     if (v.isInt()) {
       if (ty.isbool()) {
-        return v() == 0 ? constants().lit_true : constants().lit_false;
+        return v() == 0 ? constants().lit_false : constants().lit_true;
       }
       return IntLit::a(v());
     } else if (v.isVar()) {
