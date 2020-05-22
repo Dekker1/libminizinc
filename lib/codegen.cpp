@@ -3467,9 +3467,6 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // Collect partiality of the expression.
   std::vector<CG_Cond::T> cond;
 
-  if(is_var) {
-    OPEN_OTHER(cg, frag);
-  }
   // Now evaluate the array body, and emit the indices.
   std::vector<int> r_idxs(sz);
   for(int ii = 0; ii < sz; ++ii) {
@@ -3497,6 +3494,7 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     r_args[sz] = CG::r(r_A);
 
     // Push CALL instruction with the correct id
+    OPEN_OTHER(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first);
     // Append instruction with register arguments
     CG_Instr &i = frag.instrs.back();
