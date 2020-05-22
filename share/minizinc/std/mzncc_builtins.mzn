@@ -249,3 +249,5 @@ include "fzn_if_then_else_var_int.mzn";
 include "fzn_if_then_else_bool.mzn";
 include "fzn_if_then_else_var_bool.mzn";
 include "fzn_if_then_else_partiality.mzn";
+% Include interpreter definitions always to be included
+include "mznasm_builtins.mzn";

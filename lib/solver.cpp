@@ -756,11 +756,6 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     assert(!in_out_defs.model());
     in_out_defs.model(m);
     long long int idn = 0;
-    std::vector<VarDecl*> args = {
-      new VarDecl(Location().introduce(), new TypeInst(Location().introduce(), Type::parint()), idn)
-    };
-    args[0]->toplevel(false);
-    in_out_defs.model()->addItem(new FunctionI(Location().introduce(), constants().ann.global_register, new TypeInst(Location().introduce(), Type::ann()), args));
     std::vector<TypeError> typeErrors;
     typecheck(in_out_defs, in_out_defs.model(), typeErrors, false, true, false);
     registerBuiltins(in_out_defs);

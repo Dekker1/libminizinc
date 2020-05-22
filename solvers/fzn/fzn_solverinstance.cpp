@@ -316,6 +316,7 @@ namespace MiniZinc {
 
     if (dom->size() == 2 && (*dom)[0]() == 0 && (*dom)[1]() == 1) {
       vdmap.emplace(std::piecewise_construct, std::forward_as_tuple(var->timestamp()), std::forward_as_tuple(nullptr, nullptr, false, false));
+      return;
     }
 
     std::vector<IntSetVal::Range> ranges;
@@ -358,41 +359,6 @@ namespace MiniZinc {
     }
     _model->compact();
     stack.pop_back();
-  }
-
-  void FZNSolverInstance::createFunctionItems() {
-    GCLock lock;
-    std::vector<FunctionI*> toAdd;
-    for (auto ci = _model->begin_constraints(); ci != _model->end_constraints(); ++ci) {
-      auto call = ci->e()->cast<Call>();
-      FunctionI* fi = _model->matchFn(env.envi(), call, false);
-      if (!fi) {
-        std::vector<VarDecl*> args;
-        for (int i = 0; i < call->n_args(); ++i) {
-          TypeInst* ti;
-          if (call->arg(i)->type().dim() > 0) {
-            auto al = eval_array_lit(env.envi(), call->arg(i));
-            std::vector<TypeInst*> ranges(al->dims());
-            for (auto& range : ranges) {
-              range = new TypeInst(Location().introduce(), Type::parint(), nullptr);
-            }
-            ti = new TypeInst(Location().introduce(), call->arg(i)->type(), ranges, nullptr);
-          } else {
-            ti = new TypeInst(Location().introduce(), call->arg(i)->type(), nullptr);
-          }
-          args.push_back(new VarDecl(Location().introduce(), ti, i));
-        }
-        TypeInst* ti = new TypeInst(Location().introduce(), Type::varbool());
-        fi = new FunctionI(Location().introduce(), call->id().str(), ti, args, nullptr);
-        _model->registerFn(env.envi(), fi);
-        toAdd.push_back(fi);
-      }
-      call->decl(fi);
-    }
-    env.model(nullptr);
-    for (const auto& j : toAdd) {
-      _model->addItem(j);
-    }
   }
 
   SolverInstance::Status
@@ -451,7 +417,6 @@ namespace MiniZinc {
     FileUtils::TmpFile fznFile(".fzn");
     std::ofstream os(fznFile.name());
     Printer p(os, 0, true);
-    createFunctionItems();
     for (FunctionIterator it = _model->begin_functions(); it != _model->end_functions(); ++it) {
       if(!it->removed()) {
         Item& item = *it;
