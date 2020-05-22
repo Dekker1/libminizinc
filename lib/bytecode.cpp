@@ -709,7 +709,8 @@ namespace MiniZinc {
       it = _table[i].find(key);
     } while (it == _table[i].end() && i > 0);
     if (it != _table[i].end()) {
-      Val val = Val::follow_alias(it->second.second, interpreter);
+      // FIXME: This can be a permanent replacement, but the change needs to be stored in the CSETable and we are removing a weak reference, not a strong reference.
+      Val val = Val::follow_alias(it->second.second);
       BytecodeProc::Mode val_m = it->second.first;
       if (!val.exists()) {
         this->_table[i].erase(it);
