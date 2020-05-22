@@ -772,7 +772,9 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
       }
       throw Error("multiple type errors");
     }
-    std::cerr << "Input Data:\n";
+    if (verbose) {
+      std::cerr << "Input Data:\n";
+    }
     for (VarDeclIterator it = in_out_defs.model()->begin_vardecls(); it != in_out_defs.model()->end_vardecls(); ++it) {
       if (it->removed()) {
         continue;
@@ -827,11 +829,9 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     case Interpreter::ERROR:
     case Interpreter::ABORTED:
       interpreter_status = SolverInstance::ERROR;
-      std::cout << printSolution(getFltStatus()) << std::endl;
       break;
     case Interpreter::INCONSISTENT:
       interpreter_status = SolverInstance::UNSAT;
-      std::cout << printSolution(getFltStatus()) << std::endl;
       break;
   }
   flatten_time = tm01.s();
@@ -930,6 +930,7 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
 std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   using namespace std::chrono;
   steady_clock::time_point startTime = steady_clock::now();
+
 
   if (!ifMzn2Fzn() && flag_overall_time_limit != 0) {
     steady_clock::time_point afterFlattening = steady_clock::now();

@@ -364,8 +364,6 @@ namespace MiniZinc {
     FlatModelStatistics stats = statistics(_model);
     auto& out = getSolns2Out()->getOutput();
 
-    out << "% Generated FlatZinc statistics:\n";
-
     if (stats.n_bool_vars) { out << "%%%mzn-stat: flatBoolVars=" << stats.n_bool_vars << endl; }
     if (stats.n_int_vars) { out << "%%%mzn-stat: flatIntVars=" << stats.n_int_vars << endl; }
     if (stats.n_float_vars) { out << "%%%mzn-stat: flatFloatVars=" << stats.n_float_vars << endl; }
