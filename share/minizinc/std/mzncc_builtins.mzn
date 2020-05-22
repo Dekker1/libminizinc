@@ -72,14 +72,35 @@ function var int: op_minus(var int: x) ::promise_total =
 /** @group builtins.arithmetic Return \a x - \a y */
 function int: op_minus(int: x, int: y) = x - y;
 /** @group builtins.arithmetic Return \a x - \a y */
+function var int: op_minus(var int: x, int: y) ::promise_total =
+  if y = 0 then
+    x
+  else
+    let {
+      var lb(x)-y..ub(x)-y: z;
+      constraint int_lin_eq([1,-1], [x,z], y);
+    } in z
+  endif;
+/** @group builtins.arithmetic Return \a x - \a y */
 function var int: op_minus(var int: x,  var int: y) ::promise_total =
   let {
     var lb(x)-ub(y)..ub(x)-lb(y): z;
     constraint int_lin_eq([1,-1,-1], [x,y,z], 0);
   } in z;
-
 /** @group builtins.arithmetic Return \a x + \a y */
 function int: op_plus(int: x, int: y) = x + y;
+/** @group builtins.arithmetic Return \a x + \a y */
+function var int: op_plus(int: x, var int: y) ::promise_total =
+  if x = 0 then
+    y
+  else
+    let {
+      var x+lb(y)..x+ub(y): z;
+      constraint int_lin_eq([-1,1], [y,z], x);
+    } in z
+  endif;
+/** @group builtins.arithmetic Return \a x + \a y */
+function var int: op_plus(var int: x, int: y) = op_plus(y, x);
 /** @group builtins.arithmetic Return \a x + \a y */
 function var int: op_plus(var int: x, var int: y) ::promise_total =
   let {
