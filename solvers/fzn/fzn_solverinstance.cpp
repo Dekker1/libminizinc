@@ -222,6 +222,7 @@ namespace MiniZinc {
           vs.bool_var = new VarDecl(Location().introduce(), ti, "view_" + std::to_string(v.timestamp()));
         } else {
           vs.bool_var = new VarDecl(Location().introduce(), ti, v.timestamp());
+          vs.bool_var()->addAnnotation(constants().ann.output_var);
         }
         auto vdi = new VarDeclI(Location().introduce(), vs.bool_var()->cast<VarDecl>());
         _model->addItem(vdi);
@@ -247,6 +248,7 @@ namespace MiniZinc {
         vs.int_var = new VarDecl(Location().introduce(), ti, "view_" + std::to_string(v.timestamp()));
       } else {
         vs.int_var = new VarDecl(Location().introduce(), ti, v.timestamp());
+        vs.int_var()->addAnnotation(constants().ann.output_var);
       }
       auto vdi = new VarDeclI(Location().introduce(), vs.int_var()->cast<VarDecl>());
       _model->addItem(vdi);
@@ -339,8 +341,8 @@ namespace MiniZinc {
 
   Val FZNSolverInstance::getSolutionValue(Variable* var) {
     GCLock lock;
-    Id id(Location().introduce(), var->timestamp(), nullptr);
-    auto de = getSolns2Out()->findOutputVar(id.str());
+    Id ident(Location().introduce(), var->timestamp(), nullptr);
+    auto de = getSolns2Out()->findOutputVar(ident.str());
     assert(de.first->e()); // A solution must have been assigned
     return Val(eval_int(env.envi(), de.first->e()));
   };
