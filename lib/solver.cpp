@@ -988,8 +988,8 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
 void MznSolver::addDefinitions() {
   /// TODO: currently this will always add all variables and constraints
   for (Variable* v = interpreter->root()->next(); v != interpreter->root(); v = v->next()) {
-    Val va = Val::follow_alias(Val(v));
-    if (va.isVar()) {
+    // Only add variables that are not aliased
+    if (Val(v) == Val::follow_alias(Val(v))) {
       si->addVariable(v);
     }
   }
