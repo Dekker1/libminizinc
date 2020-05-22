@@ -339,14 +339,13 @@ namespace MiniZinc {
         }
 
         bool propImmediately = false;
-        for (unsigned int j=0; j < c->arg(1).size(); j++) {
-          if (c->arg(1)[j].isVar()) {
-            c->arg(1)[j].toVar()->subscribe(c, Variable::SES_ANY);
-          } else {
-            propImmediately = true;
-          }
+        int vars = 0;
+        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
+          Val v = c->arg(1)[0][j];
+          assert(v.isVar());
+          v.toVar()->subscribe(c, Variable::SES_VAL);
         }
-        if (propImmediately) {
+        if (c->arg(1)[0].size() <= 2 /* || propImmediately */) {
           return propagate(i,c);
         } else {
           return PS_OK;
@@ -360,7 +359,30 @@ namespace MiniZinc {
           }
         }
       }
-      virtual PropStatus propagate(Interpreter& i, Constraint* c) const { return PS_OK; }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        // FIXME: Deal with Variables turned into parameters
+        if (c->arg(1)[0].size() == 1) {
+          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+          return v.toVar()->setVal(&i, c->arg(2)() / c->arg(0)[0][0]()) ? PS_ENTAILED : PS_FAILED;
+        }
+        if (c->arg(1)[0].size() == 2) {
+          Val lhs = Val::follow_alias(c->arg(1)[0][0], &i);
+          Val rhs = Val::follow_alias(c->arg(1)[0][1], &i);
+          if (c->arg(2)() == 0 && (c->arg(0)[0][0]() + c->arg(0)[0][1]()) == 0) {
+            if (lhs.toVar()->timestamp() < rhs.toVar()->timestamp()) {
+              std::swap(lhs, rhs);
+            }
+            bool success = rhs.toVar()->intersectDom(&i, Val(lhs.toVar()->domain()));
+            if (!success) {
+              return PS_FAILED;
+            }
+            lhs.toVar()->alias(&i, rhs);
+            return PS_ENTAILED;
+          }
+        }
+        // More propagation?
+        return PS_OK;
+      }
     };
 
     class Uniform : public PrimitiveMap::Primitive {
