@@ -68,6 +68,7 @@ namespace MiniZinc {
       Status next(void) override {return SolverInstance::ERROR;}
 
       Status solve(void) override;
+      void printStatistics(bool fLegend=0) override;
 
       void processFlatZinc(void) override;
 
@@ -92,10 +93,11 @@ namespace MiniZinc {
 
       void resetSolver(void) override;
 
+      Model* getModel() { return _model; };
     protected:
-    void createFunctionItems();
-    Expression* getSolutionValue(Id* id);
-    Expression* val_to_expr(Type ty, Val v);
+      void createFunctionItems();
+      Expression* getSolutionValue(Id* id);
+      Expression* val_to_expr(Type ty, Val v);
   };
 
   class FZN_SolverFactory: public SolverFactory {

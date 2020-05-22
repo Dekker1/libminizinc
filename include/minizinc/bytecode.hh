@@ -331,7 +331,6 @@ namespace MiniZinc {
     void assign(Interpreter* interpreter, const Val& v);
     void assign(Interpreter* interpreter, Val&& v);
     std::string toString(bool trim=false) const;
-    Expression* const toFZN(const std::unordered_map<int, VarDecl*>& vdmap = {});
     IntVal lb() const;
     IntVal ub() const;
     bool isFixed() const;
@@ -686,13 +685,8 @@ namespace MiniZinc {
     Variable* next(void) const { return _next; }
 
     static void dump(Variable* d, const std::vector<BytecodeProc>& bs, std::ostream& os);
-    VarDecl* varDecl(void);
-    static void toFZN(Variable* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
-    static void toFZNItem(Variable* d, const std::vector<BytecodeProc>& bs, Model* model, std::unordered_map<int, VarDecl*>& vdmap, Interpreter* interpreter=nullptr);
-    static void addToSolver(Interpreter* interpreter, Variable* d, const std::vector<BytecodeProc>& bs, SolverInstanceBase* si);
 
     // Propagation interface
-    
     /// Flag whether definition's domain is binding
     bool binding(void) const { return _binding==1; }
     /// Set flag whether definition's domain is binding
@@ -701,7 +695,6 @@ namespace MiniZinc {
     void subscribe(Constraint* d, const SubscriptionEventSet& events);
     /// Remove \a c from set of subscribed constraints
     void unsubscribe(Constraint* c);
-
   };
 
   void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
@@ -1076,7 +1069,6 @@ namespace MiniZinc {
     void schedule(Constraint* d, const Variable::SubscriptionEvent& ev);
     void deschedule(Constraint* d);
     void propagate(void);
-    Model* toFZN();
     void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
 
     Val infinite_domain() {

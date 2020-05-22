@@ -188,10 +188,7 @@ namespace MiniZinc {
 
 
   FZNSolverInstance::FZNSolverInstance(std::ostream& log, SolverInstanceBase::Options* options)
-    : SolverInstanceBase(log, options), _model(new Model()), env(_model) {
-    auto ofs = new std::ofstream("/dev/null");
-    pS2Out = new Solns2Out(*ofs, log, "");
-  }
+    : SolverInstanceBase(log, options), _model(new Model()), env(_model) {}
 
   FZNSolverInstance::~FZNSolverInstance(void) {}
 
@@ -361,6 +358,42 @@ namespace MiniZinc {
     }
     _model->compact();
     stack.pop_back();
+  }
+
+  void FZNSolverInstance::printStatistics(bool fLegend) {
+    FlatModelStatistics stats = statistics(_model);
+    auto& out = getSolns2Out()->getOutput();
+
+    out << "% Generated FlatZinc statistics:\n";
+
+    if (stats.n_bool_vars) { out << "%%%mzn-stat: flatBoolVars=" << stats.n_bool_vars << endl; }
+    if (stats.n_int_vars) { out << "%%%mzn-stat: flatIntVars=" << stats.n_int_vars << endl; }
+    if (stats.n_float_vars) { out << "%%%mzn-stat: flatFloatVars=" << stats.n_float_vars << endl; }
+    if (stats.n_set_vars) { out << "%%%mzn-stat: flatSetVars=" << stats.n_set_vars << endl; }
+
+    if (stats.n_bool_ct) { out << "%%%mzn-stat: flatBoolConstraints=" << stats.n_bool_ct << endl; }
+    if (stats.n_int_ct) { out << "%%%mzn-stat: flatIntConstraints=" << stats.n_int_ct << endl; }
+    if (stats.n_float_ct) { out << "%%%mzn-stat: flatFloatConstraints=" << stats.n_float_ct << endl; }
+    if (stats.n_set_ct) { out << "%%%mzn-stat: flatSetConstraints=" << stats.n_set_ct << endl; }
+
+    if (stats.n_reif_ct) { out << "%%%mzn-stat: evaluatedReifiedConstraints=" << stats.n_reif_ct << endl; }
+    if (stats.n_imp_ct) { out << "%%%mzn-stat: evaluatedHalfReifiedConstraints=" << stats.n_imp_ct << endl; }
+
+    if (stats.n_imp_del) { out << "%%%mzn-stat: eliminatedImplications=" << stats.n_imp_del << endl; }
+    if (stats.n_lin_del) { out << "%%%mzn-stat: eliminatedLinearConstraints=" << stats.n_lin_del << endl; }
+
+    /// Objective / SAT. These messages are used by mzn-test.py.
+    SolveI* solveItem = _model->solveItem();
+    if (solveItem && solveItem->st() != SolveI::SolveType::ST_SAT) {
+      if (solveItem->st() == SolveI::SolveType::ST_MAX) {
+        out << "%%%mzn-stat: method=\"maximize\"" << endl;
+      } else {
+        out << "%%%mzn-stat: method=\"minimize\"" << endl;
+      }
+    } else {
+      out << "%%%mzn-stat: method=\"satisfy\"" << endl;
+    }
+    out << "%%%mzn-stat-end" << endl << endl;
   }
 
   SolverInstance::Status

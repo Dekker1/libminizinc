@@ -29,49 +29,6 @@
 
 namespace MiniZinc {
 
-  Expression* const Val::toFZN(const std::unordered_map<int, VarDecl*>& vdmap) {
-    GCLock lock;
-    if (this->isInt()) {
-      return IntLit::a((*this)());
-    } else if (this->isVar()) {
-      auto it = vdmap.find(this->timestamp());
-      assert(it != vdmap.end());
-      VarDecl* vd = it->second;
-      auto id = new Id(Location().introduce(), this->timestamp(), vd);
-      id->type(vd->type());
-      return id;
-    } else {
-      // Expected [[actual array], [indexes]]
-      assert(this->isVec());
-      if (this->size() == 2 && (*this)[0].isVec() && (*this)[1].isVec()) {
-        // this is an array
-        Val vec = (*this)[0];
-        std::vector<Expression*> evec(vec.size());
-        bool par = true;
-        for (int i = 0; i < vec.size(); ++i) {
-          Val v = follow_alias(vec[i]);
-          assert(!v.isVec());
-          evec[i] = v.toFZN(vdmap);
-          par = par && evec[i]->type().ispar();
-        }
-        auto al = new ArrayLit(Location().introduce(), evec);
-        al->type(par ? Type::parint(1) : Type::varint(1));
-        assert((*this)[1].size() == 2 && (*this)[1][0]() == 1 && (*this)[1][1]() == vec.size());
-        return al;
-      } else {
-        // this is a set
-        std::vector<IntSetVal::Range> ranges;
-        Vec* vec = this->toVec();
-        for (int i=0; i<vec->size(); i+=2) {
-          ranges.push_back(IntSetVal::Range((*vec)[i](),(*vec)[i+1]()));
-        }
-        auto sl = new SetLit(Location().introduce(), IntSetVal::a(ranges));
-        return sl;
-      }
-    }
-  }
-
-
   Val
   AggregationCtx::createVec(Interpreter* interpreter, int timestamp) const {
     return Val(Vec::a(interpreter, timestamp, stack));
@@ -478,20 +435,6 @@ namespace MiniZinc {
       }
       d = d->next();
     } while (d != head);
-  }
-
-  VarDecl* Variable::varDecl(void) {
-    Vec* dom = domain();
-    assert(dom->size() >= 2 && dom->size() % 2 == 0);
-    std::vector<IntSetVal::Range> ranges;
-    for (int i = 0; i < dom->size(); i += 2) {
-      ranges.emplace_back((*dom)[i](), (*dom)[i+1]());
-    }
-    SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
-    auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-    auto vd = new VarDecl(Location().introduce(), ti, timestamp());
-    vd->addAnnotation(constants().ann.output_var);
-    return vd;
   }
 
   std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v) {
@@ -1467,6 +1410,7 @@ namespace MiniZinc {
           assert(frame->reg[r1].size()==2);
           assert(frame->reg[r1][0].isVec());
           assert(frame->reg[r1][1].isVec());
+
           std::vector<std::pair<IntVal,IntVal>> dimensions;
           IntVal realdim = 1;
           for (int i=0; i<frame->reg[r1][1].size(); i+=2) {
@@ -1488,7 +1432,7 @@ namespace MiniZinc {
             realidx += (ix-dimensions[i].first)*realdim;
           }
           assert(realidx >= 0 && realidx < frame->reg[r1][0].size());
-          
+
           Val v = Val::follow_alias(frame->reg[r1][0][realidx.toInt()], this);
           frame->reg.assign(this, r2, v);
           DBG_INTERPRETER(" R" << r2 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
@@ -2151,81 +2095,6 @@ execute_ret:
   void
   Interpreter::dumpState() { dumpState(std::cerr); }
 
-  Model*
-  Interpreter::toFZN() {
-    GCLock lock;
-    auto fzn = new Model();
-    if (_status != ROGER) {
-      std::vector<Expression*> args = {constants().boollit(true), constants().boollit(false)};
-      auto fail = new Call(Location().introduce(), constants().ids.bool_eq, args);
-      auto failI = new ConstraintI(Location().introduce(), fail);
-      fzn->addItem(failI);
-    } else {
-      std::unordered_map<int, VarDecl*> vdmap;
-      for (Variable* v = _root_var->next(); v != _root_var; v = v->next()) {
-        Val va = Val::follow_alias(Val(v),this);
-        if (va.isVar()) {
-          VarDecl* vd = va.toVar()->varDecl();
-          vdmap.emplace(va.timestamp(), vd);
-          auto vdi = new VarDeclI(Location().introduce(), vd);
-          fzn->addItem(vdi);
-        }
-      }
-      Variable* v = _root_var;
-      do {
-        for (Constraint* c : v->definitions()) {
-          const BytecodeProc& proc = _procs[c->pred()];
-          std::string name = proc.name;
-          std::vector<Expression*> args(proc.nargs);
-          for (int i = 0; i < proc.nargs; ++i) {
-            Val v = Val::follow_alias(c->arg(i), this);
-            args[i] = v.toFZN(vdmap);
-          }
-          auto call = new Call(Location().introduce(), name, args);
-          auto ci = new ConstraintI(Location().introduce(), call);
-          fzn->addItem(ci);
-        }
-        v = v->next();
-      } while (v != _root_var);
-
-      Env env(fzn);
-      std::vector<FunctionI*> toAdd;
-      for (auto ci = fzn->begin_constraints(); ci != fzn->end_constraints(); ++ci) {
-        auto call = ci->e()->cast<Call>();
-        FunctionI* fi = fzn->matchFn(env.envi(), call, false);
-        if (!fi) {
-          std::vector<VarDecl*> args;
-          for (int i = 0; i < call->n_args(); ++i) {
-            TypeInst* ti;
-            if (call->arg(i)->type().dim() > 0) {
-              auto al = eval_array_lit(env.envi(), call->arg(i));
-              std::vector<TypeInst*> ranges(al->dims());
-              for (auto& range : ranges) {
-                range = new TypeInst(Location().introduce(), Type::parint(), nullptr);
-              }
-              ti = new TypeInst(Location().introduce(), call->arg(i)->type(), ranges, nullptr);
-            } else {
-              ti = new TypeInst(Location().introduce(), call->arg(i)->type(), nullptr);
-            }
-            args.push_back(new VarDecl(Location().introduce(), ti, i));
-          }
-          auto ti = new TypeInst(Location().introduce(), Type::varbool());
-          fi = new FunctionI(Location().introduce(), call->id().str(), ti, args, nullptr);
-          fzn->registerFn(env.envi(), fi);
-          toAdd.push_back(fi);
-        }
-        call->decl(fi);
-      }
-      env.model(nullptr);
-      for (const auto& j : toAdd) {
-        fzn->addItem(j);
-      }
-    }
-    // TODO: What solve item should we add?
-    fzn->addItem(SolveI::sat(Location().introduce()));
-    return fzn;
-  }
-  
   Interpreter::~Interpreter(void) {
     globals.destroy(this);
     for (auto& f : _stack) {
@@ -2329,6 +2198,7 @@ execute_ret:
 //      RefCountedObject::rmWRef(this, def);
 //    }
 //    return !delayed_calls.empty();
+    return false;
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
