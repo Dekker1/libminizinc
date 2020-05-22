@@ -20,13 +20,11 @@ namespace MiniZinc {
   class PrimitiveMap {
   public:
     enum Id {
-      ALIAS,
       MK_INTVAR,
       BOOLNOT,
       CLAUSE,
       FORALL,
       EXISTS,
-      INT_EQ,
       INT_TIMES,
       INT_LIN_EQ,
       UNIFORM,
@@ -96,13 +94,6 @@ namespace MiniZinc {
   PrimitiveMap& primitiveMap(void);
   
   namespace BytecodePrimitives {
-
-    class Alias : public PrimitiveMap::Primitive {
-    public:
-      Alias(void) : PrimitiveMap::Primitive("<alias>",PrimitiveMap::ALIAS,1) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const { return PS_OK; }
-      virtual void unsubscribe(Interpreter& i, Constraint* c) const {}
-    };
 
     class MkIntVar : public PrimitiveMap::Primitive {
     public:
@@ -266,32 +257,6 @@ namespace MiniZinc {
       virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
         return PS_OK;
       }
-    };
-
-    class IntEq : public PrimitiveMap::Primitive {
-    public:
-      IntEq(void) : PrimitiveMap::Primitive("int_eq", PrimitiveMap::INT_EQ, 2) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
-        Val x(c->arg(0));
-        Val y(c->arg(1));
-        if (x.isInt() && y.isInt()) {
-          return c->arg(0)() == c->arg(1)() ? PS_ENTAILED : PS_FAILED;
-        }
-        if (!y.isVar()) {
-          std::swap(x, y);
-        }
-        assert(y.isVar());
-        if (x.isInt()) {
-          return y.toVar()->setVal(&i, x()) ? PS_ENTAILED : PS_FAILED;
-        }
-        bool success = y.toVar()->intersectDom(&i, Val(x.toVar()->domain()));
-        if (!success) {
-          return PS_FAILED;
-        }
-        y.toVar()->alias(&i, x);
-        return PS_ENTAILED;
-      }
-      virtual void unsubscribe(Interpreter& i, Constraint* c) const {}
     };
 
     class IntTimes : public PrimitiveMap::Primitive {
