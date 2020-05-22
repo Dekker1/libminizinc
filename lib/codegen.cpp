@@ -1628,6 +1628,19 @@ void show(O& out, CodeGen& cg) {
     Model m;
     for (auto g : cg.globals_env) {
       if (g.second.second) {
+        TypeInst* ti = g.first->ti();
+        // TODO: This removes information from the origin model. Could be reverted after printing
+        if (ti->isarray()) {
+          std::vector<TypeInst*> ranges(ti->ranges().size());
+          for (int i = 0; i < ranges.size(); ++i) {
+            ranges[i] = new TypeInst(Location().introduce(), Type::parint());
+          }
+          auto nti = new TypeInst(Location().introduce(), ti->type(), ranges);
+          g.first->ti(nti);
+        } else if (ti->domain()) {
+          auto nti = new TypeInst(Location().introduce(), ti->type());
+          g.first->ti(nti);
+        }
         g.first->ann().add(new Call(Location().introduce(), constants().ann.global_register, {IntLit::a(g.second.first)}));
         m.addItem(new VarDeclI(Location().introduce(), g.first));
       }
