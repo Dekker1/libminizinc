@@ -1964,10 +1964,9 @@ execute_ret:
           // Decrement depth counter for current aggregation context
           _agg.back().n_symbols--;
           if (_agg.back().n_symbols==0) {
-            
             // Result produced by this aggregation
             Variable* result = nullptr;
-                        
+
             assert(_agg.size() >= 2);
             switch (_agg.back().symbol) {
               case AggregationCtx::VCTX_AND:
@@ -1995,9 +1994,9 @@ execute_ret:
                 } else if (_agg.size()==2) {
                   // Push into root context
                   for (Val v : args) {
-                    auto succes = v.toVar()->setVal(this, 1);
+                    auto success = v.toVar()->setVal(this, 1);
                     //FIXME: Deal with unsuccessful setVal
-                    assert(succes);
+                    assert(success);
                   }
 
                   // Why do we need a definition? If this is in ROOT, then all arguments should be true
@@ -2024,12 +2023,11 @@ execute_ret:
               {
                 // Create a clause on the definition stack, and push a reference
                 // to it onto the aggregation stack
-                
-                std::vector<Val> args;
-                args.reserve(_agg.back().size());
+                std::vector<Val> pos;
+                std::vector<Val> neg;
                 bool isTrue = false;
                 for (int i=0; i<_agg.back().size(); i++) {
-                  const Val& v = _agg.back()[i];
+                  const Val& v = Val::follow_alias(_agg.back()[i]);
                   if (v.isInt()) {
                     if(v()!=0) {
                       // Disjunction is constant true
@@ -2037,29 +2035,49 @@ execute_ret:
                       break;
                     }
                   } else {
-                    args.push_back(v);
+                    Variable* cur = v.toVar();
+                    if (Constraint* defby = cur->defined_by()) {
+                      if (defby->pred() == PrimitiveMap::BOOLNOT) {
+                        if (Val::follow_alias(defby->arg(0)) == v) {
+                          neg.push_back(Val::follow_alias(defby->arg(1)));
+                        } else {
+                          neg.push_back(Val::follow_alias(defby->arg(0)));
+                        }
+                        continue;
+                      }
+                    }
+                    pos.push_back(v);
                   }
                 }
-                if (isTrue || args.empty()) {
+                if (isTrue || (pos.empty() && neg.empty())) {
                   // Disjunction is constant true or false
-                  /// TODO: check, what if _agg.size()==2 as below?
-                  pushAgg(IntVal(isTrue),-2);
-                } else if (_agg.size()==2) {
-                  // Push into root context
-                  Vec* arr = Vec::allocate_array(this, newIdent(), args);
-                  Vec* empty = Vec::allocate_array(this, newIdent(), {});
-                  /// TODO: check, why not EXISTS? Is it guaranteed that this will be processed further?
-                  Constraint* c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(arr), Val(empty)});
-                  root()->addDefinition(this, c);
-                } else if (args.size() == 1) {
-                  pushAgg(args[0],-2);
+                  if (_agg.size() > 2) {
+                    pushAgg(IntVal(isTrue),-2);
+                  }
+                } else if (pos.size() == 1 && neg.empty()) {
+                  if (_agg.size()==2) {
+                    auto success = pos[0].toVar()->setVal(this, 1);
+                    //FIXME: Deal with unsuccessful setVal
+                    assert(success);
+                  } else {
+                    pushAgg(pos[0],-2);
+                  }
                 } else {
-                  Vec* arr = Vec::allocate_array(this, newIdent(), args);
-                  result = Variable::a(this,boolean_domain(),false, newIdent());
-                  Constraint* def_c = Constraint::a(this, PrimitiveMap::EXISTS, BytecodeProc::ROOT, {Val(arr), Val(result)});
-                  result->addDefinition(this, def_c);
-                  pushAgg(Val(result),-2);
-                  result->makeUniqueReference();
+                  // Push into root context
+                  Vec* vpos = Vec::allocate_array(this, newIdent(), pos);
+                  Vec* vneg = Vec::allocate_array(this, newIdent(), neg);
+                  /// TODO: check, why not EXISTS? Is it guaranteed that this will be processed further?
+                  if (_agg.size() == 2) {
+                    Vec* empty = Vec::allocate_array(this, newIdent(), {});
+                    Constraint* c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)});
+                    root()->addDefinition(this, c);
+                  } else {
+                    result = Variable::a(this,boolean_domain(),false, newIdent());
+                    Constraint* def_c = Constraint::a(this, PrimitiveMap::CLAUSE_REIF, BytecodeProc::ROOT, {Val(vpos), Val(vneg), Val(result)});
+                    result->addDefinition(this, def_c);
+                    pushAgg(Val(result),-2);
+                    result->makeUniqueReference();
+                  }
                 }
               }
                 break;

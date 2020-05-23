@@ -17,6 +17,7 @@ namespace MiniZinc {
     BoolNot boolnot;
     MkIntVar mk_intvar;
     Clause clause;
+    ClauseReif clause_reif;
     Forall forall;
     Exists exists;
     IntTimes inttimes;
@@ -32,7 +33,7 @@ namespace MiniZinc {
     SliceXd slice_xd;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &mk_intvar, &boolnot, &clause, &forall, &exists, &inttimes, &int_lin_eq, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
+      &mk_intvar, &boolnot, &clause, &clause_reif, &forall, &exists, &inttimes, &int_lin_eq, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
     };
   }
   

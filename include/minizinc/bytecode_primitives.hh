@@ -23,6 +23,7 @@ namespace MiniZinc {
       MK_INTVAR,
       BOOLNOT,
       CLAUSE,
+      CLAUSE_REIF,
       FORALL,
       EXISTS,
       INT_TIMES,
@@ -145,19 +146,19 @@ namespace MiniZinc {
 
     class Clause : public PrimitiveMap::Primitive {
     public:
-      Clause(void) : PrimitiveMap::Primitive("clause",PrimitiveMap::CLAUSE,2) {}
+      Clause(void) : PrimitiveMap::Primitive("bool_clause",PrimitiveMap::CLAUSE,2) {}
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
         bool propImmediately = false;
-        for (unsigned int i=0; i<c->arg(0).size(); i++) {
+        for (unsigned int i=0; i<c->arg(0)[0].size(); i++) {
           if (c->arg(0)[0][i].isVar()) {
             c->arg(0)[0][i].toVar()->subscribe(c, Variable::SES_VAL);
           } else {
             propImmediately = true;
           }
         }
-        for (unsigned int i=0; i<c->arg(1).size(); i++) {
+        for (unsigned int i=0; i<c->arg(1)[0].size(); i++) {
           if (c->arg(1)[0][i].isVar()) {
-            c->arg(1)[i].toVar()->subscribe(c, Variable::SES_VAL);
+            c->arg(1)[0][i].toVar()->subscribe(c, Variable::SES_VAL);
           } else {
             propImmediately = true;
           }
@@ -180,6 +181,55 @@ namespace MiniZinc {
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const { return PS_OK; }
+    };
+
+    class ClauseReif : public PrimitiveMap::Primitive {
+    public:
+      ClauseReif(void) : PrimitiveMap::Primitive("bool_clause_reif", PrimitiveMap::CLAUSE_REIF, 3) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        bool propImmediately = false;
+        for (unsigned int i=0; i<c->arg(0)[0].size(); i++) {
+          if (c->arg(0)[0][i].isVar()) {
+            c->arg(0)[0][i].toVar()->subscribe(c, Variable::SES_VAL);
+          } else {
+            propImmediately = true;
+          }
+        }
+        for (unsigned int i=0; i<c->arg(1)[0].size(); i++) {
+          if (c->arg(1)[0][i].isVar()) {
+            c->arg(1)[0][i].toVar()->subscribe(c, Variable::SES_VAL);
+          } else {
+            propImmediately = true;
+          }
+        }
+        if (c->arg(2).isVar()) {
+            c->arg(2).toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (propImmediately) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (unsigned int i=0; i<c->arg(0).size(); i++) {
+          Val arg = Val::follow_alias(c->arg(0)[0][i]);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+        for (unsigned int i=0; i<c->arg(1).size(); i++) {
+          Val arg = Val::follow_alias(c->arg(1)[0][i]);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+        Val arg = Val::follow_alias(c->arg(2));
+        if (arg.isVar()) {
+          arg.toVar()->unsubscribe(c);
         }
       }
       virtual PropStatus propagate(Interpreter& i, Constraint* c) const { return PS_OK; }
