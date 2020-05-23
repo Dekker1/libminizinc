@@ -293,7 +293,15 @@ namespace MiniZinc {
   void FZNSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
     GCLock lock;
     const BytecodeProc& proc = bs[c->pred()];
-    std::string name = proc.name;
+    const std::string& name = proc.name;
+    if (name == "minimize_this") {
+      _model->addItem(SolveI::min(Location().introduce(), val_to_expr(Type::varint(), c->arg(0))));
+      return;
+    }
+    if (name == "maximize_this") {
+      _model->addItem(SolveI::max(Location().introduce(), val_to_expr(Type::varint(), c->arg(0))));
+      return;
+    }
     auto fnit = _model->fnmap.find(ASTString(name));
     assert(fnit != _model->fnmap.end());
     assert(fnit->second.size() == 1);

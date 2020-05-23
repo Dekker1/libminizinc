@@ -426,7 +426,23 @@ namespace MiniZinc {
   }
 
   void GecodeSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
-    _constraintRegistry.post(bs[c->pred()].name, c);
+    const std::string& name = bs[c->pred()].name;
+    if (name == "minimize_this" || name == "maximize_this") {
+      _current_space->_optVarIsInt = true;
+      _current_space->_solveType = name == "minimize_this" ? MiniZinc::SolveI::SolveType::ST_MIN : MiniZinc::SolveI::SolveType::ST_MAX;
+      GecodeVariable var = resolveVar(c->arg(0).toVar());
+      IntVar intVar = var.intVar(_current_space);
+      for(unsigned int i=0; i<_current_space->iv.size(); i++) {
+        if(_current_space->iv[i].varimp()==intVar.varimp()) {
+          _current_space->_optVarIdx = i;
+          break;
+        }
+      }
+      GCLock lock;
+      solveExpr = new Id(Location().introduce(), c->arg(0).timestamp(), nullptr);
+      return;
+    }
+    _constraintRegistry.post(name, c);
   }
   void GecodeSolverInstance::addVariable(Variable* var) {
     GecodeConstraints::p_mk_intvar(*this, var);
@@ -1427,7 +1443,6 @@ namespace MiniZinc {
       // TODO: check what we need to do options-wise
       std::vector<Expression*> branch_vars;
       std::vector<Expression*> solve_args;
-      Expression* solveExpr = nullptr; //_flat->solveItem()->e();
       Expression* optSearch = NULL;
       
       switch(_current_space->_solveType) {

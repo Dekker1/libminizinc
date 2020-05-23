@@ -243,8 +243,8 @@ namespace MiniZinc {
     int _n_max_solutions;
     int _n_found_solutions;
     bool _allow_unbounded_vars;
-    Model* _flat;
     std::vector<FznSpace*> stack;
+    Expression* solveExpr = nullptr;
   public:
     /// the Gecode space that will be/has been solved
     FznSpace* _current_space; 
