@@ -117,7 +117,18 @@ namespace MiniZinc {
       new (&_args[i]) Val(args[i]);
       _args[i].construct(interpreter);
     }
-    interpreter->subscribe(this);
+  }
+
+  std::pair<Constraint*, bool> Constraint::a(Interpreter* interpreter, int pred, char mode, const std::vector<Val>& args, Val defines, Val ann) {
+    Constraint* c = static_cast<Constraint*>(::malloc(sizeof(Constraint)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
+    c = new (c) Constraint(interpreter,pred,mode,args,ann,defines);
+    PropStatus ps = interpreter->subscribe(c);
+    if (ps == PS_ENTAILED || ps == PS_FAILED) {
+      c->destroy(interpreter);
+      Constraint::free(c);
+      return {nullptr, ps == PS_ENTAILED};
+    }
+    return {c, true};
   }
 
   Variable::Variable(Interpreter* interpreter, Val domain, int ident)
@@ -1161,11 +1172,12 @@ namespace MiniZinc {
     _agg.back().constraints.push_back(c);
   }
     
-  void
+  PropStatus
   Interpreter::subscribe(Constraint* c) {
     if (c->pred() < primitiveMap().size()) {
-      primitiveMap()[c->pred()]->subscribe(*this, c);
+      return primitiveMap()[c->pred()]->subscribe(*this, c);
     }
+    return PS_OK;
   }
   void
   Interpreter::unsubscribe(Constraint* c) {
@@ -1198,12 +1210,12 @@ namespace MiniZinc {
       c->scheduled(false);
       auto ps = primitiveMap()[c->pred()]->propagate(*this, c);
       switch (ps) {
-        case PrimitiveMap::Primitive::PS_OK:
+        case PS_OK:
           break;
-        case PrimitiveMap::Primitive::PS_FAILED:
+        case PS_FAILED:
           _status = INCONSISTENT;
           return;
-        case PrimitiveMap::Primitive::PS_ENTAILED:
+        case PS_ENTAILED:
           // TODO: remove constraint
           break;
       }
@@ -1788,11 +1800,20 @@ execute_ret:
               pushAgg(Val(v), -1);
             } else {
               assert(mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG);
-              Constraint* c = Constraint::a(this, code, mode, args);
-              pushConstraint(c);
+              auto c = Constraint::a(this, code, mode, args);
+              if (!(c.first || c.second)) {
+                // Propagation failed
+                _status = INCONSISTENT;
+                // Invariant: Last instruction in the frame is always an ABORT instruction
+                frame->pc = frame->bs->size()-1;
+                break;
+              }
+              if (c.first){
+                pushConstraint(c.first);
+              }
               if (cse_suited) {
-                Val const1(1);
-                cse_insert(code, cse_key, mode, const1);
+                Val ret(c.second);
+                cse_insert(code, cse_key, mode, ret);
               }
               /// TODO: delayed calls
   //            if (_procs[code].delay) {
@@ -1876,11 +1897,20 @@ execute_ret:
             DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
             // this is a FlatZinc builtin
             assert(mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG);
-            Constraint* c = Constraint::a(this,code,mode,args);
-            pushConstraint(c);
+            auto c = Constraint::a(this, code, mode, args);
+            if (!(c.first || c.second)) {
+              // Propagation failed
+              _status = INCONSISTENT;
+              // Invariant: Last instruction in the frame is always an ABORT instruction
+              frame->pc = frame->bs->size()-1;
+              break;
+            }
+            if (c.first){
+              pushConstraint(c.first);
+            }
             if (cse_suited) {
-              Val const1(1);
-              cse_insert(code, cse_key, mode, const1);
+              Val ret(c.second);
+              cse_insert(code, cse_key, mode, ret);
             }
             /// TODO: delayed calls
 //            if (_procs[code].delay) {
@@ -2056,8 +2086,9 @@ execute_ret:
                 } else {
                   Vec* arr = Vec::allocate_array(this, newIdent(), args);
                   result = Variable::a(this,boolean_domain(),false, newIdent());
-                  Constraint* def_c = Constraint::a(this, PrimitiveMap::FORALL, BytecodeProc::ROOT, {Val(arr), Val(result)});
-                  result->addDefinition(this, def_c);
+                  auto def_c = Constraint::a(this, PrimitiveMap::FORALL, BytecodeProc::ROOT, {Val(arr), Val(result)});
+                  assert(def_c.first);
+                  result->addDefinition(this, def_c.first);
                   pushAgg(Val(result),-2);
                   result->makeUniqueReference();
                 }
@@ -2113,12 +2144,14 @@ execute_ret:
                   /// TODO: check, why not EXISTS? Is it guaranteed that this will be processed further?
                   if (_agg.size() == 2) {
                     Vec* empty = Vec::allocate_array(this, newIdent(), {});
-                    Constraint* c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)});
-                    root()->addDefinition(this, c);
+                    auto c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)});
+                    assert(c.first);
+                    root()->addDefinition(this, c.first);
                   } else {
                     result = Variable::a(this,boolean_domain(),false, newIdent());
-                    Constraint* def_c = Constraint::a(this, PrimitiveMap::CLAUSE_REIF, BytecodeProc::ROOT, {Val(vpos), Val(vneg), Val(result)});
-                    result->addDefinition(this, def_c);
+                    auto def_c = Constraint::a(this, PrimitiveMap::CLAUSE_REIF, BytecodeProc::ROOT, {Val(vpos), Val(vneg), Val(result)});
+                    assert(def_c.first);
+                    result->addDefinition(this, def_c.first);
                     pushAgg(Val(result),-2);
                     result->makeUniqueReference();
                   }

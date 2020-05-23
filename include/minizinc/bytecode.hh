@@ -27,6 +27,7 @@ namespace MiniZinc {
   class Interpreter;
   class SolverInstanceBase;
 
+  enum PropStatus { PS_OK, PS_FAILED, PS_ENTAILED };
   class BytecodeStream {
   protected:
     /// The bytecode stream
@@ -559,11 +560,7 @@ namespace MiniZinc {
     Val _args[1];
     Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines);
   public:
-    static Constraint* a(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val defines=IntVal(1), Val ann=IntVal(0)) {
-      Constraint* c = static_cast<Constraint*>(::malloc(sizeof(Constraint)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
-      new (c) Constraint(interpreter,pred,mode,args,ann,defines);
-      return c;
-    }
+    static std::pair<Constraint*, bool> a(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val defines=IntVal(1), Val ann=IntVal(0));
     static void free(Constraint* c) {
       ::free(c);
     }
@@ -1062,7 +1059,7 @@ namespace MiniZinc {
     }
     void set_global(int i, const Val& val) { globals.assign(this, i, val); }
     const Val get_global(int i) { return globals[i]; }
-    void subscribe(Constraint* c);
+    PropStatus subscribe(Constraint* c);
     void unsubscribe(Constraint* d);
     int newIdent(void) { return _identCount++; }
     int currentIdent(void) const { return _identCount; }

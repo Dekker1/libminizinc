@@ -46,7 +46,6 @@ namespace MiniZinc {
       Id _ident;
       Primitive(const std::string& name, const Id& ident0, int n_args0) : _name(name), _n_args(n_args0), _ident(ident0) {}
     public:
-      enum PropStatus { PS_OK, PS_FAILED, PS_ENTAILED };
       PropStatus ps_combine(const PropStatus& ps0, const PropStatus& ps1) {
         if (ps0==PS_FAILED || ps1==PS_FAILED)
           return PS_FAILED;
