@@ -2485,9 +2485,11 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // TODO: Specialise for literals and comprehensions.
   CG::Binding b_elts(CG::bind(e, cg, frag));
   int r_A(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_elts.first), CG::r(bind_cst(1, cg, frag)), CG::r(r_A));
+  int r_one(bind_cst(1, cg, frag));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_elts.first), CG::r(r_one), CG::r(r_A));
+
   if(e->type().ispar()) {
-    int r_sum(GET_REG(cg));   
+    int r_sum(GET_REG(cg));
     PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r_sum));
     Foreach iter(cg, r_A);
     iter.emit_pre(frag);
@@ -2496,78 +2498,38 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     return CG::Binding(r_sum, b_elts.second);
   }
 
-  if (ENABLE_PLUS) {
-    OPEN_OTHER(cg, frag);
-    // int r_one(CG::locate_immi(1, cg, frag));
-    int r_one(bind_cst(1, cg, frag));
-    int r_sz(GET_REG(cg));
-    int r_elt(GET_REG(cg));
-    int r_acc(GET_REG(cg));
-    PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_A), CG::r(r_sz));
-    int l_hd(GET_LABEL(cg));
-    int l_end(GET_LABEL(cg));
-
-    // Slightly cheeky here -- if this fails, we know the accumulator should be zero.
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_acc));
-    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_acc), CG::l(l_end));
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_acc));
-    // Second element.
-    PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r_sz));
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_elt));
-    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_elt), CG::l(l_end));
-    PUSH_LABEL(frag, l_hd);
-
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_elt));
-    // OPEN_OTHER(cg, frag); // maybe needed?
-    auto fun = find_call_fun(cg, {"op_plus"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
-    assert(fun.second == BytecodeProc::FUN);
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_elt), CG::r(r_acc));
-    // CLOSE_AGG(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_acc));
-
-    PUSH_INSTR(frag, BytecodeStream::DECI, CG::r(r_sz));
-    PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_one), CG::r(r_sz), CG::r(r_elt));
-    PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_elt), CG::l(l_hd));
-    PUSH_LABEL(frag, l_end);
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_acc));
-    CLOSE_AGG(cg, frag);
-  } else {
-    OPEN_OTHER(cg, frag);
-    int r_one(bind_cst(1, cg, frag));
-    int r_sz(GET_REG(cg));
-    int r_res(GET_REG(cg));
-
-    int l_eq0(GET_LABEL(cg));
-    int l_eq1(GET_LABEL(cg));
-    int l_end(GET_LABEL(cg));
-
-    PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_A), CG::r(r_sz));
-    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_sz), CG::l(l_eq0));
-    PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_one), CG::r(r_sz), CG::r(r_res));
-    PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_res), CG::l(l_eq1));
-
-    // Sum n arguments
-    auto fun = find_call_fun(cg, {"sum"}, Type::varint(), {Type::varint(1)}, BytecodeProc::FUN);
-    assert(fun.second == BytecodeProc::FUN);
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_A));
-    PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
-
-    // Sum zero arguments (result must be 0)
-    PUSH_LABEL(frag, l_eq0);
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_sz));
-    PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
-
-    // Sum 1 arguments (result == a[1])
-    PUSH_LABEL(frag, l_eq1);
-    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_res));
-    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_res));
-
-    // End of sum
-    PUSH_LABEL(frag, l_end);
-    CLOSE_AGG(cg, frag);
-  }
+  int r_sz(GET_REG(cg));
   int r_ret(GET_REG(cg));
+
+  int l_eq0(GET_LABEL(cg));
+  int l_eq1(GET_LABEL(cg));
+  int l_end(GET_LABEL(cg));
+
+  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_A), CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_sz), CG::l(l_eq0));
+  PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_one), CG::r(r_sz), CG::r(r_ret));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_ret), CG::l(l_eq1));
+
+  // Sum n arguments
+  auto fun = find_call_fun(cg, {"sum_cc"}, Type::varint(), {Type::varint(1)}, BytecodeProc::FUN);
+  assert(fun.second == BytecodeProc::FUN);
+  OPEN_OTHER(cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(b_elts.first));
+  CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
+  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
+
+  // Sum zero arguments (result must be 0)
+  PUSH_LABEL(frag, l_eq0);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
+
+  // Sum 1 arguments (result == a[1])
+  PUSH_LABEL(frag, l_eq1);
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_A), CG::r(r_sz), CG::r(r_ret));
+
+  // End of sum
+  PUSH_LABEL(frag, l_end);
   return CG::Binding(r_ret, b_elts.second);
 }
 

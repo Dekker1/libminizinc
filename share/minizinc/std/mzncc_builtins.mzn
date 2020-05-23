@@ -169,6 +169,14 @@ function int: min(set of int: x) = internal_min(set2array(x));
 function int: min(array[$U] of int: x) = internal_min(array1d(x));
 function bool: min(array[$U] of bool: x) = internal_min(array1d(x));
 
+/** @group builtins.arithmetic Return sum of elements in array \a x */
+function var int: sum_cc(array[$T] of var int: x) ::promise_total =
+  let {
+    array[int] of var int: xs = array1d(x);
+    var sum([lb(xi) | xi in xs])..sum([ub(xi) | xi in xs]): res;
+    constraint int_lin_eq([1 | i in index_set(xs)] ++ [-1], [res] ++ xs, 0);
+  } in res;
+
 % ---------------
 /** @group flatzinc.set Constrains \a x \( \in \) \a S */
 function var bool: op_in(var int: x, var set of int: S) ::promise_total =
