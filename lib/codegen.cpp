@@ -2426,7 +2426,7 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
                                         CG_Cond::T c = CG::compile(elt, cg, frag);
                                         post_cond(cg, frag,  c);
                                       });;
-        break;
+        return CG_Cond::T::ttt();
       }
       OPEN_OTHER(cg, frag);
       OPEN_AND(cg, frag);
