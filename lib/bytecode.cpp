@@ -487,12 +487,13 @@ namespace MiniZinc {
         if (Constraint* defby = cur->defined_by()) {
           switch (defby->pred()) {
             case PrimitiveMap::INT_LIN_EQ: {
+              // FIXME: Variables that are being replaced might have a smaller domain
               IntVal cur_coeff = 0;
               for (int i = defby->arg(1)[0].size() - 1; i >= 0; --i) {
                 Val arg = Val::follow_alias(defby->arg(1)[0][i]);
                 if (arg == stacktop) {
                   cur_coeff += defby->arg(0)[0][i]();
-                  break; // TODO: Can we assume no dumplicates?
+                  break; // TODO: Can we assume no duplicates?
                 }
                 assert(i != 0);
               }
