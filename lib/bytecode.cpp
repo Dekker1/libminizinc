@@ -1657,6 +1657,7 @@ namespace MiniZinc {
             result.emplace_back(diff_r.min());
             result.emplace_back(diff_r.max());
           }
+          result_val = Val(Vec::a(this, newIdent(), result));
           frame->reg.assign(this, r3, result_val);
           DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
