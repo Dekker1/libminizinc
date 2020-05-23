@@ -178,27 +178,6 @@ function var int: sum_cc(array[$T] of var int: x) ::promise_total =
   } in res;
 
 % ---------------
-/** @group flatzinc.set Constrains \a x \( \in \) \a S */
-function var bool: op_in(var int: x, var set of int: S) ::promise_total =
-  let {
-    var bool: b;
-    constraint set_in_reif(x, S, b);
-  } in b;
-
-/** @group flatzinc.set Constrains \a x \( \in \) \a S */
-function var bool: op_in(var int: x, set of int: S) ::promise_total =
-  if dom(x) subset S then
-    true
-  else
-    let {
-      var bool: b;
-      constraint set_in_reif(x, S, b);
-    } in b
-  endif;
-
-/** @group flatzinc.set Constrains \a x \( \in \) \a S */
-function bool: op_in(int: x, set of int: S) =
-  exists(i in S) (i == x);
 
 /***
   @groupdef builtins.ifthenelse Conditionals

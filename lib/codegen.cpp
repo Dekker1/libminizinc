@@ -4203,7 +4203,24 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       assert(b->rhs()->type().ispar());
       cond.push_back(b_lhs.second);
       cond.push_back(b_rhs.second);
-      cond.push_back(CG_Cond::call({"op_in"}, ctx, {Type::varbool(), Type::varint(), Type::varsetint()}, {CG::r(b_lhs.first), CG::r(b_rhs.first)}));
+      if (ctx == BytecodeProc::ROOT) {
+        int r(GET_REG(cg));
+        PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(b_lhs.first), CG::r(b_rhs.first), CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r), CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
+        cond.push_back(CG_Cond::reg(r));
+      } else if (ctx == BytecodeProc::ROOT_NEG) {
+        int r(GET_REG(cg));
+        PUSH_INSTR(frag, BytecodeStream::DOM, CG::r(b_lhs.first), CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r), CG::r(b_rhs.first), CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(b_lhs.first), CG::r(r), CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r), CG::r(r));
+        PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
+        cond.push_back(~CG_Cond::reg(r));
+      } else {
+        GCLock lock;
+        cond.push_back(CG_Cond::call({"set_in"}, ctx, {Type::varbool(), Type::varint(), Type::varsetint()}, {CG::r(b_lhs.first), CG::r(b_rhs.first)}));
+      }
       return CG_Cond::forall(ctx, cond);
     }
     default:
