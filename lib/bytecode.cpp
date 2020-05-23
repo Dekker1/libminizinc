@@ -723,14 +723,9 @@ namespace MiniZinc {
     // TODO: Should CSEKeys compare arrays with the same content again?
     for (const auto& val : vec) {
       if (val.isVec() && val.size()==2 && val[0].isVec() && val[1].isVec() && val[0].size() <= 5) {
-        _size += val[0].size() + val[1].size() + 2;
+        _size += val[0].size() + val[1].size() + 1;
       }
     }
-//    for (const auto& val : vec) {
-//      if (val.isVec() && val.size() <= 3) {
-//        _size += val.size();
-//      }
-//    }
     if (_size > 0) {
      _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
       size_t i = 0;
