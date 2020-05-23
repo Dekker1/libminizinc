@@ -2521,7 +2521,7 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
   // Sum zero arguments (result must be 0)
   PUSH_LABEL(frag, l_eq0);
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_sz));
+  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r_ret));
   PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
 
   // Sum 1 arguments (result == a[1])
