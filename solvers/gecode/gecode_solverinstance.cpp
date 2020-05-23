@@ -1015,7 +1015,7 @@ namespace MiniZinc {
     BoolVar x0;
     if (_v.isVar()) {
       //x0 = _current_space->bv[*(int*)resolveVar(getVarDecl(e))];
-      GecodeVariable var = resolveVar(v.toVar());
+      GecodeVariable var = resolveVar(_v.toVar());
       assert(var.isbool());
       x0 = var.boolVar(_current_space);
     } else {
