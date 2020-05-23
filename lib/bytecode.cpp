@@ -271,7 +271,10 @@ namespace MiniZinc {
         }
       }
       if (did_update) {
-        domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), newDomain)), binding0);
+        Val ndv(Vec::a(interpreter, interpreter->newIdent(), newDomain));
+        ndv.construct(interpreter);
+        domain(interpreter, ndv, binding0);
+        ndv.destroy(interpreter);
       }
     }
   }
