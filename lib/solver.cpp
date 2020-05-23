@@ -733,13 +733,15 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   bs = parse_mza(assembly);
   if (verbose) {
     std::cerr << "Disassembled code:\n";
+    int b_count=0;
     for (auto& b : bs) {
       for (int i=0; i<BytecodeProc::MAX_MODE; i++) {
         if (b.mode[i].size()>0) {
-          std::cerr << ":" << b.name << ":" << BytecodeProc::mode_to_string[i] << "\n";
+          std::cerr << ":" << b.name << ":" << BytecodeProc::mode_to_string[i] << " %% " << b_count << "\n";
           std::cerr << b.mode[i].toString(bs);
         }
       }
+      b_count++;
     }
     std::cerr << "\n";
   }
@@ -747,7 +749,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     resolve_call.insert({bs[i].name, {i, bs[i].nargs}});
   }
   // The main procedure is the last one in the file
-  BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT]);
+  BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT],bs.size()-1,BytecodeProc::ROOT);
   interpreter = new Interpreter(bs, frame);
   // Parse and add data
   if (!mzn_defs.empty()) {
