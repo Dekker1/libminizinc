@@ -1943,6 +1943,22 @@ private:
     }
   }
 
+  void vSolveI(SolveI* si) {
+    GCLock lock;
+    if (si->st() == SolveI::ST_SAT) {
+      return;
+    }
+    ASTString ident;
+    if (si->st() == SolveI::ST_MIN) {
+      ident = ASTString("minimize_this");
+    } else {
+      ident = ASTString("maximize_this");
+    }
+    auto c = new Call(si->loc(), ident, {si->e()});
+    c->type(Type::varbool());
+    post_cond(cg, root_frag, CG::compile(c, cg, root_frag));
+  }
+
   // FIXME: This method of saving the CodeGen state is pretty icky.
   // CodeGen should probably be split into two objects.
   void compile_fun(CG_Builder& frag, const ASTExprVec<VarDecl>& params, Expression* e) {
