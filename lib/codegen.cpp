@@ -456,15 +456,8 @@ int bind_binop_par_set(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, i
       return r;
     }
     case BOT_NQ: {
-      r = GET_REG(cg);
-      int r_tmp = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r), CG::r(r));
+      r = bind_binop_par_set(cg, frag, BOT_EQ, r_lhs, r_rhs);
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_rhs), CG::r(r_lhs), CG::r(r_tmp));
-      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r_tmp), CG::r(r_tmp));
-      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_tmp), CG::r(r_tmp));
-      PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r), CG::r(r_tmp), CG::r(r));
       return r;
     }
     case BOT_LE:
