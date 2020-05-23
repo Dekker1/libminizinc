@@ -296,7 +296,7 @@ void bind_binop_var(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r
   throw InternalError("Unexpected fall-through in bind_binop_var.");
 }
 
-int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r_rhs) {
+int bind_binop_par_int(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r_rhs) {
   int r;
   switch(op) {
     // Actual builtins
@@ -396,63 +396,6 @@ int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r
       PUSH_LABEL(frag, l);
       }
       return r;
-    case BOT_UNION:
-      r = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::UNION, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-      return r;
-    case BOT_INTERSECT:
-      r = GET_REG(cg);
-      PUSH_INSTR(frag, BytecodeStream::INTERSECTION, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-      return r;
-    case BOT_SUBSET: {
-      // (L subset R) <-> ((L intersect R) == L)
-      r = GET_REG(cg);
-      int l_fin(GET_LABEL(cg));
-      int r_inter(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::INTERSECTION, CG::r(r_lhs), CG::r(r_rhs), CG::r(r_inter));
-
-      int r_sz(GET_REG(cg));
-      int r_tmp(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_lhs), CG::r(r_tmp));
-      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_inter), CG::r(r_sz));
-      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_tmp), CG::r(r_sz), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_fin));
-
-      int r_idx(GET_REG(cg));
-      int l_loop(GET_LABEL(cg));
-      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_idx));
-      PUSH_LABEL(frag, l_loop);
-      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_idx), CG::r(r_sz), CG::r(r_tmp));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_tmp), CG::l(l_fin));
-
-      int r_tmp2(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_lhs), CG::r(r_idx), CG::r(r_tmp));
-      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_inter), CG::r(r_idx), CG::r(r_tmp2));
-      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_tmp), CG::r(r_tmp2), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_fin));
-
-      PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_idx));
-      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_loop));
-
-      PUSH_LABEL(frag, l_fin);
-      return r;
-    }
-    case BOT_SUPERSET: {
-      return bind_binop_par(cg, frag, BOT_SUBSET, r_rhs, r_lhs);
-    }
-    case BOT_DIFF: {
-      int r(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-      return r;
-    }
-    case BOT_SYMDIFF: {
-      int r(GET_REG(cg));
-      int r_tmp(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
-      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_rhs), CG::r(r_lhs), CG::r(r_tmp));
-      PUSH_INSTR(frag, BytecodeStream::UNION, CG::r(r), CG::r(r_tmp), CG::r(r));
-      return r;
-    }
     case BOT_PLUSPLUS:
     {
       int r_one(bind_cst(1, cg, frag));
@@ -495,6 +438,112 @@ int bind_binop_par(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r
       break;
   }
   throw InternalError("Unexpected fall-through in bind_binop_par.");
+}
+
+int bind_binop_par_set(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, int r_rhs) {
+  int r;
+  switch(op) {
+    // Actual builtins
+    case BOT_EQ:
+    case BOT_EQUIV: {
+      r = GET_REG(cg);
+      int r_tmp = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_rhs), CG::r(r_lhs), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r_tmp), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::AND, CG::r(r), CG::r(r_tmp), CG::r(r));
+      return r;
+    }
+    case BOT_NQ: {
+      r = GET_REG(cg);
+      int r_tmp = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_rhs), CG::r(r_lhs), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r_tmp), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_tmp), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r), CG::r(r_tmp), CG::r(r));
+      return r;
+    }
+    case BOT_LE:
+      r = GET_REG(cg);
+      TODO();
+      return r;
+    case BOT_LQ:
+      r = GET_REG(cg);
+      TODO();
+      return r;
+    case BOT_GR:
+      r = GET_REG(cg);
+      TODO();
+      return r;
+    case BOT_GQ:
+      r = GET_REG(cg);
+      TODO();
+      return r;
+    case BOT_UNION:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::UNION, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_INTERSECT:
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::INTERSECTION, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    case BOT_SUBSET: {
+      // (L subset R) <-> ((L intersect R) == L)
+      r = GET_REG(cg);
+      int l_fin(GET_LABEL(cg));
+      int r_inter(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::INTERSECTION, CG::r(r_lhs), CG::r(r_rhs), CG::r(r_inter));
+
+      int r_sz(GET_REG(cg));
+      int r_tmp(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_lhs), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r_inter), CG::r(r_sz));
+      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_tmp), CG::r(r_sz), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_fin));
+
+      int r_idx(GET_REG(cg));
+      int l_loop(GET_LABEL(cg));
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_idx));
+      PUSH_LABEL(frag, l_loop);
+      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_idx), CG::r(r_sz), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_tmp), CG::l(l_fin));
+
+      int r_tmp2(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_lhs), CG::r(r_idx), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_inter), CG::r(r_idx), CG::r(r_tmp2));
+      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(r_tmp), CG::r(r_tmp2), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_fin));
+
+      PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_idx));
+      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_loop));
+
+      PUSH_LABEL(frag, l_fin);
+      return r;
+    }
+    case BOT_SUPERSET: {
+      return bind_binop_par_set(cg, frag, BOT_SUBSET, r_rhs, r_lhs);
+    }
+    case BOT_DIFF: {
+      int r(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      return r;
+    }
+    case BOT_SYMDIFF: {
+      int r(GET_REG(cg));
+      int r_tmp(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_lhs), CG::r(r_rhs), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r_rhs), CG::r(r_lhs), CG::r(r_tmp));
+      PUSH_INSTR(frag, BytecodeStream::UNION, CG::r(r), CG::r(r_tmp), CG::r(r));
+      return r;
+    }
+    default:
+      break;
+  }
+  throw InternalError("Unexpected fall-through in bind_binop_par_set.");
 }
 
 CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, int r_lhs, int r_rhs) {
@@ -3716,6 +3765,10 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(b->type().ispar()) {
     CG::Binding b_lhs(CG::force_or_bind(b->lhs(), ctx, cg, frag));
     CG::Binding b_rhs(CG::force_or_bind(b->rhs(), ctx, cg, frag));
+    if (b->lhs()->type().isintset()) {
+      int r = bind_binop_par_set(cg, frag, b->op(), b_lhs.first, b_rhs.first);
+      return {r, CG_Cond::ttt()};
+    }
 
     int r_cond(GET_REG(cg));
     int l_skip(GET_LABEL(cg));
@@ -3728,7 +3781,7 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_cond), CG::r(r_cond));
       PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_skip));
     }
-    int r = bind_binop_par(cg, frag, b->op(), b_lhs.first, b_rhs.first);
+    int r = bind_binop_par_int(cg, frag, b->op(), b_lhs.first, b_rhs.first);
     PUSH_LABEL(frag, l_skip);
 
     return {r, CG_Cond::reg(r_cond)};
@@ -4167,7 +4220,12 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     for(CG_Cond::T c : cond) {
       r_cond.push_back(CG::force(c, ctx, cg, frag));
     }
-    int r_ret = bind_binop_par(cg, frag, b->op(), r_lhs, r_rhs);
+    int r_ret;
+    if (b->lhs()->type().isintset()) {
+      r_ret = bind_binop_par_set(cg, frag, b->op(), r_lhs, r_rhs);
+    } else {
+      r_ret = bind_binop_par_int(cg, frag, b->op(), r_lhs, r_rhs);
+    }
     if(r_cond.size() > 0) {
       // If any conditions don't hold, evaluate to false.
       int r(GET_REG(cg));
