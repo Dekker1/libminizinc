@@ -23,6 +23,41 @@
 #include <streambuf>
 #include <minizinc/eval_par.hh>
 
+//class DebugStream {
+//  static const int _max_size = 20;
+//  std::vector<std::string> _stream;
+//  int _i;
+//public:
+//
+//  DebugStream(void) : _stream(_max_size), _i(0) {}
+//
+//  void put(const std::string& s) {
+//    _stream[_i++]=s;
+//    if (_i==_max_size) {
+//      _i=0;
+//    }
+//  }
+//
+//  void dump(void);
+//};
+//
+//void DebugStream::dump(void) {
+//  for (int i=_i+1; i<_stream.size(); i++) {
+//    std::cerr << _stream[i];
+//  }
+//  for (int i=0; i<_i; i++) {
+//    std::cerr << _stream[i];
+//  }
+//}
+//
+//static DebugStream* __debugstream = new DebugStream;
+//
+//#define DBG_INTERPRETER(msg) do { \
+//  std::ostringstream oss;         \
+//  oss << msg;                     \
+//  __debugstream->put(oss.str());\
+//} while(0)
+
 //#define DBG_INTERPRETER(msg) std::cerr << msg
 #define DBG_INTERPRETER(msg) do {} while(0)
 #define DBG_TRIM_OUTPUT true
@@ -317,6 +352,7 @@ namespace MiniZinc {
 
   void Variable::alias(Interpreter* interpreter, Val v) {
     assert(!_aliased);
+    assert(!v.isVar() || v.toVar()!=this);
     // Move defining constraints to current context
     
     for (Constraint* c : _definitions) {
@@ -823,130 +859,131 @@ namespace MiniZinc {
     std::ostringstream oss;
     int pc = 0;
     while (pc < _bs.size()) {
+      int cur_pc = pc;
       switch (instr(pc)) {
         case BytecodeStream::ADDI:
         {
-          oss << "ADDI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "ADDI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::SUBI:
         {
-          oss << "SUBI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "SUBI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::MULI:
         {
-          oss << "MULI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "MULI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::DIVI:
         {
-          oss << "DIVI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "DIVI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::MODI:
         {
-          oss << "MODI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "MODI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::INCI:
         {
-          oss << "INCI R" << reg(pc) << "\n";
+          oss << "INCI R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::DECI:
         {
-          oss << "DECI R" << reg(pc) << "\n";
+          oss << "DECI R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::IMMI:
         {
-          oss << "IMMI " << intval(pc) << " R" << reg(pc) << "\n";
+          oss << "IMMI " << intval(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::LOAD_GLOBAL:
         {
-          oss << "LOAD_GLOBAL " << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "LOAD_GLOBAL " << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::STORE_GLOBAL:
         {
-          oss << "STORE_GLOBAL R" << reg(pc) << " " << reg(pc) << "\n";
+          oss << "STORE_GLOBAL R" << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::MOV:
         {
-          oss << "MOV R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "MOV R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::JMP:
         {
-          oss << "JMP " << reg(pc) << "\n";
+          oss << "JMP " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::JMPIF:
         {
-          oss << "JMPIF R" << reg(pc) << " " << reg(pc) << "\n";
+          oss << "JMPIF R" << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::JMPIFNOT:
         {
-          oss << "JMPIFNOT R" << reg(pc) << " " << reg(pc) << "\n";
+          oss << "JMPIFNOT R" << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::EQI:
         {
-          oss << "EQI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "EQI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::LTI:
         {
-          oss << "LTI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "LTI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::LEI:
         {
-          oss << "LEI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "LEI R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::AND:
         {
-          oss << "AND R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "AND R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::OR:
         {
-          oss << "OR R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "OR R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::NOT:
         {
-          oss << "NOT R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "NOT R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::XOR:
         {
-          oss << "XOR R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "XOR R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::ISPAR:
         {
-          oss << "ISPAR R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "ISPAR R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::ISEMPTY:
         {
-          oss << "ISEMPTY R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "ISEMPTY R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::LENGTH:
         {
-          oss << "LENGTH R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "LENGTH R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::GET_VEC:
         {
-          oss << "GET_VEC R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "GET_VEC R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::GET_VEC_NDIM:
@@ -957,52 +994,52 @@ namespace MiniZinc {
           for (int i=0; i<n; i++) {
             oss << " R" << reg(pc);
           }
-          oss << " R" << reg(pc) << "\n";
+          oss << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::LB:
         {
-          oss << "LB R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "LB R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::UB:
         {
-          oss << "UB R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "UB R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::DOM:
         {
-          oss << "DOM R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "DOM R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::MAKE_SET:
         {
-          oss << "MAKE_SET R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "MAKE_SET R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::INTERSECTION:
         {
-          oss << "INTERSECTION R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "INTERSECTION R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::UNION:
         {
-          oss << "UNION R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "UNION R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::DIFF:
         {
-          oss << "DIFF R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "DIFF R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::INTERSECT_DOMAIN:
         {
-          oss << "INTERSECT_DOMAIN R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "INTERSECT_DOMAIN R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::RET:
         {
-          oss << "RET\n";
+          oss << "RET" <<  " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::CALL:
@@ -1015,7 +1052,7 @@ namespace MiniZinc {
           for (int i=0; i<procs[p].nargs; i++) {
             oss << " R" << reg(pc);
           }
-          oss << "\n";
+          oss << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::BUILTIN:
@@ -1026,7 +1063,7 @@ namespace MiniZinc {
           for (int i=0; i<procs[p].nargs; i++) {
             oss << " R" << reg(pc);
           }
-          oss << "\n";
+          oss << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::TCALL:
@@ -1035,9 +1072,9 @@ namespace MiniZinc {
           int p = reg(pc);
           
           if (procs.empty()) {
-            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << p << "\n";
+            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << p << " % " << cur_pc << "\n";
           } else {
-            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << "\n";
+            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << " % " << cur_pc << "\n";
           }
         }
           break;
@@ -1047,57 +1084,58 @@ namespace MiniZinc {
           int p = chr(pc);
           switch (p) {
             case AggregationCtx::VCTX_AND:
-              oss << "AND\n";
+              oss << "AND";
               break;
             case AggregationCtx::VCTX_OR:
-              oss << "OR\n";
+              oss << "OR";
               break;
             case AggregationCtx::VCTX_VEC:
-              oss << "VEC\n";
+              oss << "VEC";
               break;
             case AggregationCtx::VCTX_OTHER:
-              oss << "OTHER\n";
+              oss << "OTHER";
               break;
             default:
-              oss << "ERROR\n";
+              oss << "ERROR";
               assert(false);
               break;
           }
+          oss << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::CLOSE_AGGREGATION:
         {
-          oss << "CLOSE_AGGREGATION\n";
+          oss << "CLOSE_AGGREGATION" << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::SIMPLIFY_LIN:
         {
-          oss << "SIMPLIFY_LIN R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << "\n";
+          oss << "SIMPLIFY_LIN R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::PUSH:
         {
-          oss << "PUSH R" << reg(pc) << "\n";
+          oss << "PUSH R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::POP:
         {
-          oss << "POP R" << reg(pc) << "\n";
+          oss << "POP R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::POST:
         {
-          oss << "POST R" << reg(pc) << "\n";
+          oss << "POST R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::TRACE:
         {
-          oss << "TRACE R" << reg(pc) << "\n";
+          oss << "TRACE R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::ABORT:
         {
-          oss << "ABORT\n";
+          oss << "ABORT" << " % " << cur_pc << "\n";
         }
           break;
       }
@@ -1756,7 +1794,7 @@ execute_ret:
   //            }
             }
           } else {
-            _stack.emplace_back(_procs[code].mode[mode]);
+            _stack.emplace_back(_procs[code].mode[mode], code, mode);
             BytecodeFrame* newFrame = &_stack[_stack.size()-1];
             newFrame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
             newFrame->reg.mov(this, args);
@@ -2255,7 +2293,7 @@ execute_ret:
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
-    trail_size.emplace_back(var_list_trail.size(), obj_trail.size(), alias_trail.size(), domain_trail.size());
+    trail_size.emplace_back(var_list_trail.size(), obj_trail.size(), alias_trail.size(), domain_trail.size(), def_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
     for (auto &table : interpreter->cse) {
       table.push(interpreter, !last_operation_pop);

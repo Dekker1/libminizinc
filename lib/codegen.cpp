@@ -154,6 +154,7 @@ void CodeGen::register_builtins(void) {
 void OPEN_AGG(CodeGen& cg, CG_Builder& frag, AggregationCtx::Symbol ctx) {
   cg.env_push();
   cg.reg_trail.push_back(cg.current_reg_count);
+
   PUSH_INSTR(frag, BytecodeStream::OPEN_AGGREGATION, ctx);
 }
 void CLOSE_AGG(CodeGen& cg, CG_Builder& frag) {
@@ -2279,8 +2280,9 @@ int CG::locate_immi(int x, CodeGen& cg, CG_Builder& frag) {
   return r;
 }
 
-// Modified version of execute-comprehension, but using bind.
-void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+// Modified version of execute-comprehension, executing an arbitrary callable on the innter expression.
+template<class F>
+void execute_comprehension_generic(Comprehension* c, Mode ctx, CodeGen& cg, CG_Builder& frag, F f) {
    // Build up the object to build the generator.
   std::vector<EmitPost*> nesting;
   
@@ -2331,8 +2333,7 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
     }
   }
   // We're now in the deepest scope. Generate code for the body.
-  CG::Binding b_e = CG::force_or_bind(c->e(), ctx, cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b_e.first)); // FIXME: Discarding partiality
+  f(c->e(), ctx, cg, frag);
 
   // Now close the iterators _in reverse order_, and restore the environment.
   for(int ii = nesting.size()-1; ii >= 0; --ii) {
@@ -2341,6 +2342,15 @@ void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Buil
   }
   for(int ii = 0; ii < n_gen; ++ii)
     cg.env_pop();
+}
+
+// Specialized version when we're binding and pushing the body.
+void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  execute_comprehension_generic(c, ctx, cg, frag, [](Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+      // Bind and push everything in the comprehension.
+  CG::Binding b_e = CG::force_or_bind(e, ctx, cg, frag);
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b_e.first)); // FIXME: Discarding partiality
+    });
 }
 
 // Special case implementation of folds where body is a generator.
@@ -2360,19 +2370,23 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         return CG_Cond::forall(ctx, conj);
       }
       break;
-      /*
     case Expression::E_COMP: {
+      if(ctx == BytecodeProc::ROOT) {
+        execute_comprehension_generic(param->cast<Comprehension>(), ctx, cg, frag,
+                                      [](Expression* elt, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+                                        CG_Cond::T c = CG::compile(elt, cg, frag);
+                                        post_cond(cg, frag,  c);
+                                      });;
+        break;
+      }
       OPEN_OTHER(cg, frag);
       OPEN_AND(cg, frag);
-      execute_comprehension_compile(param->cast<Comprehension>(), c_ctx, cg, frag);
       CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       int r(GET_REG(cg));
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       return CG_Cond::reg(r);
       }
-      break;
-      */
     default:
       {
         int r(GET_REG(cg));

@@ -572,8 +572,7 @@ namespace MiniZinc {
           }
         } else if (b.ub() <= a.lb() || b.ub() < c.lb() || b.lb() > c.ub()) {
           if (c.isVar()) {
-            /// TODO: this can't be right?
-            c.toVar()->alias(&i, c);
+            c.toVar()->alias(&i, a);
             return PS_ENTAILED;
           } else if(a.isVar()) {
             return a.toVar()->setVal(&i, c()) ? PS_ENTAILED : PS_FAILED;

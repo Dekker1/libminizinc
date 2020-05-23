@@ -900,15 +900,17 @@ namespace MiniZinc {
     RegisterFile reg;
     const BytecodeStream* bs;
     int pc;
-    
+    int _pred;
+    char _mode;
     // CSE information for RET statement
     // <proc, mode, cse_key, stack size>
     typedef std::tuple<int,BytecodeProc::Mode, CSETable::Key, size_t> CSEInfo;
     std::vector<CSEInfo> cse_info;
 
-    BytecodeFrame(const BytecodeStream& bs0) :
+    BytecodeFrame(const BytecodeStream& bs0, int pred, char mode) :
     reg(bs0.maxRegister()), bs(&bs0),
-    pc(0) {}
+    pc(0),
+    _pred(pred), _mode(mode) {}
     void destroyRegisters(Interpreter* interpreter) {
       reg.destroy(interpreter);
     }
