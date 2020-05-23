@@ -174,7 +174,7 @@ function var int: sum_cc(array[$T] of var int: x) ::promise_total =
   let {
     array[int] of var int: xs = array1d(x);
     var sum([lb(xi) | xi in xs])..sum([ub(xi) | xi in xs]): res;
-    constraint int_lin_eq([1 | i in index_set(xs)] ++ [-1], [res] ++ xs, 0);
+    constraint int_lin_eq([1 | i in index_set(xs)] ++ [-1], xs ++ [res], 0);
   } in res;
 
 % ---------------
