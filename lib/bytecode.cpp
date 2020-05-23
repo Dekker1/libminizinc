@@ -413,22 +413,25 @@ namespace MiniZinc {
   Variable::dump(Variable* head, const std::vector<BytecodeProc>& bs, std::ostream& os) {
     Variable* d = head;
     do {
-      if (d->timestamp() >=0) {
-        os << d->timestamp() << "(";
-      }
-      os << d << "." << d->_ref_count;
-      if (d->timestamp() >=0) {
-        os << ")";
-      }
-      os << ":\t";
-      if (d->aliased()) {
-        os << " alias " << d->alias().toString() << "\n";
-      } else {
-        if (d->domain()) {
-          if (d->_binding) {
-            os << " binding";
+      d = d->next();
+      if (d != head) {
+        if (d->timestamp() >=0) {
+          os << d->timestamp() << "(";
+        }
+        os << d << "." << d->_ref_count;
+        if (d->timestamp() >=0) {
+          os << ")";
+        }
+        os << ":\t";
+        if (d->aliased()) {
+          os << " alias " << d->alias().toString() << "\n";
+        } else {
+          if (d->domain()) {
+            if (d->_binding) {
+              os << " binding";
+            }
+            os << " domain: " << Val(d->domain()).toString();
           }
-          os << " domain: " << Val(d->domain()).toString();
         }
         os << "\n";
         if (!d->_subscriptions.empty()) {
@@ -438,18 +441,19 @@ namespace MiniZinc {
           }
           os << "\n";
         }
-        for (Constraint* c : d->_definitions) {
-          os << "    ";
-          os << c << " " << bs[c->pred()].name << "(";
-          for (int i=0; i<c->size(); i++) {
-            os << c->arg(i).toString();
-            if (i<c->size()-1)
-              os << ", ";
-          }
-          os << ")\n";
-        }
       }
-      d = d->next();
+      for (Constraint* c : d->_definitions) {
+        if (d != head) {
+          os << "    ";
+        }
+        os << c << " " << bs[c->pred()].name << "(";
+        for (int i=0; i<c->size(); i++) {
+          os << c->arg(i).toString();
+          if (i<c->size()-1)
+            os << ", ";
+        }
+        os << ")\n";
+      }
     } while (d != head);
   }
 
