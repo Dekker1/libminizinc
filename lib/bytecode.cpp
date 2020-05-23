@@ -23,8 +23,8 @@
 #include <streambuf>
 #include <minizinc/eval_par.hh>
 
-//#define DBG_INTERPRETER(msg) std::cerr << msg
-#define DBG_INTERPRETER(msg) do {} while(0)
+#define DBG_INTERPRETER(msg) std::cerr << msg 
+/* #define DBG_INTERPRETER(msg) do {} while(0) */
 #define DBG_TRIM_OUTPUT true
 
 namespace MiniZinc {
@@ -2237,7 +2237,7 @@ execute_ret:
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
-    trail_size.emplace_back(var_list_trail.size(), obj_trail.size(), alias_trail.size(), domain_trail.size());
+    trail_size.emplace_back(var_list_trail.size(), obj_trail.size(), alias_trail.size(), domain_trail.size(), def_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
     for (auto &table : interpreter->cse) {
       table.push(interpreter, !last_operation_pop);
