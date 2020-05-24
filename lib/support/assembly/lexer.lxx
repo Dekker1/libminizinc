@@ -44,6 +44,7 @@ using namespace MiniZinc;
 "DECI"      { yylval->bValue = BytecodeStream::DECI; return MZA_DECI; }
 
 "IMMI"      { yylval->bValue = BytecodeStream::IMMI; return MZA_IMMI; }
+"CLEAR"     { yylval->bValue = BytecodeStream::CLEAR; return MZA_CLEAR; }
 "LOAD_GLOBAL" { yylval->bValue = BytecodeStream::LOAD_GLOBAL; return MZA_LOAD_GLOBAL; }
 "STORE_GLOBAL" { yylval->bValue = BytecodeStream::STORE_GLOBAL; return MZA_STORE_GLOBAL; }
 "MOV"       { yylval->bValue = BytecodeStream::MOV; return MZA_MOV; }

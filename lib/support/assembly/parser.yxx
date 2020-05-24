@@ -79,6 +79,7 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
 %token<bValue> MZA_DECI
 
 %token<bValue> MZA_IMMI
+%token<bValue> MZA_CLEAR
 %token<bValue> MZA_LOAD_GLOBAL
 %token<bValue> MZA_STORE_GLOBAL
 %token<bValue> MZA_MOV
@@ -371,6 +372,7 @@ instrRR:
   | MZA_UB
   | MZA_LB
   | MZA_DOM
+  | MZA_CLEAR
 
 instrRS:
     MZA_JMPIF

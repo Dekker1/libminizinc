@@ -48,6 +48,7 @@ namespace MiniZinc {
       DECI, // R1
       
       IMMI, // I, R : Load immediate integer into register
+      CLEAR,// R1, Rn : Clear all registers R1, R2, ..., Rn
       LOAD_GLOBAL, // i -> R : Load global i into register R (globals are registers of the bottom stack frame)
       STORE_GLOBAL, // R -> i : Store register R into global i
       MOV,  // R1 -> R2
