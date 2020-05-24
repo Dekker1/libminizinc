@@ -124,6 +124,7 @@ namespace MiniZinc {
     c = new (c) Constraint(interpreter,pred,mode,args,ann,defines);
     PropStatus ps = interpreter->subscribe(c);
     if (ps == PS_ENTAILED || ps == PS_FAILED) {
+      interpreter->unsubscribe(c);
       c->destroy(interpreter);
       Constraint::free(c);
       return {nullptr, ps == PS_ENTAILED};
