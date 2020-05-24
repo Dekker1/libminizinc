@@ -410,24 +410,50 @@ namespace MiniZinc {
         }
       }
       virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
-        // FIXME: Deal with Variables turned into parameters
         if (c->arg(1)[0].size() == 1) {
           Val v = Val::follow_alias(c->arg(1)[0][0], &i);
-          return v.toVar()->setVal(&i, c->arg(2)() / c->arg(0)[0][0]()) ? PS_ENTAILED : PS_FAILED;
+          if (v.isVar()) {
+            if (c->arg(2)() % c->arg(0)[0][0]()==0) {
+              return v.toVar()->setVal(&i, c->arg(2)() / c->arg(0)[0][0]()) ? PS_ENTAILED : PS_FAILED;
+            } else {
+              return PS_FAILED;
+            }
+          } else {
+            // aliased to val
+            return c->arg(0)[0][0]()*v() == c->arg(2)() ? PS_ENTAILED : PS_FAILED;
+          }
         }
         if (c->arg(1)[0].size() == 2) {
           Val lhs = Val::follow_alias(c->arg(1)[0][0], &i);
           Val rhs = Val::follow_alias(c->arg(1)[0][1], &i);
-          if (c->arg(2)() == 0 && (c->arg(0)[0][0]() + c->arg(0)[0][1]()) == 0) {
-            if (lhs.toVar()->timestamp() < rhs.toVar()->timestamp()) {
-              std::swap(lhs, rhs);
+          IntVal lhs_c = c->arg(0)[0][0]();
+          IntVal rhs_c = c->arg(0)[0][1]();
+          if (!lhs.isVar()) {
+            std::swap(lhs, rhs);
+            std::swap(lhs_c, rhs_c);
+          }
+          if (lhs.isVar()) {
+            if (rhs.isVar()) {
+              if (c->arg(2)() == 0 && (lhs_c+rhs_c) == 0) {
+                if (lhs.toVar()->timestamp() < rhs.toVar()->timestamp()) {
+                  std::swap(lhs, rhs);
+                }
+                bool success = rhs.toVar()->intersectDom(&i, Val(lhs.toVar()->domain()));
+                if (!success) {
+                  return PS_FAILED;
+                }
+                lhs.toVar()->alias(&i, rhs);
+                return PS_ENTAILED;
+              }
+            } else {
+              if (c->arg(2)() % lhs_c==0) {
+                return lhs.toVar()->setVal(&i, (c->arg(2)()-rhs_c*rhs()) / lhs_c) ? PS_ENTAILED : PS_FAILED;
+              } else {
+                return PS_FAILED;
+              }
             }
-            bool success = rhs.toVar()->intersectDom(&i, Val(lhs.toVar()->domain()));
-            if (!success) {
-              return PS_FAILED;
-            }
-            lhs.toVar()->alias(&i, rhs);
-            return PS_ENTAILED;
+          } else {
+            return lhs()*lhs_c+rhs()*rhs_c==c->arg(2)() ? PS_ENTAILED : PS_FAILED;
           }
         }
         // More propagation?
@@ -484,22 +510,6 @@ namespace MiniZinc {
           } else {
             // aliased to val
             return c->arg(0)[0][0]()*v() <= c->arg(2)() ? PS_ENTAILED : PS_FAILED;
-          }
-        }
-        if (c->arg(1)[0].size() == 2) {
-          // FIXME: Deal with Variables turned into parameters
-          Val lhs = Val::follow_alias(c->arg(1)[0][0], &i);
-          Val rhs = Val::follow_alias(c->arg(1)[0][1], &i);
-          if (c->arg(2)() == 0 && (c->arg(0)[0][0]() + c->arg(0)[0][1]()) == 0) {
-            if (lhs.toVar()->timestamp() < rhs.toVar()->timestamp()) {
-              std::swap(lhs, rhs);
-            }
-            bool success = rhs.toVar()->intersectDom(&i, Val(lhs.toVar()->domain()));
-            if (!success) {
-              return PS_FAILED;
-            }
-            lhs.toVar()->alias(&i, rhs);
-            return PS_ENTAILED;
           }
         }
         // More propagation?
