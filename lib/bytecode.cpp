@@ -784,7 +784,8 @@ namespace MiniZinc {
             assert(v().toInt() == 0 || v().toInt() == 1);
             return Val(1 - v().toInt());
           } else {
-            return v;
+            throw Error("NOT YET IMPLEMENTED");
+            /* return v; */
             // TODO: make sure negated versions are stored in CSE table
 //              Key nkey({v});
 //              bool found;
