@@ -1726,7 +1726,12 @@ namespace MiniZinc {
               break;
             }
             v1.toVar()->domain(this, result, true);
-            result_val = Val(v1.toVar()->domain());
+            Val v1a = Val::follow_alias(v1);
+            if (v1a.isVar()) {
+              result_val = Val(v1a.toVar()->domain());
+            } else {
+              result_val = Val(Vec::a(this, newIdent(), {v1a(),v1a()}));
+            }
           } else {
             Ranges::Const<IntVal> vsr1(v1(),v1());
             VecSetRanges vsr2(s2);
