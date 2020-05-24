@@ -894,7 +894,7 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         bool first = true;
         ss << "{" << std::endl;
         for (Variable* v = interpreter->root()->next(); v != interpreter->root(); v = v->next()) {
-          Val va = Val::follow_alias(Val(v), interpreter);
+          Val va = Val::follow_alias(Val(v));
           if (va.isVar()) {
             int timestamp = va.timestamp();
             if (timestamp >= 0) {
