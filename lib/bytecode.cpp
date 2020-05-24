@@ -1703,17 +1703,13 @@ namespace MiniZinc {
           int r3 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("INTERSECT_DOMAIN R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ") R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
           Val v1 = Val::follow_alias(frame->reg[r1], this);
-          Val v2 = Val::follow_alias(frame->reg[r2], this);
-
-          // FIXME: What if variable is already fixed, then v1.isInt()!
-          if (!v1.isVar()) {
-            throw Error("Error: INTERSECT_DOMAIN on invalid type");
-          }
+          Val v2 = frame->reg[r2];
+          assert(v2.isVec());
 
           Val result_val;
-          if (v2.isVec()) {
+          Vec* s2 = v2.toVec();
+          if (v1.isVar()) {
             Vec* s1 = v1.toVar()->domain();
-            Vec* s2 = v2.toVec();
             VecSetRanges vsr1(s1);
             VecSetRanges vsr2(s2);
             Ranges::Inter<IntVal,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
@@ -1722,8 +1718,25 @@ namespace MiniZinc {
               result.emplace_back(inter.min());
               result.emplace_back(inter.max());
             }
+            if (result.empty()) {
+              _status = INCONSISTENT;
+              // Invariant: Last instruction in the frame is always an ABORT instruction
+              frame->pc = frame->bs->size()-1;
+              break;
+            }
             v1.toVar()->domain(this, result, true);
             result_val = Val(v1.toVar()->domain());
+          } else {
+            Ranges::Const<IntVal> vsr1(v1(),v1());
+            VecSetRanges vsr2(s2);
+            if (Ranges::subset(vsr1, vsr2)) {
+              result_val = Val(Vec::a(this, newIdent(), {v1(),v1()}));
+            } else {
+              _status = INCONSISTENT;
+              // Invariant: Last instruction in the frame is always an ABORT instruction
+              frame->pc = frame->bs->size()-1;
+              break;
+            }
           }
           frame->reg.assign(this, r3, result_val);
           DBG_INTERPRETER(" R" << r3 <<  "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
