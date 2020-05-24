@@ -3762,22 +3762,23 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       int r = bind_binop_par_set(cg, frag, b->op(), b_lhs.first, b_rhs.first);
       return {r, CG_Cond::ttt()};
     }
+    std::vector<CG_Cond::T> cond = {b_lhs.second, b_rhs.second};
 
-    int r_cond(GET_REG(cg));
-    int l_skip(GET_LABEL(cg));
-    PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(CG::force(b_lhs.second, ctx, cg, frag)), CG::r(CG::force(b_rhs.second, ctx, cg, frag)), CG::r(r_cond));
-    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_skip));
-
+    int l_skip;
     if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
+      l_skip = GET_LABEL(cg);
       int r_zero(bind_cst(0, cg, frag));
+      int r_cond = GET_REG(cg);
+      cond.push_back(CG_Cond::reg(r_cond));
       PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(b_rhs.first), CG::r(r_zero), CG::r(r_cond));
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_cond), CG::r(r_cond));
       PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_skip));
     }
     int r = bind_binop_par_int(cg, frag, b->op(), b_lhs.first, b_rhs.first);
-    PUSH_LABEL(frag, l_skip);
-
-    return {r, CG_Cond::reg(r_cond)};
+    if (b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
+      PUSH_LABEL(frag, l_skip);
+    }
+    return {r, CG_Cond::forall(ctx, cond)};
   } else {
     std::vector<CG_Cond::T> partial;
     int r_lhs = CG::force_or_bind(b->lhs(), ctx, partial, cg, frag);
