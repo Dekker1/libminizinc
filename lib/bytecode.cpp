@@ -597,9 +597,11 @@ namespace MiniZinc {
             default: {}
           }
         }
-        coeffs.emplace_back(coeff);
-        vars.emplace_back(cur);
-        idx.push_back(idx.size());
+        if (coeff != 0) {
+          coeffs.emplace_back(coeff);
+          vars.emplace_back(cur);
+          idx.push_back(idx.size());
+        }
       }
     }
 
