@@ -3208,6 +3208,7 @@ CG::Binding bind_card(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(r), CG::r(r_e), CG::r(r)); 
   PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
   PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_e));
+  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
   PUSH_INSTR(frag, BytecodeStream::ADDI, CG::r(r), CG::r(r_e), CG::r(r));
 
   PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_i), CG::r(r_sz), CG::r(r_e));
