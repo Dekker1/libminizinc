@@ -835,7 +835,7 @@ namespace MiniZinc {
       // We are replacing another entry within the CSE table.
       assert(it->first == key && it->second.first != mode);
       it->first.destroy();
-      Val& oldVal = it->second.second;
+      Val oldVal = Val::follow_alias(it->second.second);
       BytecodeProc::Mode& oldMode = it->second.first;
       if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
         if (oldVal.isVar()) {
