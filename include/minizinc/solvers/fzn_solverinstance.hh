@@ -57,6 +57,7 @@ namespace MiniZinc {
     private:
       std::string _fzn_solver;
       std::unordered_map<int, VarStore> vdmap;
+      std::unordered_set<int> uninitialised_vars;
       Model* _model;
       Env env;
       std::vector<unsigned int> stack;
@@ -98,6 +99,7 @@ namespace MiniZinc {
       void createFunctionItems();
       Expression* getSolutionValue(Id* id);
       Expression* val_to_expr(Type ty, Val v);
+      VarDecl* add_var_to_model(int ident, TypeInst* ti, bool view=false);
   };
 
   class FZN_SolverFactory: public SolverFactory {

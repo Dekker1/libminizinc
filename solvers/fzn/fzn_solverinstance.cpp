@@ -197,6 +197,24 @@ namespace MiniZinc {
     _model->registerFn(env.envi(), fi);
   }
 
+  VarDecl* FZNSolverInstance::add_var_to_model(int ident, TypeInst* ti, bool view) {
+    VarDecl* vd;
+    if (!view) {
+      vd = new VarDecl(Location().introduce(), ti, ident);
+
+      vd->addAnnotation(constants().ann.output_var);
+      bool is_bool = ti->type().isbool();
+      auto output_ti = new TypeInst(Location().introduce(), is_bool ? Type::parbool() : Type::parint(), nullptr);
+      auto output_vd = new VarDecl(Location().introduce(), output_ti, ident);
+      env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
+    } else {
+      vd = new VarDecl(Location().introduce(), ti, "view_" + std::to_string(ident));
+    }
+    auto vdi = new VarDeclI(Location().introduce(), vd);
+    _model->addItem(vdi);
+    return vd;
+  }
+
   Expression* FZNSolverInstance::val_to_expr(Type ty, Val v) {
     v = Val::follow_alias(v);
     if (v.isInt()) {
@@ -215,23 +233,13 @@ namespace MiniZinc {
         vs.used_bool = true;
 
         auto ti = new TypeInst(Location().introduce(), Type::varbool());
-        if (vs.used_int) {
-          vs.bool_var = new VarDecl(Location().introduce(), ti, "view_" + std::to_string(v.timestamp()));
-        } else {
-          vs.bool_var = new VarDecl(Location().introduce(), ti, v.timestamp());
-          vs.bool_var()->addAnnotation(constants().ann.output_var);
-        }
-        auto vdi = new VarDeclI(Location().introduce(), vs.bool_var()->cast<VarDecl>());
-        _model->addItem(vdi);
+        VarDecl* vd = add_var_to_model(v.timestamp(), ti, vs.used_int);
 
         if (vs.used_int) {
           _model->addItem(new ConstraintI(Location().introduce(), new Call(Location().introduce(), constants().ids.bool2int, {vs.bool_var()->cast<VarDecl>()->id(), vs.int_var()->cast<VarDecl>()->id()})));
         } else {
-          auto output_ti = new TypeInst(Location().introduce(), Type::parbool());
-          auto output_vd = new VarDecl(Location().introduce(), output_ti, v.timestamp());
-          env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
+          uninitialised_vars.erase(v.timestamp());
         }
-
         return vs.bool_var()->cast<VarDecl>()->id();
       }
       if (vs.used_int) {
@@ -241,22 +249,14 @@ namespace MiniZinc {
 
       SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(0,1));
       auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-      if (vs.used_bool) {
-        vs.int_var = new VarDecl(Location().introduce(), ti, "view_" + std::to_string(v.timestamp()));
-      } else {
-        vs.int_var = new VarDecl(Location().introduce(), ti, v.timestamp());
-        vs.int_var()->addAnnotation(constants().ann.output_var);
-      }
-      auto vdi = new VarDeclI(Location().introduce(), vs.int_var()->cast<VarDecl>());
-      _model->addItem(vdi);
+      VarDecl* vd = add_var_to_model(v.timestamp(), ti, vs.used_bool);
 
       if (vs.used_bool) {
         _model->addItem(new ConstraintI(Location().introduce(), new Call(Location().introduce(), constants().ids.bool2int, {vs.bool_var()->cast<VarDecl>()->id(), vs.int_var()->cast<VarDecl>()->id()})));
       } else {
-        auto output_ti = new TypeInst(Location().introduce(), Type::parint());
-        auto output_vd = new VarDecl(Location().introduce(), output_ti, v.timestamp());
-        env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
+        uninitialised_vars.erase(v.timestamp());
       }
+
       return vs.int_var()->cast<VarDecl>()->id();
     } else {
       // Expected [[actual array], [indexes]]
@@ -323,6 +323,7 @@ namespace MiniZinc {
 
     if (dom->size() == 2 && (*dom)[0]() == 0 && (*dom)[1]() == 1) {
       vdmap.emplace(std::piecewise_construct, std::forward_as_tuple(var->timestamp()), std::forward_as_tuple(nullptr, nullptr, false, false));
+      uninitialised_vars.insert(var->timestamp());
       return;
     }
 
@@ -332,16 +333,8 @@ namespace MiniZinc {
     }
     SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
     auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-    auto vd = new VarDecl(Location().introduce(), ti, var->timestamp());
-    vd->addAnnotation(constants().ann.output_var);
-
-    auto vdi = new VarDeclI(Location().introduce(), vd);
-    _model->addItem(vdi);
+    VarDecl* vd = add_var_to_model(var->timestamp(), ti);
     vdmap.emplace(std::piecewise_construct, std::forward_as_tuple(var->timestamp()), std::forward_as_tuple(vd, nullptr, true, false));
-
-    auto output_ti = new TypeInst(Location().introduce(), Type::parint(), nullptr);
-    auto output_vd = new VarDecl(Location().introduce(), output_ti, var->timestamp());
-    env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
   }
 
   Val FZNSolverInstance::getSolutionValue(Variable* var) {
@@ -404,6 +397,15 @@ namespace MiniZinc {
 
   SolverInstance::Status
   FZNSolverInstance::solve(void) {
+    {
+      // Add all remaining variables to the model
+      GCLock lock;
+      auto ti = new TypeInst(Location().introduce(), Type::varbool());
+      for (int var : uninitialised_vars) {
+        add_var_to_model(var, ti);
+      }
+    }
+
     FZNSolverOptions& opt = static_cast<FZNSolverOptions&>(*_options);
     if (opt.fzn_solver.empty()) {
       throw InternalError("No FlatZinc solver specified");
