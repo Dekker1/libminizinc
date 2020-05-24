@@ -206,8 +206,8 @@ namespace MiniZinc {
       return false;
     }
     std::vector<Val> dom;
-    for (size_t k = 0; k <= j; ++j) {
-      dom.push_back(_domain[j]);
+    for (size_t k = 0; k <= j; ++k) {
+      dom.push_back(_domain[k]);
     }
     if (j % 2 == 0) {
       dom.emplace_back(i);
