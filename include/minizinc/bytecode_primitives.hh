@@ -28,6 +28,7 @@ namespace MiniZinc {
       EXISTS,
       INT_TIMES,
       INT_LIN_EQ,
+      INT_LIN_LE,
       UNIFORM,
       SOL,
       SORT,
@@ -434,6 +435,78 @@ namespace MiniZinc {
       }
     };
 
+    class IntLinLe : public PrimitiveMap::Primitive {
+    public:
+      IntLinLe(void) : PrimitiveMap::Primitive("int_lin_le",PrimitiveMap::INT_LIN_LE,3) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        {
+          std::vector<Val> coeffs = c->arg(0)[0].toVec()->as_vector();
+          std::vector<Val> vars = c->arg(1)[0].toVec()->as_vector();
+          IntVal d = -c->arg(2)();
+          simplify_linexp(coeffs, vars, d);
+
+          Vec* ncoeffs = Vec::allocate_array(&i, i.newIdent(), coeffs);
+          Vec* nvars = Vec::allocate_array(&i, i.newIdent(), vars);
+          c->arg(&i, 0, Val(ncoeffs));
+          c->arg(&i, 1, Val(nvars));
+          c->arg(&i, 2, Val(-d));
+        }
+
+        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
+          Val v = c->arg(1)[0][j];
+          assert(v.isVar()); // cannot be alias because of simplify_linexp
+          v.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(1)[0].size() <= 2 /* || propImmediately */) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
+          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        if (c->arg(1)[0].size() == 1) {
+          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+          if (v.isVar()) {
+            IntVal newBound = c->arg(2)() / c->arg(0)[0][0]();
+            if (c->arg(0)[0][0]() > 0) {
+              return v.toVar()->setMax(&i, newBound) ? PS_ENTAILED : PS_FAILED;
+            } else {
+              return v.toVar()->setMin(&i, newBound) ? PS_ENTAILED : PS_FAILED;
+            }
+          } else {
+            // aliased to val
+            return c->arg(0)[0][0]()*v() <= c->arg(2)() ? PS_ENTAILED : PS_FAILED;
+          }
+        }
+        if (c->arg(1)[0].size() == 2) {
+          // FIXME: Deal with Variables turned into parameters
+          Val lhs = Val::follow_alias(c->arg(1)[0][0], &i);
+          Val rhs = Val::follow_alias(c->arg(1)[0][1], &i);
+          if (c->arg(2)() == 0 && (c->arg(0)[0][0]() + c->arg(0)[0][1]()) == 0) {
+            if (lhs.toVar()->timestamp() < rhs.toVar()->timestamp()) {
+              std::swap(lhs, rhs);
+            }
+            bool success = rhs.toVar()->intersectDom(&i, Val(lhs.toVar()->domain()));
+            if (!success) {
+              return PS_FAILED;
+            }
+            lhs.toVar()->alias(&i, rhs);
+            return PS_ENTAILED;
+          }
+        }
+        // More propagation?
+        return PS_OK;
+      }
+    };
+  
     class Uniform : public PrimitiveMap::Primitive {
     public:
       Uniform() : PrimitiveMap::Primitive("uniform",PrimitiveMap::UNIFORM,2) {

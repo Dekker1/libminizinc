@@ -22,6 +22,7 @@ namespace MiniZinc {
     Exists exists;
     IntTimes inttimes;
     IntLinEq int_lin_eq;
+    IntLinLe int_lin_le;
     Uniform uniform;
     Sol sol;
     Sort sort;
@@ -33,7 +34,7 @@ namespace MiniZinc {
     SliceXd slice_xd;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &mk_intvar, &boolnot, &clause, &clause_reif, &forall, &exists, &inttimes, &int_lin_eq, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
+      &mk_intvar, &boolnot, &clause, &clause_reif, &forall, &exists, &inttimes, &int_lin_eq, &int_lin_le, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
     };
   }
   
