@@ -867,17 +867,18 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         Val vec = output->arg(0)[0];
         ss << (output_dict ? '{' : '[');
         for (int i = 0; i < vec.size(); ++i) {
+          Val v = Val::follow_alias(vec[i]);
           if (i > 0) {
             ss << ", ";
           }
-          if (vec[i].isVar()) {
+          if (v.isVar()) {
             if (output_dict) {
-              ss << "\"" << vec[i].timestamp() << "\"" << ": ";
+              ss << "\"" << v.timestamp() << "\"" << ": ";
             }
-            ss << si->getSolutionValue(vec[i].toVar()).toString();
+            ss << si->getSolutionValue(v.toVar()).toString();
           } else {
             assert(!output_dict);
-            ss << vec[i].toString();
+            ss << v.toString();
           }
         }
         ss << (output_dict ? '}' : ']') << std::endl;
@@ -885,8 +886,9 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         // Set output for sol() builtin
         interpreter->solutions.clear();
         for (int i = 0; i < vec.size(); ++i) {
-          if (vec[i].isVar()) {
-            interpreter->solutions.emplace(vec[i].timestamp(), si->getSolutionValue(vec[i].toVar())());
+          Val v = Val::follow_alias(vec[i]);
+          if (v.isVar()) {
+            interpreter->solutions.emplace(v.timestamp(), si->getSolutionValue(v.toVar())());
           }
         }
       } else {
