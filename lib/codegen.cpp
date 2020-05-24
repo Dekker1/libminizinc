@@ -47,6 +47,7 @@ const char* instr_names[] = {
       "DECI",
       
       "IMMI",
+      "CLEAR",
       "LOAD_GLOBAL",
       "STORE_GLOBAL",
       "MOV",
@@ -162,8 +163,9 @@ void CLOSE_AGG(CodeGen& cg, CG_Builder& frag) {
   int old_reg_count = cg.current_reg_count;
   cg.current_reg_count = cg.reg_trail.back();
   cg.reg_trail.pop_back();
-  for(int ii = cg.current_reg_count; ii < old_reg_count; ++ii)
-    PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(ii));
+  if (cg.current_reg_count < old_reg_count) {
+    PUSH_INSTR(frag, BytecodeStream::CLEAR, CG::r(cg.current_reg_count), CG::r(old_reg_count-1));
+  }
   PUSH_INSTR(frag, BytecodeStream::CLOSE_AGGREGATION);
   cg.env_pop();
 }
@@ -2101,9 +2103,7 @@ public:
       int old_reg_count = cg.current_reg_count;
       cg.current_reg_count = cg.reg_trail.back();
       cg.reg_trail.pop_back();
-      for (int ii = cg.current_reg_count; ii < old_reg_count; ++ii) {
-        PUSH_INSTR(c.root_frag, BytecodeStream::IMMI, CG::i(0), CG::r(ii));
-      }
+      PUSH_INSTR(c.root_frag, BytecodeStream::CLEAR, CG::r(cg.current_reg_count), CG::r(old_reg_count-1));
       cg.env_pop();
     }
     PUSH_INSTR(c.root_frag, BytecodeStream::RET);

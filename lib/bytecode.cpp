@@ -918,6 +918,11 @@ namespace MiniZinc {
           oss << "IMMI " << intval(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
+        case BytecodeStream::CLEAR:
+        {
+          oss << "CLEAR " << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
+        }
+          break;
         case BytecodeStream::LOAD_GLOBAL:
         {
           oss << "LOAD_GLOBAL " << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
@@ -1306,6 +1311,17 @@ namespace MiniZinc {
           int r1 = frame->bs->reg(frame->pc);
           frame->reg.assign(this, r1, i);
           DBG_INTERPRETER("IMMI " << i << " R" << r1 << "(" << frame->reg[r1]() << ")" << "\n");
+        }
+          break;
+        case BytecodeStream::CLEAR:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          assert(r1<=r2);
+          for (int i=r1; i<=r2; i++) {
+            frame->reg.assign(this, i, IntVal(0));
+          }
+          DBG_INTERPRETER("CLEAR " << " R" << r1 << " " << r2 << "\n");
         }
           break;
         case BytecodeStream::LOAD_GLOBAL:
