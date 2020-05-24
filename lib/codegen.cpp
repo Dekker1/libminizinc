@@ -559,10 +559,6 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
       PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
-      if (ctx == BytecodeProc::ROOT_NEG) {
-        // Negated to match ROOT_NEG posting
-        return ~CG_Cond::call({"int_lin_ne"}, BytecodeProc::ROOT, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
-      }
       return CG_Cond::call({"int_lin_eq"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_LQ:
@@ -703,13 +699,12 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
   auto bodies = std::move(cg.fun_map.get_bodies(ident, arg_types));
   assert(!bodies.empty());
 
-  // TODO: Consider negated contexts.
   if (ret_type.isbool() && call_mode != BytecodeProc::ROOT) {
     bool valid = false;
-    if (call_mode == BytecodeProc::IMP && cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::IMP)) {
+    if (cg.fun_map.defines_mode(ident, arg_types, call_mode).first) {
       valid = true;
     } else {
-      valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::FUN);
+      valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::FUN).first;
       if (valid) {
         call_mode = BytecodeProc::FUN;
         def_mode = BytecodeProc::FUN;
@@ -1448,8 +1443,26 @@ int _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
       Mode call_m(m.strength(), negated);
       assert(m == call_m);
       auto fun = find_call_fun(cg, call->ident, call->ty[0], ty, call->m);
-      assert(call_m == fun.second);
-      PUSH_INSTR(frag, BytecodeStream::CALL, call_m, fun.first, call->params);
+      if(call_m == fun.second) {
+        PUSH_INSTR(frag, BytecodeStream::CALL, call_m, fun.first, call->params);
+      } else {
+        assert(fun.second == BytecodeProc::FUN);
+        std::cerr << "Warning: emitting reification for " << call->ident << " because no ROOT_NEG version is available\n";
+        OPEN_OTHER(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, call->params);
+        CLOSE_AGG(cg, frag);
+        r = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+        if (BytecodeProc::is_neg(call->m) != BytecodeProc::is_neg(fun.second)) {
+          OPEN_OTHER(cg, frag);
+          auto fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+          assert(fun.second == BytecodeProc::FUN);
+          PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r));
+          CLOSE_AGG(cg, frag);
+          PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+        }
+        PUSH_INSTR(frag, BytecodeStream::POST, CG::r(r));
+      }
       r = bind_cst(1, cg, frag);
     }
     return r;
@@ -1755,8 +1768,26 @@ void post_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
     CG::Mode call_m(CG::Mode::Root, sign);
     std::vector<Type> ty(call->ty.begin() + 1, call->ty.end());
     auto fun = find_call_fun(cg, call->ident, call->ty[0], ty, call_m);
-    assert(call_m == fun.second);
-    PUSH_INSTR(frag, BytecodeStream::CALL, call_m, fun.first, call->params);
+    if(call_m == fun.second) {
+      PUSH_INSTR(frag, BytecodeStream::CALL, call_m, fun.first, call->params);
+    } else {
+      assert(fun.second == BytecodeProc::FUN);
+      std::cerr << "Warning: emitting reification for " << call->ident << " because no ROOT_NEG version is available\n";
+      OPEN_OTHER(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, call->params);
+      CLOSE_AGG(cg, frag);
+      int r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      if (BytecodeProc::is_neg(call->m) != BytecodeProc::is_neg(fun.second)) {
+        OPEN_OTHER(cg, frag);
+        auto fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+        assert(fun.second == BytecodeProc::FUN);
+        PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r));
+        CLOSE_AGG(cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      }
+      PUSH_INSTR(frag, BytecodeStream::POST, CG::r(r));
+    }
   } else {
     assert(p->kind() == CG_Cond::CC_And);
     CG_Cond::C_And* conj(reinterpret_cast<CG_Cond::C_And*>(p));
@@ -2113,41 +2144,45 @@ public:
       GCLock lock;
       auto p(cg.pending_bodies.back());
       cg.pending_bodies.pop_back();
-      
+
       FunctionI* fun(p.first);
       Mode call_mode(p.second.first);
       Mode def_mode(p.second.second);
       annotate_total(fun);
       // Find the body.
-      if (call_mode == BytecodeProc::IMP || call_mode == BytecodeProc::FUN) {
+      if (call_mode == BytecodeProc::IMP || call_mode == BytecodeProc::FUN || call_mode == BytecodeProc::ROOT_NEG) {
         std::vector<Type> arg_types (fun->params().size());
         for (int j = 0; j < arg_types.size(); ++j) {
           arg_types[j] = fun->params()[j]->type();
         }
-        bool reif_exists = cg.fun_map.defines_mode(fun->id(), arg_types, call_mode);
-        if (reif_exists) {
+        auto redef = cg.fun_map.defines_mode(fun->id(), arg_types, call_mode);
+        if (redef.first)  {
           CG_ProcID proc(cg.resolve_fun(fun));
           CG_Builder frag;
           std::vector<Expression*> args;
-          args.reserve(fun->params().size() + 1);
+          args.reserve(fun->params().size() + !(call_mode == BytecodeProc::ROOT_NEG));
           for (int i = 0; i < fun->params().size(); ++i) {
             VarDecl* vd = fun->params()[i];
             args.emplace_back(vd->id());
           }
-          TypeInst var_bool(Location().introduce(), Type::varbool());
-          VarDecl new_var(Location().introduce(), &var_bool, "b");
-          args.emplace_back(new_var.id());
-          Call call(
-            Location().introduce(),
-            call_mode == BytecodeProc::FUN ? fun->id().str() + "_reif" : fun->id().str() + "_imp",
-            args
-          );
-          call.type(Type::varbool());
-          Let let(Location().introduce(), {&new_var, &call}, new_var.id());
-          let.type(Type::varbool());
-          let.addAnnotation(constants().ann.promise_total);
-          c.compile_pred(frag, fun->params(), call_mode, &let);
-          cg.append(proc.id(), call_mode, frag);
+          if (call_mode == BytecodeProc::ROOT_NEG) {
+            Call call(Location().introduce(), redef.second, args);
+            call.type(Type::varbool());
+            // Call negated constraint in ROOT context (implementation should deal with the negation).
+            c.compile_pred(frag, fun->params(), BytecodeProc::ROOT, &call);
+            cg.append(proc.id(), call_mode, frag);
+          } else {
+            TypeInst var_bool(Location().introduce(), Type::varbool());
+            VarDecl new_var(Location().introduce(), &var_bool, "b");
+            args.emplace_back(new_var.id());
+            Call call(Location().introduce(), redef.second, args);
+            call.type(Type::varbool());
+            Let let(Location().introduce(), {&new_var, &call}, new_var.id());
+            let.type(Type::varbool());
+            let.addAnnotation(constants().ann.promise_total);
+            c.compile_pred(frag, fun->params(), call_mode, &let);
+            cg.append(proc.id(), call_mode, frag);
+          }
           continue;
         }
       }
@@ -3843,6 +3878,7 @@ CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   OPEN_OTHER(cg, frag);
   // Bind the value part.
   auto fun = find_call_fun(cg, call, BytecodeProc::ROOT);
+  assert(fun.second == BytecodeProc::FUN);
   PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, r_arg);
   CLOSE_AGG(cg, frag);
 

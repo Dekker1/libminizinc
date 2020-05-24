@@ -125,6 +125,12 @@ function var int: op_times(var int: x, var int: y) ::promise_total =
     constraint int_times(x, y, z);
   } in z;
 
+/* Negated versions of FlatZinc builtins */
+predicate int_lin_le_neg(array[int] of int: as, array[int] of var int: bs, int: c) =
+  int_lin_le([-a | a in as], bs, -c-1);
+predicate int_lin_eq_neg(array[int] of int: as, array[int] of var int: bs, int: c) =
+  int_lin_ne(as, bs, c);
+
 /** @group builtins.arithmetic Return result of integer division \a x / \a y */
 function int: op_int_division(int: x, int: y) = x div y;
 /** @group builtins.arithmetic Return result of integer division \a x / \a y */

@@ -746,13 +746,25 @@ struct CG_FunMap {
     return get_bodies(call->id(), args);
   }
 
-  bool defines_mode(const ASTString& ident, const std::vector<Type>& args, BytecodeProc::Mode mode) {
-    assert(mode == BytecodeProc::FUN || mode == BytecodeProc::IMP);
+  std::pair<bool, ASTString> defines_mode(const ASTString& ident, const std::vector<Type>& args, BytecodeProc::Mode mode) {
     GCLock lock;
-    ASTString reif_ident = mode == BytecodeProc::FUN ? ident.str() + "_reif" : ident.str() + "_imp";
-    auto it(id_map.find(reif_ident));
+    ASTString nident;
+    switch (mode) {
+      case BytecodeProc::FUN:
+        nident = ident.str() + "_reif";
+        break;
+      case BytecodeProc::IMP:
+        nident = ident.str() + "_imp";
+        break;
+      case BytecodeProc::ROOT_NEG:
+        nident = ident.str() + "_neg";
+        break;
+      default:
+        return {false, ASTString("")};
+    }
+    auto it(id_map.find(nident));
     if(it == id_map.end()) {
-      return false;
+      return {false, nident};
     }
     unsigned int fun_id((*it).second);
     std::vector<Type> reif_args;
@@ -762,8 +774,10 @@ struct CG_FunMap {
       arg.ti(Type::TI_PAR);
       reif_args.push_back(arg);
     }
-    reif_args.push_back(Type::parbool());
-    return !get_bodies(fun_id, reif_args).empty();
+    if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
+      reif_args.push_back(Type::parbool());
+    }
+    return {!get_bodies(fun_id, reif_args).empty(), nident};
   }
 };
 
