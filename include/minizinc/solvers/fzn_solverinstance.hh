@@ -70,8 +70,10 @@ namespace MiniZinc {
 
       Status solve(void) override;
       void printStatistics(bool fLegend=0) override;
+      void printModelToFile(std::string filename);
 
       void processFlatZinc(void) override;
+
 
       void addFunction(FunctionI* fi) override;
       void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override;
@@ -93,8 +95,6 @@ namespace MiniZinc {
       void popState() override;
 
       void resetSolver(void) override;
-
-      Model* getModel() { return _model; };
     protected:
       void createFunctionItems();
       Expression* getSolutionValue(Id* id);

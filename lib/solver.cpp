@@ -963,23 +963,13 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   }
   if (ifMzn2Fzn()) {
     assert(dynamic_cast<FZNSolverInstance*>(si));
-    /* si = new FZNSolverInstance(log, nullptr); */
     addDefinitions();
-
     // Print flatzinc to file
-    Model* fzn = static_cast<FZNSolverInstance*>(si)->getModel();
-    std::ofstream ofs;
-    ofs.open((file.substr(0, file.size()-4) + std::string(".fzn")).c_str(), ios::out);
-    checkIOStatus (ofs.good(), " I/O error: cannot open fzn output file. ");
-    Printer p(ofs,0);
-    p.print(fzn);
-    checkIOStatus (ofs.good(), " I/O error: cannot write fzn output file. ");
-    ofs.close();
+    static_cast<FZNSolverInstance*>(si)->printModelToFile(file.substr(0, file.size()-4) + std::string(".fzn"));
 
     if (flag_statistics) {
       si->printStatistics();
     }
-
     return {SolverInstance::UNKNOWN, ""};
   } else if (SolverInstance::UNKNOWN == getFltStatus()) {
     addDefinitions();

@@ -394,6 +394,35 @@ namespace MiniZinc {
     }
     out << "%%%mzn-stat-end" << endl << endl;
   }
+  void FZNSolverInstance::printModelToFile(std::string filename) {
+    std::ofstream os(filename);
+    Printer p(os, 0, true);
+    for (FunctionIterator it = _model->begin_functions(); it != _model->end_functions(); ++it) {
+      if(!it->removed()) {
+        Item& item = *it;
+        p.print(&item);
+      }
+    }
+    for (VarDeclIterator it = _model->begin_vardecls(); it != _model->end_vardecls(); ++it) {
+      if(!it->removed()) {
+        Item& item = *it;
+        p.print(&item);
+      }
+    }
+    for (ConstraintIterator it = _model->begin_constraints(); it != _model->end_constraints(); ++it) {
+      if(!it->removed()) {
+        Item& item = *it;
+        p.print(&item);
+      }
+    }
+    if (_model->solveItem()) {
+      p.print(_model->solveItem());
+    } else {
+      GCLock lock;
+      auto si = SolveI::sat(Location().introduce());
+      p.print(si);
+    }
+  }
 
   SolverInstance::Status
   FZNSolverInstance::solve(void) {
@@ -458,31 +487,7 @@ namespace MiniZinc {
     bool sigint = opt.fzn_sigint;
 
     FileUtils::TmpFile fznFile(".fzn");
-    std::ofstream os(fznFile.name());
-    Printer p(os, 0, true);
-    for (FunctionIterator it = _model->begin_functions(); it != _model->end_functions(); ++it) {
-      if(!it->removed()) {
-        Item& item = *it;
-        p.print(&item);
-      }
-    }
-    for (VarDeclIterator it = _model->begin_vardecls(); it != _model->end_vardecls(); ++it) {
-      if(!it->removed()) {
-        Item& item = *it;
-        p.print(&item);
-      }
-    }
-    for (ConstraintIterator it = _model->begin_constraints(); it != _model->end_constraints(); ++it) {
-      if(!it->removed()) {
-        Item& item = *it;
-        p.print(&item);
-      }
-    }
-    {
-      GCLock lock;
-      auto si = SolveI::sat(Location().introduce());
-      p.print(si);
-    }
+    printModelToFile(fznFile.name());
     cmd_line.push_back(fznFile.name());
 
     FileUtils::TmpFile* pathsFile = NULL;
