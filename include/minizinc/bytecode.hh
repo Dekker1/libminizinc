@@ -850,8 +850,8 @@ namespace MiniZinc {
     struct Less { bool operator()(const Key& lhs, const Key& rhs) const {
       return lhs < rhs;
     }};
-//    typedef std::unordered_map<Key, std::pair<BytecodeProc::Mode, Val>, Hash, Equals> impl;
-    typedef std::map<Key, std::pair<BytecodeProc::Mode, Val>> impl;
+    typedef std::unordered_map<Key, std::pair<BytecodeProc::Mode, Val>, Hash, Equals> impl;
+//    typedef std::map<Key, std::pair<BytecodeProc::Mode, Val>, Less> impl;
     typedef impl::iterator iterator;
     std::pair<Val, bool> lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode);
     void insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val);
