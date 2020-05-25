@@ -171,7 +171,10 @@ namespace MiniZinc {
       return true;
     }
     if (j == _domain.size()) {
-      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), {})), binding);
+      Val ndom(Vec::a(interpreter, interpreter->newIdent(), {}));
+      ndom.construct(interpreter);
+      domain(interpreter, ndom, binding);
+      ndom.destroy(interpreter);
       return false;
     }
     std::vector<Val> dom;
