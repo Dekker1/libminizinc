@@ -845,31 +845,34 @@ namespace MiniZinc {
           v->alias(interpreter, BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode) ? Val(IntVal(1)) : Val(IntVal(0)));
         }
       } else if (mode == BytecodeProc::FUN || mode == BytecodeProc::FUN_NEG) {
-        assert(false); // NO MORE FUN
-//        if (oldVal.isVar()) {
-//          Variable* v = oldVal.toVar();
-//          if (BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode)) {
-//            v->alias(interpreter, val);
-//          } else {
-//            Key nkey({val});
-//            bool found;
-//            auto cmode = BytecodeProc::FUN;
-//            Val new_val;
-//            std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
-//            if (!found) {
-//              // FIXME: This is no longer how this works. We do not create FUN definitions (They should not exist)
-//              auto negation = Definition::a(interpreter, interpreter->boolean_domain().toVec(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent());
-//              interpreter->pushDef(negation);
-//              new_val = Val(negation);
-//              interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
-//            } else {
-//              nkey.destroy();
-//            }
-//            d->alias(interpreter, new_val);
-//          }
-//        }
+        if (oldVal.isVar()) {
+          Variable* v = oldVal.toVar();
+          if (BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode)) {
+            // Value might have already been aliased earlier in the call stack
+            if (val != oldVal) {
+              v->alias(interpreter, val);
+            }
+          } else {
+            // FIXME: This is no longer how this works. We do not create FUN definitions (They should not exist)
+            throw Error("NOT YET IMPLEMENTED");
+            /* Key nkey({val}); */
+            /* bool found; */
+            /* auto cmode = BytecodeProc::FUN; */
+            /* Val new_val; */
+            /* std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode); */
+            /* if (!found) { */
+            /*   auto negation = Definition::a(interpreter, interpreter->boolean_domain().toVec(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent()); */
+            /*   interpreter->pushDef(negation); */
+            /*   new_val = Val(negation); */
+            /*   interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val); */
+            /* } else { */
+            /*   nkey.destroy(); */
+            /* } */
+            /* d->alias(interpreter, new_val); */
+          }
+        }
       }
-      oldVal.removeWeakRef(interpreter);
+      it->second.second.removeWeakRef(interpreter);
       it->second = std::make_pair(mode, val);
     }
   }
