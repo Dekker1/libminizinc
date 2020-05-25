@@ -3073,7 +3073,7 @@ CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& f
 
 CG::Binding bind_bool2int(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
-  return CG::force_or_bind(call->arg(0), ctx, cg, frag);
+  return CG::force_or_bind(call->arg(0), BytecodeProc::FUN, cg, frag);
 }
 
 CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
