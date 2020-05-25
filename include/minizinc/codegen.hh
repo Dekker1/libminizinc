@@ -247,15 +247,16 @@ struct CG_Cond {
   class C_And;
 
   struct cond_reg {
-    cond_reg(void) : is_root(0), is_seen(0), reg(-1) { }
-    cond_reg(int _reg) : is_root(0), is_seen(0), reg(_reg) { }
+    cond_reg(void) : is_root(0), is_seen(0), is_par(0), reg(-1) { }
+    cond_reg(int _reg, bool _par) : is_root(0), is_seen(0), is_par(_par), reg(_reg) { }
 
     int operator*(void) const { assert(reg >= 0); return reg; }
     bool has_reg(void) const { return reg >= 0; }
 
     int is_root: 1;
     int is_seen: 1;
-    int reg: 30;
+    int is_par: 1;
+    int reg: 29;
   };
 
   class _T {
@@ -263,8 +264,9 @@ struct CG_Cond {
     cond_reg reg[2];
   
     _T(void) { }
-    _T(int r) {
+    _T(int r, bool is_par) {
       reg[0].reg = r;
+      reg[0].is_par = is_par;
     }
 
     virtual Kind kind(void) const = 0;
@@ -295,7 +297,7 @@ struct CG_Cond {
   public:
     static const Kind _kind = CC_Reg;
     Kind kind(void) const { return _kind; }
-    C_Reg(int reg) : _T(reg) { }
+    C_Reg(int reg, bool is_par) : _T(reg, is_par) { }
   };
   class C_Call : public _T {
   public:
@@ -323,8 +325,8 @@ struct CG_Cond {
     std::vector<T> children;
   };
 
-  static T reg(int r) {
-    return T::of_ptr(new C_Reg(r));
+  static T reg(int r, bool is_par) {
+    return T::of_ptr(new C_Reg(r, is_par));
   }
 
   static T call(ASTString ident, BytecodeProc::Mode m, const std::vector<Type>& ty, const std::vector<CG_Value>& params) {
