@@ -698,10 +698,13 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
   GCLock lock;
   auto bodies = std::move(cg.fun_map.get_bodies(ident, arg_types));
   assert(!bodies.empty());
+  auto neg_bodies = std::move(cg.fun_map.get_bodies(ASTString(ident.str()+"_neg"), arg_types));
 
   if (ret_type.isbool() && call_mode != BytecodeProc::ROOT) {
     bool valid = false;
     if (cg.fun_map.defines_mode(ident, arg_types, call_mode).first) {
+      valid = true;
+    } else if (BytecodeProc::is_neg(m) && std::any_of(neg_bodies.begin(), neg_bodies.end(), [](FunctionI* fi){return fi->e();}) ) {
       valid = true;
     } else {
       valid = cg.fun_map.defines_mode(ident, arg_types, BytecodeProc::FUN).first;
@@ -710,13 +713,7 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
         def_mode = BytecodeProc::FUN;
       }
     }
-    for (auto & body : bodies) {
-      if (body->e()) {
-        valid = true;
-        break;
-      }
-    }
-    if (!valid) {
+    if (!valid && std::none_of(bodies.begin(), bodies.end(), [](FunctionI* fi){return fi->e();})) {
       throw InternalError(ident.str() + " is used in a reified context, but no reification is available.");
     }
   }
@@ -731,14 +728,14 @@ std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTStr
       cg.pending_bodies.emplace_back(b, std::make_pair(call_mode, def_mode));
     }
   }
-  
+
   // If there's a unique candidate, go for it.
   if(procs.size() == 1) {
     if(it == cg.dispatch.end())
       cg.dispatch.insert(std::make_pair(sig, procs[0]));
     return {procs[0], call_mode};
   }
-  
+
   CG_ProcID d_proc(CG_ProcID::builtin(0));
   if(it != cg.dispatch.end()) {
     d_proc = it->second;
@@ -2149,68 +2146,77 @@ public:
       Mode call_mode(p.second.first);
       Mode def_mode(p.second.second);
       annotate_total(fun);
+      // Building structures
+      CG_ProcID proc(cg.resolve_fun(fun));
+      CG_Builder frag;
       // Find the body.
-      if (call_mode == BytecodeProc::IMP || call_mode == BytecodeProc::FUN || call_mode == BytecodeProc::ROOT_NEG) {
-        std::vector<Type> arg_types (fun->params().size());
-        for (int j = 0; j < arg_types.size(); ++j) {
-          arg_types[j] = fun->params()[j]->type();
-        }
+      std::vector<Type> arg_types (fun->params().size());
+      for (int j = 0; j < arg_types.size(); ++j) {
+        arg_types[j] = fun->params()[j]->type();
+      }
+
+      // Introduce reification if necessary
+      if (call_mode == BytecodeProc::IMP || call_mode == BytecodeProc::FUN || call_mode == BytecodeProc::IMP_NEG || call_mode == BytecodeProc::FUN_NEG) {
         auto redef = cg.fun_map.defines_mode(fun->id(), arg_types, call_mode);
-        if (redef.first)  {
-          CG_ProcID proc(cg.resolve_fun(fun));
-          CG_Builder frag;
+        if (redef.first) {
           std::vector<Expression*> args;
-          args.reserve(fun->params().size() + !(call_mode == BytecodeProc::ROOT_NEG));
+          args.reserve(fun->params().size() + 1);
           for (int i = 0; i < fun->params().size(); ++i) {
             VarDecl* vd = fun->params()[i];
             args.emplace_back(vd->id());
           }
-          if (call_mode == BytecodeProc::ROOT_NEG) {
-            Call call(Location().introduce(), redef.second, args);
-            call.type(Type::varbool());
-            // Call negated constraint in ROOT context (implementation should deal with the negation).
-            c.compile_pred(frag, fun->params(), BytecodeProc::ROOT, &call);
-            cg.append(proc.id(), call_mode, frag);
-          } else {
-            TypeInst var_bool(Location().introduce(), Type::varbool());
-            VarDecl new_var(Location().introduce(), &var_bool, "b");
-            args.emplace_back(new_var.id());
-            Call call(Location().introduce(), redef.second, args);
-            call.type(Type::varbool());
-            Let let(Location().introduce(), {&new_var, &call}, new_var.id());
-            let.type(Type::varbool());
-            let.addAnnotation(constants().ann.promise_total);
-            c.compile_pred(frag, fun->params(), call_mode, &let);
-            cg.append(proc.id(), call_mode, frag);
+          TypeInst var_bool(Location().introduce(), Type::varbool());
+          VarDecl new_var(Location().introduce(), &var_bool, "b");
+          args.emplace_back(new_var.id());
+          Call call(Location().introduce(), redef.second, args);
+          call.type(Type::varbool());
+          Let let(Location().introduce(), {&new_var, &call}, new_var.id());
+          let.type(Type::varbool());
+          let.addAnnotation(constants().ann.promise_total);
+          c.compile_pred(frag, fun->params(), call_mode, &let);
+          cg.append(proc.id(), call_mode, frag);
+          continue;
+        }
+      }
+      if(BytecodeProc::is_neg(call_mode)) {
+        GCLock lock;
+        ASTString ident(fun->id().str() + "_neg");
+        auto neg_bodies = std::move(cg.fun_map.get_bodies(ident, arg_types));
+        if (std::any_of(neg_bodies.begin(), neg_bodies.end(), [](FunctionI* fi){return fi->e();})) {
+          std::vector<Expression*> args;
+          args.reserve(fun->params().size());
+          for (int i = 0; i < fun->params().size(); ++i) {
+            VarDecl* vd = fun->params()[i];
+            args.emplace_back(vd->id());
           }
+          Call call(Location().introduce(), ident, args);
+          call.type(Type::varbool());
+          // Call negated constraint in positive context (implementation should deal with the negation).
+          c.compile_pred(frag, fun->params(), BytecodeProc::negate(call_mode), &call);
+          cg.append(proc.id(), call_mode, frag);
           continue;
         }
       }
 
       if (fun->e()) {
-        CG_ProcID proc(cg.resolve_fun(fun));
-        CG_Builder frag;
         if(fun->e()->type().isbool()) {
           c.compile_pred(frag, fun->params(), def_mode, fun->e());
         } else {
           assert(def_mode == BytecodeProc::ROOT);
           c.compile_fun(frag, fun->params(), fun->e());
         }
-        cg.append(proc.id(), call_mode, frag);
       } else {
         assert(call_mode == BytecodeProc::ROOT);
-        CG_ProcID proc(cg.resolve_fun(fun));
-        CG_Builder frag;
-        cg.append(proc.id(), call_mode, frag);
         cg.req_solver_predicates.push_back(fun);
       }
+      cg.append(proc.id(), call_mode, frag);
     }
 
     // And finally, add the entry function.
     int main_proc = cg.bytecode.size();
     cg.bytecode.emplace_back("main", 0);
     cg.append(main_proc, BytecodeProc::ROOT, c.root_frag);
- 
+
     show(std::cout, cg);
   }
 };

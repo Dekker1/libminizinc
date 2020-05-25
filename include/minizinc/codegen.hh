@@ -729,7 +729,7 @@ struct CG_FunMap {
   std::vector<FunctionI*> get_bodies(const ASTString& ident, const std::vector<Type>& args) {
     auto it(id_map.find(ident));
     if(it == id_map.end())
-      throw InternalError("Attempted to call function not in CG_FunMap.");
+      return {};
     unsigned int fun_id((*it).second);
     return get_bodies(fun_id, args);
   }
@@ -750,14 +750,20 @@ struct CG_FunMap {
     GCLock lock;
     ASTString nident;
     switch (mode) {
+      case BytecodeProc::ROOT_NEG:
+        nident = ident.str() + "_neg";
+        break;
       case BytecodeProc::FUN:
         nident = ident.str() + "_reif";
+        break;
+      case BytecodeProc::FUN_NEG:
+        nident = ident.str() + "_neg_reif";
         break;
       case BytecodeProc::IMP:
         nident = ident.str() + "_imp";
         break;
-      case BytecodeProc::ROOT_NEG:
-        nident = ident.str() + "_neg";
+      case BytecodeProc::IMP_NEG:
+        nident = ident.str() + "_neg_imp";
         break;
       default:
         return {false, ASTString("")};
