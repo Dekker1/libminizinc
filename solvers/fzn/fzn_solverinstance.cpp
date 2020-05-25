@@ -234,6 +234,7 @@ namespace MiniZinc {
 
         auto ti = new TypeInst(Location().introduce(), Type::varbool());
         VarDecl* vd = add_var_to_model(v.timestamp(), ti, vs.used_int);
+        vs.bool_var = KeepAlive(vd);
 
         if (vs.used_int) {
           _model->addItem(new ConstraintI(Location().introduce(), new Call(Location().introduce(), constants().ids.bool2int, {vs.bool_var()->cast<VarDecl>()->id(), vs.int_var()->cast<VarDecl>()->id()})));
@@ -250,6 +251,7 @@ namespace MiniZinc {
       SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(0,1));
       auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
       VarDecl* vd = add_var_to_model(v.timestamp(), ti, vs.used_bool);
+      vs.int_var = KeepAlive(vd);
 
       if (vs.used_bool) {
         _model->addItem(new ConstraintI(Location().introduce(), new Call(Location().introduce(), constants().ids.bool2int, {vs.bool_var()->cast<VarDecl>()->id(), vs.int_var()->cast<VarDecl>()->id()})));
