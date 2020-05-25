@@ -1851,6 +1851,14 @@ void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
   if(p->reg[sign].has_reg()) {
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(p->reg[sign].reg));
     return;
+  } else if(p->reg[1 - sign].has_reg()) {
+    int r_neg(p->reg[1 - sign].reg);
+    OPEN_OTHER(cg, frag);
+    auto fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+    assert(fun.second == BytecodeProc::FUN);
+    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_neg));
+    CLOSE_AGG(cg, frag);
+    return;
   }
   std::vector<int> leaves;
   if(p->kind() == CG_Cond::CC_And) {
@@ -3109,7 +3117,7 @@ CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& f
 
 CG::Binding bind_bool2int(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
-  return CG::force_or_bind(call->arg(0), ctx, cg, frag);
+  return CG::force_or_bind(call->arg(0), BytecodeProc::FUN, cg, frag);
 }
 
 CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
@@ -3845,19 +3853,24 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     std::vector<CG_Cond::T> cond = {b_lhs.second, b_rhs.second};
 
     int l_skip;
+    int r_ret;
     if(b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
       l_skip = GET_LABEL(cg);
-      int r_zero(bind_cst(0, cg, frag));
       int r_cond = GET_REG(cg);
+      r_ret = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r_ret));
       cond.push_back(CG_Cond::reg(r_cond, true));
-      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(b_rhs.first), CG::r(r_zero), CG::r(r_cond));
+      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(b_rhs.first), CG::r(r_ret), CG::r(r_cond));
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_cond), CG::r(r_cond));
       PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_cond), CG::l(l_skip));
     }
     int r = bind_binop_par_int(cg, frag, b->op(), b_lhs.first, b_rhs.first);
     if (b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
+      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r), CG::r(r_ret));
+      r = r_ret;
       PUSH_LABEL(frag, l_skip);
     }
+
     return {r, CG_Cond::forall(ctx, cond)};
   } else {
     std::vector<CG_Cond::T> partial;
@@ -4397,9 +4410,13 @@ CG_Cond::T CG::compile(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(u->op() == UOT_NOT);
   if(u->type().ispar()) {
     int r_e = CG::force(CG::compile(u->e(), cg, frag), ctx, cg, frag);
+    /*
     int r_neg = GET_REG(cg);
     PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_e), CG::r(r_neg));
-    return CG_Cond::reg(r_neg, true);
+    return CG_Cond::reg(r_neg);
+    */
+    // I _think_ this negation is now dealt with in force.
+    return CG_Cond::reg(r_e, true);
   }
   return ~CG::compile(u->e(), cg, frag);
 }
