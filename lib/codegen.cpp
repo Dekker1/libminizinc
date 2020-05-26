@@ -2043,6 +2043,19 @@ private:
             int r_dp = GET_REG(cg);
             PUSH_INSTR(root_frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(r_var), CG::r(b_d.first), CG::r(r_dp));
             post_cond(cg, root_frag, b_d.second);
+          } else {
+            // Iterate over the elements of the variable we just created, and
+            // bind the corresponding domain.
+            CG::Binding b_d = CG::bind(d, cg, root_frag);
+            int r_elts = GET_REG(cg);
+            PUSH_INSTR(root_frag, BytecodeStream::GET_VEC, CG::r(r_var),
+              CG::r(bind_cst(1, cg, root_frag)), CG::r(r_elts));
+            int r_dp = GET_REG(cg);
+            ITER_VEC(cg, root_frag, r_elts, [b_d, r_dp](CodeGen& cg, CG_Builder& frag, int r_elt) {
+              PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN,
+                CG::r(r_elt), CG::r(b_d.first), CG::r(r_dp));
+            });
+            post_cond(cg, root_frag, b_d.second);
           }
         }
       } else {
