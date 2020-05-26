@@ -2116,6 +2116,7 @@ execute_ret:
                     //FIXME: Deal with unsuccessful setVal
                     assert(success);
                   }
+                  pushAgg(IntVal(1), -2);
 
                   // Why do we need a definition? If this is in ROOT, then all arguments should be true
                   /* Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::FORALL,BytecodeProc::ROOT, */
@@ -2170,14 +2171,13 @@ execute_ret:
                 }
                 if (isTrue || (pos.empty() && neg.empty())) {
                   // Disjunction is constant true or false
-                  if (_agg.size() > 2) {
-                    pushAgg(IntVal(isTrue),-2);
-                  }
+                  pushAgg(IntVal(isTrue),-2);
                 } else if (pos.size() == 1 && neg.empty()) {
                   if (_agg.size()==2) {
                     auto success = pos[0].toVar()->setVal(this, 1);
                     //FIXME: Deal with unsuccessful setVal
                     assert(success);
+                    pushAgg(IntVal(1), -2);
                   } else {
                     pushAgg(pos[0],-2);
                   }
@@ -2191,6 +2191,7 @@ execute_ret:
                     auto c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)});
                     assert(c.first);
                     root()->addDefinition(this, c.first);
+                    pushAgg(IntVal(1), -2);
                   } else {
                     result = Variable::a(this,boolean_domain(),false, newIdent());
                     auto def_c = Constraint::a(this, PrimitiveMap::CLAUSE_REIF, BytecodeProc::ROOT, {Val(vpos), Val(vneg), Val(result)});
