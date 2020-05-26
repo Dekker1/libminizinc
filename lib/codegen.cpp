@@ -3491,11 +3491,11 @@ CG::Binding CG::bind(Id* x, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
 }
 
-CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+CG::Binding CG::bind(SetLit* sl, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   bool is_vec(false);
   OPEN_OTHER(cg, frag);
   OPEN_VEC(cg, frag);
-  if(IntSetVal* s = l->isv()) {
+  if(IntSetVal* s = sl->isv()) {
     int r_t(GET_REG(cg));
     for(int ii = 0; ii < s->size(); ++ii) {
       IntVal l(s->min(ii));
@@ -3510,7 +3510,7 @@ CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_t));
       }
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
-      if (l.isFinite()) {
+      if (u.isFinite()) {
         PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(u.toInt()), CG::r(r_t));
       } else {
         assert(u.isPlusInfinity());
@@ -3523,7 +3523,7 @@ CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     }
   } else {
     is_vec = true;
-    int sz = l->v().size();
+    int sz = sl->v().size();
     int r_t(GET_REG(cg));
     for(int ii = 0; ii < sz; ii++) {
       // Assumes the set is sorted.
@@ -3534,7 +3534,7 @@ CG::Binding CG::bind(SetLit* l, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
       */
-      CG::Binding b(CG::bind(l->v()[ii], cg, frag)); // Ignores any partiality.
+      CG::Binding b(CG::bind(sl->v()[ii], cg, frag)); // Ignores any partiality.
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b.first));
     }
   }
