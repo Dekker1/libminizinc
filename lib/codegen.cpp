@@ -4293,7 +4293,7 @@ CG_Cond::T CG::compile(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) 
     CG_Cond::T ncond;
     std::tie(r, ncond) = execute_array_access(r_A, r_idxs, cg, frag);
     cond.push_back(ncond);
-    cond.push_back(CG_Cond::reg(r, true));
+    cond.push_back(CG_Cond::reg(r, a->type().ispar()));
     return CG_Cond::forall(ctx, cond);
   }
 }
