@@ -1356,18 +1356,28 @@ bool collect_disj(std::vector<int>& pos, std::vector<int>& neg, std::vector<CG_C
   return false;
 }
 
-void force_and_leaves(std::vector<int>& leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
+std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag);
+
+void force_and_leaves(std::vector<int>& var_leaves, std::vector<int>& par_leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
   assert(child.get());
   CG_Cond::_T* p(child.get());
   bool sign(child.sign());
+  auto push = [&](int r, bool is_par){
+    if (is_par) {
+      par_leaves.push_back(r);
+    } else {
+      var_leaves.push_back(r);
+    }
+  };
   if(p->reg[sign].has_reg()) {
-    leaves.push_back(p->reg[sign].reg);
+    push(p->reg[sign].reg, p->reg[sign].is_par);
   } else if(p->reg[1 - sign].has_reg()) {
     // Create the negation
     int r(GET_REG(cg));
     if (p->reg[1 - sign].is_par) {
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(p->reg[1 - sign].reg), CG::r(r));
     } else {
+      GCLock lock;
       OPEN_OTHER(cg, frag);
       auto fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
       assert(fun.second == BytecodeProc::FUN);
@@ -1376,31 +1386,39 @@ void force_and_leaves(std::vector<int>& leaves, CG_Cond::T child, CodeGen& cg, C
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
     p->reg[sign] = CG_Cond::cond_reg(r, p->reg[1 - sign].is_par);
-    leaves.push_back(r);
+    push(p->reg[sign].reg, p->reg[sign].is_par);
   } else if(p->kind() == CG_Cond::CC_And && !sign) {
     std::vector<CG_Cond::T>& children(static_cast<CG_Cond::C_And*>(p)->children);
-    for(CG_Cond::T c : children)
-      force_and_leaves(leaves, c, cg, frag);
+    for(CG_Cond::T c : children) {
+      force_and_leaves(var_leaves, par_leaves, c, cg, frag);
+    }
   } else {
-    // FIXME: Check force context
-    leaves.push_back(CG::force(child, BytecodeProc::FUN, cg, frag));
+    auto forced = _force_cond(child, cg, frag);
+    push(forced.first, forced.second);
   }
 }
 
 // Pushing the _negation_ of child.
-void force_or_leaves(std::vector<int>& leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
-  GCLock lock;
+void force_or_leaves(std::vector<int>& var_leaves, std::vector<int> par_leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
   assert(child.get());
   CG_Cond::_T* p(child.get());
   bool sign(child.sign());
+  auto push = [&](int r, bool is_par){
+    if (is_par) {
+      par_leaves.push_back(r);
+    } else {
+      var_leaves.push_back(r);
+    }
+  };
   if(p->reg[1 - sign].has_reg()) {
-    leaves.push_back(p->reg[1 - sign].reg);
+    push(p->reg[1 - sign].reg, p->reg[1 - sign].is_par);
   } else if(p->reg[sign].has_reg()) {
     // Create the negation
     int r(GET_REG(cg));
-    if (p->reg[1 - sign].is_par) {
+    if (p->reg[sign].is_par) {
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(p->reg[sign].reg), CG::r(r));
     } else {
+      GCLock lock;
       OPEN_OTHER(cg, frag);
       auto fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
       assert(fun.second == BytecodeProc::FUN);
@@ -1409,13 +1427,15 @@ void force_or_leaves(std::vector<int>& leaves, CG_Cond::T child, CodeGen& cg, CG
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
     p->reg[1 - sign] = CG_Cond::cond_reg(r, p->reg[sign].is_par);
-    leaves.push_back(r);
+    push(p->reg[1 - sign].reg, p->reg[1 - sign].is_par);
   } else if(p->kind() == CG_Cond::CC_And && !sign) {
     std::vector<CG_Cond::T>& children(static_cast<CG_Cond::C_And*>(p)->children);
-    for(CG_Cond::T c : children)
-      force_or_leaves(leaves, c, cg, frag);
+    for(CG_Cond::T c : children) {
+      force_or_leaves(var_leaves, par_leaves, c, cg, frag);
+    }
   } else {
-    leaves.push_back(CG::force(~child, BytecodeProc::FUN, cg, frag));
+    auto forced = _force_cond(~child, cg, frag);
+    push(forced.first, forced.second);
   }
 }
 
@@ -1485,32 +1505,58 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     }
     return {bind_cst(1, cg, frag), true};
   } else if(p->kind() == CG_Cond::CC_And && !cond.sign()) {
-    std::vector<int> leaves;
-    OPEN_OTHER(cg, frag);
-    force_and_leaves(leaves, cond, cg, frag);
-    OPEN_AND(cg, frag);
-    for(int r_c : leaves)
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
-    CLOSE_AGG(cg, frag);
-    CLOSE_AGG(cg, frag);
+    std::vector<int> var_leaves;
+    std::vector<int> par_leaves;
     int r = GET_REG(cg);
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-    // TODO: Could this be par?
-    return {r, false};
+    // I don't think these are necessary
+    /* OPEN_OTHER(cg, frag); */
+    force_and_leaves(var_leaves, par_leaves, cond, cg, frag);
+    if (!par_leaves.empty()) {
+      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(par_leaves[0]), CG::r(r));
+      for (int i = 1; i < par_leaves.size(); ++i) {
+        PUSH_INSTR(frag, BytecodeStream::AND, CG::r(r), CG::r(par_leaves[i]), CG::r(r));
+      }
+    }
+    if (!var_leaves.empty()) {
+      OPEN_AND(cg, frag);
+      if (!par_leaves.empty()) {
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+      }
+      for(int r_c : var_leaves) {
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+      }
+      CLOSE_AGG(cg, frag);
+      /* CLOSE_AGG(cg, frag); */
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+    }
+    return {r, var_leaves.empty()};
   } else {
     assert(p->kind() == CG_Cond::CC_And && cond.sign());
-    std::vector<int> leaves;
-    OPEN_OTHER(cg, frag);
-    force_or_leaves(leaves, ~cond, cg, frag);
-    OPEN_OR(cg, frag);
-    for(int r_c : leaves)
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
-    CLOSE_AGG(cg, frag);
-    CLOSE_AGG(cg, frag);
+    std::vector<int> var_leaves;
+    std::vector<int> par_leaves;
     int r = GET_REG(cg);
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-    // TODO: Could this be par?
-    return {r, false};
+    // I don't think these are necessary
+    /* OPEN_OTHER(cg, frag); */
+    force_or_leaves(var_leaves, par_leaves, ~cond, cg, frag);
+    if (!par_leaves.empty()) {
+      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(par_leaves[0]), CG::r(r));
+      for (int i = 1; i < par_leaves.size(); ++i) {
+        PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r), CG::r(par_leaves[i]), CG::r(r));
+      }
+    }
+    if (!var_leaves.empty()) {
+      OPEN_OR(cg, frag);
+      if (!par_leaves.empty()) {
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+      }
+      for(int r_c : var_leaves) {
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+      }
+      CLOSE_AGG(cg, frag);
+      /* CLOSE_AGG(cg, frag); */
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+    }
+    return {r, var_leaves.empty()};
   }
 }
 int CG::force(CG_Cond::T _cond, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -1860,20 +1906,53 @@ void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
     CLOSE_AGG(cg, frag);
     return;
   }
-  std::vector<int> leaves;
+  std::vector<int> var_leaves;
+  std::vector<int> par_leaves;
   if(p->kind() == CG_Cond::CC_And) {
     if(!sign) {
-      force_and_leaves(leaves, cond, cg, frag);
-      OPEN_AND(cg, frag);
-      for(auto r_l : leaves)
-        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_l));
-      CLOSE_AGG(cg, frag);
+      force_and_leaves(var_leaves, par_leaves, cond, cg, frag);
+      int r;
+      if (!par_leaves.empty()) {
+        r = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(par_leaves[0]), CG::r(r));
+        for (int i = 1; i < par_leaves.size(); ++i) {
+          PUSH_INSTR(frag, BytecodeStream::AND, CG::r(r), CG::r(par_leaves[i]), CG::r(r));
+        }
+      }
+      if (!var_leaves.empty()) {
+        OPEN_AND(cg, frag);
+        if (!par_leaves.empty()) {
+          PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+        }
+        for(int r_c : var_leaves) {
+          PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+        }
+        CLOSE_AGG(cg, frag);
+      } else {
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+      }
     } else {
-      force_or_leaves(leaves, ~cond, cg, frag);
-      OPEN_OR(cg, frag);
-      for(auto r_l : leaves)
-        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_l));
-      CLOSE_AGG(cg, frag);
+      force_or_leaves(var_leaves, par_leaves, ~cond, cg, frag);
+      int r;
+      if (!par_leaves.empty()) {
+        r = GET_REG(cg);
+        PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(par_leaves[0]), CG::r(r));
+        for (int i = 1; i < par_leaves.size(); ++i) {
+          PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r), CG::r(par_leaves[i]), CG::r(r));
+        }
+      }
+      if (!var_leaves.empty()) {
+        OPEN_OR(cg, frag);
+        if (!par_leaves.empty()) {
+          PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+        }
+        for(int r_c : var_leaves) {
+          PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+        }
+        CLOSE_AGG(cg, frag);
+      } else {
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+      }
     }
   } else {
     // FIXME: Check force context
@@ -2527,7 +2606,8 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
           if(b_param.second.sign())
             return CG_Cond::T::fff();
         } else  {
-          force_and_leaves(p_A, b_param.second, cg, frag);
+          // TODO: It's probably not quicker to split par/var since we need the AND Aggregation anyway
+          force_and_leaves(p_A, p_A, b_param.second, cg, frag);
         }
         OPEN_AND(cg, frag);
         // First, push the constraints attached to A.
