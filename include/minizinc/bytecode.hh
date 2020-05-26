@@ -37,7 +37,7 @@ namespace MiniZinc {
   public:
     /// Constructor
     BytecodeStream(void) : _max_reg(0) {}
-    
+
     enum Instr {
       ADDI, // R1, R2 -> R3
       SUBI, // R1, R2 -> R3
@@ -46,7 +46,7 @@ namespace MiniZinc {
       MODI, // R1, R2 -> R3
       INCI, // R1
       DECI, // R1
-      
+
       IMMI, // I, R : Load immediate integer into register
       CLEAR,// R1, Rn : Clear all registers R1, R2, ..., Rn
       LOAD_GLOBAL, // i -> R : Load global i into register R (globals are registers of the bottom stack frame)
@@ -56,51 +56,51 @@ namespace MiniZinc {
       JMP,  // i : pc=i
       JMPIF,     // R, i: if R then pc=i
       JMPIFNOT,  // R, i: if not R then pc=i
-      
+
       EQI,
       LTI,
       LEI,
-      
+
       AND,
       OR,
       NOT,
       XOR,
-      
+
       ISPAR,   // R1 -> R2: put whether value in R1 is not a variable into R2
       ISEMPTY, // R1 -> R2: put whether vector in R1 is empty into R2
       LENGTH,  // R1 -> R2: put length of vector in R1 into R2
       GET_VEC, // R1, R2 -> R3: put element R2 of vector in R1 into R3
-      GET_VEC_NDIM, // n, R1, R2, ... Rn -> Rn+1: put element [R2,...,Rn] of n-dimensional vector in R1 into R3
+      GET_VEC_NDIM, // n, R1, R2, ... Rn -> Rn+1 Rn+2: put element [R2,...,Rn] of n-dimensional vector in R1 into Rn+1 with success signal Rn+2
 
       LB, // R1 -> R2: put lower bound of value in R1 into R2
       UB, // R1 -> R2: put upper bound of value in R1 into R2
       DOM, // R1 -> R2: put domain of value in R1 into R2
-      
+
       MAKE_SET, // R1 -> R2: turn a vector (of values) into a set
       INTERSECTION, // R1, R2 -> R3: put intersection of sets in R1 and R2 into R3
       UNION, // R1, R2 -> R3: put union of sets in R1 and R2 into R3
       DIFF, // R1, R2 -> R3: put difference of sets in R1 and R2 into R3
 
       INTERSECT_DOMAIN, // R1, R2 -> R3: Update domain of R1 with set R2, place result in R3
-      
+
       OPEN_AGGREGATION, // i: Create a new aggregation context with symbol i
       CLOSE_AGGREGATION,  // Close current aggregation context, put result onto context above
       SIMPLIFY_LIN, // R1 -> R2, R3, R4: simplify linear expression in R1, return coefficients (R2), variables (R3), constant (R4)
-      
+
       PUSH,  // R: push R onto value stack
       POP,   // R: pop from value stack into R
       POST,  // R: post constraint in R
-      
+
       RET, // return from call
       CALL, // m, i, n, R1, ..., Rn: call code i in mode m with n arguments
       BUILTIN, // i, n, R1, ..., Rn : call builtin function i
       TCALL, // m, i : call code i in mode m (arguments are assumed to be in correct registers already)
-      
+
       TRACE, // R: output string representation of R
       ABORT, // abort execution
-      
+
     };
-    
+
     /// Get instruction at \a pc and increment \a pc
     Instr instr(int& pc) const { assert(pc < _bs.size()); return static_cast<Instr>(_bs[pc++]); }
     IntVal intval(int& pc) const { assert(pc < _bs.size()); const IntVal* iv = reinterpret_cast<const IntVal*>(&_bs[pc]); pc += sizeof(IntVal); return *iv; }

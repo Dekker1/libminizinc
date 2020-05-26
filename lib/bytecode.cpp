@@ -1519,7 +1519,8 @@ namespace MiniZinc {
             DBG_INTERPRETER(" R" << rr  << "(" << frame->reg[rr].toString(DBG_TRIM_OUTPUT) << ")");
             idx[i] = frame->reg[rr]();
           }
-          int r2 = frame->bs->reg(frame->pc);
+          int r_res = frame->bs->reg(frame->pc);
+          int r_cond = frame->bs->reg(frame->pc);
           assert(frame->reg[r1].isVec());
           assert(frame->reg[r1].size()==2);
           assert(frame->reg[r1][0].isVec());
@@ -1547,9 +1548,14 @@ namespace MiniZinc {
           }
           assert(realidx >= 0 && realidx < frame->reg[r1][0].size());
 
-          Val v = Val::follow_alias(frame->reg[r1][0][realidx.toInt()], this);
-          frame->reg.assign(this, r2, v);
-          DBG_INTERPRETER(" R" << r2 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
+          Val v(IntVal(0));
+          if (success) {
+            v = Val::follow_alias(frame->reg[r1][0][realidx.toInt()], this);
+          }
+
+          frame->reg.assign(this, r_res, v);
+          frame->reg.assign(this, r_cond, Val(success));
+          DBG_INTERPRETER(" R" << r_res <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ") R" << r_cond<< "(" << Val(succes).toString(DBG_TRIM_OUTPUT) << ")"<<  "\n");
         }
           break;
         case BytecodeStream::LB:
