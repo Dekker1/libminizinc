@@ -3818,11 +3818,14 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int sz(ite->size());
   int r_one(bind_cst(1, cg, frag));
 
-  bool all_par = true;
-  for(int ii = 0; ii < sz; ++ii) {
-    if(!ite->e_if(ii)->type().ispar()) {
-      all_par = false;
-      break;
+  bool all_par = false;
+  if(ite->e_else()->type().ispar()) {
+    all_par = true;
+    for(int ii = 0; ii < sz; ++ii) {
+      if(!ite->e_if(ii)->type().ispar()) {
+        all_par = false;
+        break;
+      }
     }
   }
 
