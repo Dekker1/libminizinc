@@ -3818,17 +3818,13 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int sz(ite->size());
   int r_one(bind_cst(1, cg, frag));
 
-  bool all_par = false;
-  if(ite->e_else()->type().ispar()) {
-    all_par = true;
-    for(int ii = 0; ii < sz; ++ii) {
-      if(!ite->e_if(ii)->type().ispar()) {
-        all_par = false;
-        break;
-      }
+  bool all_par = true;
+  for(int ii = 0; ii < sz; ++ii) {
+    if(!ite->e_if(ii)->type().ispar()) {
+      all_par = false;
+      break;
     }
   }
-
 
   if (all_par) {
     int l_end(GET_LABEL(cg));
@@ -3844,6 +3840,8 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       int l_cont(GET_LABEL(cg));
       PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_sel), CG::l(l_cont));
       cg.env_push();
+      if(!ite->e_then(ii)->type().ispar())
+        all_par = false;
       CG::Binding b_res(CG::bind(ite->e_then(ii), cg, frag));
       if(b_res.second.get()) {
         is_total = false;
@@ -3859,6 +3857,9 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       PUSH_LABEL(frag, l_cont);
     }
     // Else case.
+    if(!ite->e_else()->type().ispar())
+      all_par = false;
+
     CG::Binding b_res(CG::bind(ite->e_else(), cg, frag));
     if(b_res.second.get()) {
       is_total = false;
@@ -3873,7 +3874,7 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     for(int ii = 0; ii < sz; ++ii) {
       cg.env_pop();
     }
-    return {r_ret, is_total ? CG_Cond::ttt() : CG_Cond::reg(r_cond, true)};
+    return {r_ret, is_total ? CG_Cond::ttt() : CG_Cond::reg(r_cond, all_par)};
   } else {
     GCLock lock;
     std::vector<int> r_cond;
@@ -4340,6 +4341,8 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       int l_cont(GET_LABEL(cg));  
       PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_sel), CG::l(l_cont));
       cg.env_push();
+      if(!ite->e_then(ii)->type().ispar())
+        all_par = false;
       int r_val = CG::force(CG::compile(ite->e_then(ii), cg, frag), ctx, cg, frag);
       PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_val), CG::r(r_ret));
       PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
@@ -4348,13 +4351,15 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       PUSH_LABEL(frag, l_cont);
     }
     // Else case.
+    if(!ite->e_else()->type().ispar())
+      all_par = false;
     int r_val = CG::force(CG::compile(ite->e_else(), cg, frag), ctx, cg, frag);
     PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_val), CG::r(r_ret));
     PUSH_LABEL(frag, l_end);
     // Now kill the availability of all the expressions.
     for(int ii = 0; ii < sz; ++ii)
       cg.env_pop();
-    return CG_Cond::reg(r_ret, true);
+    return CG_Cond::reg(r_ret, all_par);
   } else {
     GCLock lock;
     // Collect conditions
