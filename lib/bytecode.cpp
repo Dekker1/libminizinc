@@ -2217,7 +2217,7 @@ execute_ret:
                     result = _agg.back()[0].toVar();
                   }
                   // push value onto surrounding context
-                  _agg[_agg.size()-2].push(this,_agg.back()[0]);
+                  pushAgg(_agg.back()[0],-2);
                 }
                 break;
             }
