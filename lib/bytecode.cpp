@@ -790,22 +790,22 @@ namespace MiniZinc {
             assert(v().toInt() == 0 || v().toInt() == 1);
             return Val(1 - v().toInt());
           } else {
-            throw Error("NOT YET IMPLEMENTED");
-            /* return v; */
-            // TODO: make sure negated versions are stored in CSE table
-//              Key nkey({v});
-//              bool found;
-//              auto cmode = BytecodeProc::FUN;
-//              std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode);
-//              if (!found) {
-//                // FIXME: This is no longer how this works. We do not create FUN definitions (They should not exist)
-//                auto d = Definition::a(interpreter, interpreter->boolean_domain().toVec(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {v}, interpreter->newIdent());
-//                interpreter->pushDef(d);
-//                new_val = Val(d);
-//                interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val);
-//              } else {
-//                nkey.destroy();
-//              }
+            Key nkey({v});
+            Val new_val;
+            bool found;
+            auto cmode = BytecodeProc::FUN;
+            std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::OP_NOT, nkey, cmode);
+            if (!found) {
+              Variable* new_var = Variable::a(interpreter, interpreter->boolean_domain(), true, interpreter->newIdent());
+              new_val = Val(new_var);
+              auto c = Constraint::a(interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {v, new_val});
+              assert(c.first);
+              new_var->addDefinition(interpreter, c.first);
+              interpreter->cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
+            } else {
+              nkey.destroy();
+            }
+            return new_val;
           }
         }
         return v;
@@ -856,22 +856,24 @@ namespace MiniZinc {
               v->alias(interpreter, val);
             }
           } else {
-            // FIXME: This is no longer how this works. We do not create FUN definitions (They should not exist)
-            throw Error("NOT YET IMPLEMENTED");
-            /* Key nkey({val}); */
-            /* bool found; */
-            /* auto cmode = BytecodeProc::FUN; */
-            /* Val new_val; */
-            /* std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::BOOLNOT, nkey, cmode); */
-            /* if (!found) { */
-            /*   auto negation = Definition::a(interpreter, interpreter->boolean_domain().toVec(), false, PrimitiveMap::BOOLNOT, BytecodeProc::FUN, {val}, interpreter->newIdent()); */
-            /*   interpreter->pushDef(negation); */
-            /*   new_val = Val(negation); */
-            /*   interpreter->cse_insert(PrimitiveMap::BOOLNOT, nkey, cmode, new_val); */
-            /* } else { */
-            /*   nkey.destroy(); */
-            /* } */
-            /* d->alias(interpreter, new_val); */
+            Key nkey({val});
+            Val new_val;
+            bool found;
+            auto cmode = BytecodeProc::FUN;
+            std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::OP_NOT, nkey, cmode);
+            if (!found) {
+              Variable* new_var = Variable::a(interpreter, interpreter->boolean_domain(), true, interpreter->newIdent());
+              new_val = Val(new_var);
+              auto c = Constraint::a(interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {val, new_val});
+              assert(c.first);
+              new_var->addDefinition(interpreter, c.first);
+              interpreter->cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
+            } else {
+              nkey.destroy();
+            }
+            if (new_val != oldVal) {
+              v->alias(interpreter, new_val);
+            }
           }
         }
       }

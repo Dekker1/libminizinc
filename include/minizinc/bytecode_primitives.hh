@@ -22,6 +22,7 @@ namespace MiniZinc {
     enum Id {
       MK_INTVAR,
       BOOLNOT,
+      OP_NOT,
       CLAUSE,
       CLAUSE_REIF,
       FORALL,
@@ -142,6 +143,11 @@ namespace MiniZinc {
         }
         return rhs.toVar()->setVal(&i, 1 - lhs()) ? PS_ENTAILED : PS_FAILED;
       }
+    };
+    // Reserve procedure code for op_not operation (to create CSE entries)
+    class OpNot: public PrimitiveMap::Primitive {
+    public:
+      OpNot(void) : PrimitiveMap::Primitive("f_op_not_vb",PrimitiveMap::OP_NOT,1) {}
     };
 
     class Clause : public PrimitiveMap::Primitive {

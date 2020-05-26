@@ -2252,6 +2252,7 @@ private:
 public:
   static void run(CodeGen& cg, Model* m) {
     Compile c(cg);
+    // Compile the main model
     OPEN_OTHER(cg, c.root_frag);
     iterItems(c, m);
     {
@@ -2262,6 +2263,12 @@ public:
       cg.env_pop();
     }
     PUSH_INSTR(c.root_frag, BytecodeStream::RET);
+
+    // Ensure we create op_not so the interpreter can negate things
+    {
+      GCLock lock;
+      find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+    }
 
     // Now generate procedures for any necessary function/predicate bodies.
     while(!cg.pending_bodies.empty()) {
