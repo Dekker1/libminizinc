@@ -1899,11 +1899,17 @@ void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
     return;
   } else if(p->reg[1 - sign].has_reg()) {
     int r_neg(p->reg[1 - sign].reg);
-    OPEN_OTHER(cg, frag);
-    auto fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
-    assert(fun.second == BytecodeProc::FUN);
-    PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_neg));
-    CLOSE_AGG(cg, frag);
+    if (p->reg[1 - sign].is_par) {
+      int r(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_neg), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
+    } else {
+      OPEN_OTHER(cg, frag);
+      auto fun = find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
+      assert(fun.second == BytecodeProc::FUN);
+      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_neg));
+      CLOSE_AGG(cg, frag);
+    }
     return;
   }
   std::vector<int> var_leaves;
