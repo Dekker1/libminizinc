@@ -4386,12 +4386,15 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 
 CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> cond;
+  // For anything we force here, its calling mode is considered positive (because
+  // it needs to mean what we said.)
+  CG::Mode f_mode(ctx.strength(), false); 
   if (b->lhs()->type().dim() > 0) {
     GCLock lock;
     assert(b->rhs()->type().dim() > 0);
     assert(b->op() == BOT_EQ || b->op() == BOT_EQUIV);
-    int r_lhs = CG::force_or_bind(b->lhs(), ctx, cond, cg, frag);
-    int r_rhs = CG::force_or_bind(b->rhs(), ctx, cond, cg, frag);
+    int r_lhs = CG::force_or_bind(b->lhs(), f_mode, cond, cg, frag);
+    int r_rhs = CG::force_or_bind(b->rhs(), f_mode, cond, cg, frag);
     cond.push_back(CG_Cond::call({"op_equals"}, BytecodeProc::FUN,
         {b->type().isvar() ? Type::varbool() : Type::parbool(), b->lhs()->type(), b->rhs()->type()},
         {CG::r(r_lhs), CG::r(r_rhs)}
@@ -4399,9 +4402,8 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     return CG_Cond::forall(ctx, cond);
   }
   if(b->type().ispar()) {
-    int r_lhs = CG::force_or_bind(b->lhs(), ctx, cond, cg, frag);
-    int r_rhs = CG::force_or_bind(b->rhs(), ctx, cond, cg, frag);
-    CG::Mode f_mode(ctx.strength(), false);
+    int r_lhs = CG::force_or_bind(b->lhs(), f_mode, cond, cg, frag);
+    int r_rhs = CG::force_or_bind(b->rhs(), f_mode, cond, cg, frag);
     std::vector<int> r_cond;
     for(CG_Cond::T c : cond) {
       // r_cond.push_back(CG::force(c, ctx, cg, frag));
@@ -4442,8 +4444,8 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     case BOT_EQUIV:
     case BOT_NQ: {
       // Potentially partial.
-      int r_lhs = CG::force_or_bind(b->lhs(), ctx, cond, cg, frag);
-      int r_rhs = CG::force_or_bind(b->rhs(), ctx, cond, cg, frag);
+      int r_lhs = CG::force_or_bind(b->lhs(), f_mode, cond, cg, frag);
+      int r_rhs = CG::force_or_bind(b->rhs(), f_mode, cond, cg, frag);
       cond.push_back(linear_cond(cg, frag, b->op(), ctx, r_lhs, r_rhs));
       return CG_Cond::forall(ctx, cond);
     }
