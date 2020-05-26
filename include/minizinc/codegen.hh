@@ -534,8 +534,35 @@ struct CG {
 
 inline CG_Cond::T CG_Cond::_exists(BytecodeProc::Mode m, std::vector<T>& args) {
   std::vector<T> c_args;
-  for(T e : args)
-    c_args.push_back(~e);
+  for(T x : args) {
+    _T* p(x.get());
+    if(!p) {
+      // Either true or false.
+      if(!x.sign()) {
+        clear_seen(args.begin(), args.end());
+        return T::ttt();
+      }
+      continue;
+    }
+    // Otherwise, check if we've already seen this or its negation.
+    if(p->reg[1 - x.sign()].is_seen || p->reg[x.sign()].is_root) {
+      clear_seen(args.begin(), args.end());
+      return T::ttt();
+    }
+    if (p->reg[x.sign()].is_seen || p->reg[1 - x.sign()].is_root) {
+      continue;
+    }
+    // Haven't seen this yet, so save and mark it.
+    p->reg[x.sign()].is_seen = true;
+    c_args.push_back(~x);
+  }
+  clear_seen(args.begin(), args.end());
+  if(args.size() == 0) {
+    return T::fff();
+  }
+  if(args.size() == 1) {
+    return args[0];
+  }
   return ~T::of_ptr(new C_And(-CG::Mode(m), c_args));
 }
 

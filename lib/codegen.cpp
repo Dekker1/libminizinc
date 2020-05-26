@@ -4489,18 +4489,7 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG_Cond::T CG::compile(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // TODO: Fix CG_Cond to handle negation.
   assert(u->op() == UOT_NOT);
-  if(u->type().ispar()) {
-    int r_e = CG::force(CG::compile(u->e(), cg, frag), ctx, cg, frag);
-    /*
-    int r_neg = GET_REG(cg);
-    PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_e), CG::r(r_neg));
-    return CG_Cond::reg(r_neg);
-    */
-    // I _think_ this negation is now dealt with in force.
-    return CG_Cond::reg(r_e, true);
-  }
   return ~CG::compile(u->e(), cg, frag);
 }
 
