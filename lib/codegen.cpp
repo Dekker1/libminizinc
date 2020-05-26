@@ -2718,6 +2718,14 @@ CG::Binding bind_fix(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
 }
 
+CG_Cond::T eval_fix(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+
+  // Should we check that the argument is actually fixed??
+  int r = CG::force(CG::compile(call->arg(0), cg, frag), ctx, cg, frag);
+  return CG_Cond::reg(r, true);
+}
+
 CG_Cond::T eval_error_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   throw InternalError("Call should only appear in general context.");
   return CG_Cond::ttt();
@@ -3457,7 +3465,7 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("mzn_in_root_context", builtin_t { eval_context_is_root, bind_error_g } ));
   tbl.insert(std::make_pair("has_bounds", builtin_t { eval_has_bounds, bind_error_g } ));
   tbl.insert(std::make_pair("is_fixed", builtin_t { eval_isfixed_b, bind_error_g } ));
-  tbl.insert(std::make_pair("fix", builtin_t { eval_error_b, bind_fix } ));
+  tbl.insert(std::make_pair("fix", builtin_t { eval_fix, bind_fix } ));
   tbl.insert(std::make_pair("slice_Xd", builtin_t { eval_error_b, bind_internal} ));
   tbl.insert(std::make_pair("internal_sort", builtin_t { eval_error_b, bind_internal} ));
   tbl.insert(std::make_pair("internal_max", builtin_t { eval_error_b, bind_max} ));
