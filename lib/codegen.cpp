@@ -1509,12 +1509,14 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     std::vector<int> par_leaves;
     int r = GET_REG(cg);
     // I don't think these are necessary
+    OPEN_OTHER(cg, frag);
     force_and_leaves(var_leaves, par_leaves, cond, cg, frag);
     if (var_leaves.empty()) {
       PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(par_leaves[0]), CG::r(r));
       for (int i = 1; i < par_leaves.size(); ++i) {
         PUSH_INSTR(frag, BytecodeStream::AND, CG::r(r), CG::r(par_leaves[i]), CG::r(r));
       }
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
     } else {
       OPEN_AND(cg, frag);
       for(int r_c : par_leaves) {
@@ -1524,8 +1526,9 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
       }
       CLOSE_AGG(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     return {r, var_leaves.empty()};
   } else {
     assert(p->kind() == CG_Cond::CC_And && cond.sign());
@@ -1540,6 +1543,7 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
       for (int i = 1; i < par_leaves.size(); ++i) {
         PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r), CG::r(par_leaves[i]), CG::r(r));
       }
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
     } else {
       OPEN_OR(cg, frag);
       for(int r_c : par_leaves) {
@@ -1551,6 +1555,8 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     return {r, var_leaves.empty()};
   }
 }
