@@ -4380,9 +4380,16 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   if(b->type().ispar()) {
     int r_lhs = CG::force_or_bind(b->lhs(), ctx, cond, cg, frag);
     int r_rhs = CG::force_or_bind(b->rhs(), ctx, cond, cg, frag);
+    CG::Mode f_mode(ctx.strength(), false);
     std::vector<int> r_cond;
     for(CG_Cond::T c : cond) {
-      r_cond.push_back(CG::force(c, ctx, cg, frag));
+      // r_cond.push_back(CG::force(c, ctx, cg, frag));
+      // FIXME: This is probably safe, assuming all the conditions
+      // are also par. We need these to be in their literal,
+      // non-context-adjusted modes for the disentailment check to work.
+      // If we want to handle non-par conditions, we probably need to
+      // force in ctx, then flip back.
+      r_cond.push_back(CG::force(c, f_mode, cg, frag));
     }
     int r_ret;
     if (b->lhs()->type().isintset()) {
