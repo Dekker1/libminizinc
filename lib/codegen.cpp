@@ -1399,7 +1399,7 @@ void force_and_leaves(std::vector<int>& var_leaves, std::vector<int>& par_leaves
 }
 
 // Pushing the _negation_ of child.
-void force_or_leaves(std::vector<int>& var_leaves, std::vector<int> par_leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
+void force_or_leaves(std::vector<int>& var_leaves, std::vector<int>& par_leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
   assert(child.get());
   CG_Cond::_T* p(child.get());
   bool sign(child.sign());
