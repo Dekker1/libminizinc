@@ -771,6 +771,7 @@ function var int: objective_deopt_(var opt int: x, bool: direction) =
 
 predicate output_this(array[int] of var int: arr);
 predicate solve_this(int: mode, var int: objective, array[int] of var int: x, int: varsel, int: valsel);
+predicate solve_this(int: mode, var int: objective);
 
 function int: sol(var int: x);
 

@@ -2176,6 +2176,7 @@ private:
     Expression* search_a;
     int search_var = 0;
     int search_val = 0;
+    Call* c;
     if (Call* ann = si->ann().getCall(ASTString("int_search"))) {
       search_a = ann->arg(0);
       Id* varsel = ann->arg(1)->cast<Id>();
@@ -2190,13 +2191,10 @@ private:
       } else if (valsel->idn()==-1 && valsel->v()==ASTString("indomain_max")) {
         search_val=2;
       }
+      c = new Call(si->loc(), ident, {IntLit::a(mode),objective,search_a,IntLit::a(search_var),IntLit::a(search_val)});
     } else {
-      std::vector<Expression*> empty;
-      search_a = new ArrayLit(Location().introduce(), empty);
-      search_var = 0;
-      search_val = 0;
+      c = new Call(si->loc(), ident, {IntLit::a(mode),objective});
     }
-    auto c = new Call(si->loc(), ident, {IntLit::a(mode),objective,search_a,IntLit::a(search_var),IntLit::a(search_val)});
     c->type(Type::varbool());
     post_cond(cg, root_frag, CG::compile(c, cg, root_frag));
   }
