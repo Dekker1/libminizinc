@@ -4354,6 +4354,8 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     return CG_Cond::reg(r_ret, all_par);
   } else {
     GCLock lock;
+
+    int r_range = locate_range(1, sz, cg, frag);
     // Collect conditions
     OPEN_VEC(cg, frag);
     for (int ii = 0; ii < sz; ++ii) {
@@ -4363,6 +4365,11 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
     CLOSE_AGG(cg, frag);
     int r_if(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_if));
+    OPEN_VEC(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_if));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_range));
+    CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_if));
 
     // Collect results
@@ -4378,6 +4385,11 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
     CLOSE_AGG(cg, frag);
     int r_then(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_then));
+    OPEN_VEC(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_then));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_range));
+    CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_then));
 
     return CG_Cond::call({"if_then_else"}, BytecodeProc::FUN, {Type::varbool(), Type::varbool(1), Type::varbool(1)}, {CG::r(r_if), CG::r(r_then)});
@@ -4663,16 +4675,11 @@ int CG::vec2array(std::vector<int> vec, CodeGen& cg, CG_Builder& frag) {
   int r_vec(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vec));
 
-  OPEN_VEC(cg, frag);
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(1, cg, frag)));
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(bind_cst(sz, cg, frag)));
-  CLOSE_AGG(cg, frag);
-  int r_idx(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_idx));
+  int r_range(locate_range(1, sz, cg, frag));
 
   OPEN_VEC(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_vec));
-  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_idx));
+  PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_range));
   CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_vec));
 
