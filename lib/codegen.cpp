@@ -4461,17 +4461,15 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       if (ctx == BytecodeProc::ROOT) {
         int r(GET_REG(cg));
         PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(b_lhs.first), CG::r(b_rhs.first), CG::r(r));
-        PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r), CG::r(r));
-        PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
-        cond.push_back(CG_Cond::reg(r, true));
+        // If INTERSECT_DOMAIN fails, then the interpreter will mark inconsistent and ABORT
+        cond.push_back(CG_Cond::ttt());
       } else if (ctx == BytecodeProc::ROOT_NEG) {
         int r(GET_REG(cg));
         PUSH_INSTR(frag, BytecodeStream::DOM, CG::r(b_lhs.first), CG::r(r));
         PUSH_INSTR(frag, BytecodeStream::DIFF, CG::r(r), CG::r(b_rhs.first), CG::r(r));
         PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(b_lhs.first), CG::r(r), CG::r(r));
-        PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(r), CG::r(r));
-        PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
-        cond.push_back(~CG_Cond::reg(r, true));
+        // If INTERSECT_DOMAIN fails, then the interpreter will mark inconsistent and ABORT
+        cond.push_back(CG_Cond::ttt());
       } else {
         GCLock lock;
         cond.push_back(CG_Cond::call({"set_in"}, ctx, {Type::varbool(), Type::varint(), Type::varsetint()}, {CG::r(b_lhs.first), CG::r(b_rhs.first)}));
