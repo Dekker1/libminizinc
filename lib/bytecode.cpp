@@ -1023,11 +1023,11 @@ namespace MiniZinc {
         {
           oss << "GET_VEC_NDIM ";
           IntVal n=intval(pc);
-          oss << n << " R" << reg(pc);
-          for (int i=0; i<n; i++) {
+          oss << n;
+          for (int i=0; i < (n + 3); ++i) {
             oss << " R" << reg(pc);
           }
-          oss << " R" << reg(pc) << " % " << cur_pc << "\n";
+          oss << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::LB:
