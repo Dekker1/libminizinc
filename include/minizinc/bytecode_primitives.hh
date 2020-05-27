@@ -29,7 +29,9 @@ namespace MiniZinc {
       EXISTS,
       INT_TIMES,
       INT_LIN_EQ,
+      INT_LIN_EQ_REIF,
       INT_LIN_LE,
+      INT_LIN_LE_REIF,
       UNIFORM,
       SOL,
       SORT,
@@ -467,6 +469,84 @@ namespace MiniZinc {
       }
     };
 
+    class IntLinEqReif : public PrimitiveMap::Primitive {
+    public:
+      IntLinEqReif(void) : PrimitiveMap::Primitive("int_lin_eq_reif",PrimitiveMap::INT_LIN_EQ_REIF,4) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        {
+          std::vector<Val> coeffs = c->arg(0)[0].toVec()->as_vector();
+          std::vector<Val> vars = c->arg(1)[0].toVec()->as_vector();
+          IntVal d = -c->arg(2)();
+          simplify_linexp(coeffs, vars, d);
+
+          Vec* ncoeffs = Vec::allocate_array(&i, i.newIdent(), coeffs);
+          Vec* nvars = Vec::allocate_array(&i, i.newIdent(), vars);
+          c->arg(&i, 0, Val(ncoeffs));
+          c->arg(&i, 1, Val(nvars));
+          c->arg(&i, 2, Val(-d));
+        }
+
+        bool propImmediately = false;
+        int vars = 0;
+        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
+          Val v = c->arg(1)[0][j];
+          assert(v.isVar());
+          v.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(3).isVar()) {
+          c->arg(3).toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(1)[0].size() <= 1 /* || propImmediately */) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
+          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+        Val r = Val::follow_alias(c->arg(3), &i);
+        if (r.isVar()) {
+          r.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        Val r = Val::follow_alias(c->arg(3), &i);
+        if (r.isInt()) {
+          // TODO: Rewrite to int_lin_eq
+          return PS_OK;
+        }
+        if (c->arg(1)[0].size() == 1) {
+          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+          Val mult = Val::follow_alias(c->arg(0)[0][0](), &i);
+          if (v.isVar()) {
+            if (c->arg(2)() % mult() == 0) {
+              IntVal res = c->arg(2)() / mult();
+              Vec* dom = v.toVar()->domain();
+              bool indom = true;
+              for (int j = 0; j < dom->size(); j+=2) {
+                if ((*dom)[j]() <= res && res <= (*dom)[j+1]()) {
+                  return PS_OK;
+                }
+              }
+              return r.toVar()->setVal(&i, IntVal(false)) ? PS_ENTAILED : PS_FAILED;
+            } else {
+              return PS_FAILED;
+            }
+          } else {
+            // aliased to val
+            return r.toVar()->setVal(&i, mult()*v() == c->arg(2)()) ? PS_ENTAILED : PS_FAILED;
+          }
+        }
+        // More propagation?
+        return PS_OK;
+      }
+    };
+
     class IntLinLe : public PrimitiveMap::Primitive {
     public:
       IntLinLe(void) : PrimitiveMap::Primitive("int_lin_le",PrimitiveMap::INT_LIN_LE,3) {}
@@ -522,7 +602,75 @@ namespace MiniZinc {
         return PS_OK;
       }
     };
-  
+
+    class IntLinLeReif : public PrimitiveMap::Primitive {
+    public:
+      IntLinLeReif(void) : PrimitiveMap::Primitive("int_lin_le_reif",PrimitiveMap::INT_LIN_LE_REIF,4) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        {
+          std::vector<Val> coeffs = c->arg(0)[0].toVec()->as_vector();
+          std::vector<Val> vars = c->arg(1)[0].toVec()->as_vector();
+          IntVal d = -c->arg(2)();
+          simplify_linexp(coeffs, vars, d);
+
+          Vec* ncoeffs = Vec::allocate_array(&i, i.newIdent(), coeffs);
+          Vec* nvars = Vec::allocate_array(&i, i.newIdent(), vars);
+          c->arg(&i, 0, Val(ncoeffs));
+          c->arg(&i, 1, Val(nvars));
+          c->arg(&i, 2, Val(-d));
+        }
+
+        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
+          Val v = c->arg(1)[0][j];
+          assert(v.isVar()); // cannot be alias because of simplify_linexp
+          v.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(3).isVar()) {
+          c->arg(3).toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(1)[0].size() <= 1 /* || propImmediately */) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
+          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+        Val r = Val::follow_alias(c->arg(3), &i);
+        if (r.isVar()) {
+          r.toVar()->unsubscribe(c);
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        Val r = Val::follow_alias(c->arg(3), &i);
+        if (r.isInt()) {
+          //TODO: Replace with int_lin_le
+          return PS_OK;
+        }
+        if (c->arg(1)[0].size() == 1) {
+          Val mult = c->arg(0)[0][0]();
+          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+          if (v.isVar()) {
+            if (mult()*v.lb() <= c->arg(2)() && mult()*v.ub() <= c->arg(2)()) {
+              return r.toVar()->setVal(&i, IntVal(true)) ? PS_ENTAILED : PS_FAILED;
+            } else if (mult()*v.lb() > c->arg(2)() && mult()*v.ub() > c->arg(2)()) {
+              return r.toVar()->setVal(&i, IntVal(false)) ? PS_ENTAILED : PS_FAILED;
+            }
+          } else {
+            // aliased to val
+            return r.toVar()->setVal(&i, mult()*v() <= c->arg(2)()) ? PS_ENTAILED : PS_FAILED;
+          }
+        }
+        // More propagation?
+        return PS_OK;
+      }
+    };
+
     class Uniform : public PrimitiveMap::Primitive {
     public:
       Uniform() : PrimitiveMap::Primitive("uniform",PrimitiveMap::UNIFORM,2) {
