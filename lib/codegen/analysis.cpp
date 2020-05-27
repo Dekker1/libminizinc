@@ -18,8 +18,9 @@ namespace MiniZinc {
     int sz(a.size());
     for(int ii = 0; ii < sz; ++ii) {
       Expression* elt(a[ii]);
-      if(o == Use || !elt->type().isbool())
+      if(o == Use || elt->type().bt() != Type::BT_BOOL) {
         update(elt, o, m);
+      }
     }
   }
 /// Visit array access
@@ -27,7 +28,7 @@ namespace MiniZinc {
     ASTExprVec<Expression> idx(a.idx());
     for(int ii = 0; ii < idx.size(); ++ii)
       update(idx[ii], o, m);
-    if(a.type().isbool())
+    if(a.type().bt() == Type::BT_BOOL)
       update(a.v(), o, +m);
     else
       update(a.v(), o, m);
@@ -48,7 +49,7 @@ namespace MiniZinc {
         }
       }
     }
-    if(o == Use ||!comp.e()->type().isbool()) {
+    if(o == Use || comp.e()->type().bt() != Type::BT_BOOL) {
       int g_n(comp.n_generators());
       for(int gg = 0; gg < comp.n_generators(); ++gg) {
         if(comp.where(gg)) {
@@ -98,8 +99,8 @@ namespace MiniZinc {
     }
     case BOT_EQ:
     case BOT_NQ: {
-      CG::Mode m_l = b.lhs()->type().isbool() ? CG::Mode(BytecodeProc::FUN) : +m;
-      CG::Mode m_r = b.rhs()->type().isbool() ? CG::Mode(BytecodeProc::FUN) : +m;
+      CG::Mode m_l = b.lhs()->type().bt() == Type::BT_BOOL ? CG::Mode(BytecodeProc::FUN) : +m;
+      CG::Mode m_r = b.rhs()->type().bt() == Type::BT_BOOL ? CG::Mode(BytecodeProc::FUN) : +m;
       update(b.lhs(), o, m_l);
       update(b.rhs(), o, m_r);
     }
@@ -162,23 +163,24 @@ namespace MiniZinc {
         // If arg is non-Boolean, this the partiality gets embedded here.
         // But if arg is Boolean, we have to assume the callee can do
         // anything with it, so the occurrence is considered FUN.
-        if(arg->type().isbool())
+        if(arg->type().bt() == Type::BT_BOOL) {
           update(arg, Use, BytecodeProc::FUN);
-        else
+        } else {
           update(arg, o, m);
+        }
       }
     }
   }
 /// Visit let
   void ModeAnalysis::vLet(Let& let, Occurrence o, CG::Mode m) {
     ASTExprVec<Expression> bindings(let.let());
-    if(o == Def || let.type().isbool()) {
+    if(o == Def || let.type().bt() == Type::BT_BOOL) {
       // If the let has Boolean type, the _use_ of the let defines
       // the def-mode of the bound variables.
       for(Expression* e : bindings) {
         // Check whether this is a decl with a def.
         if (auto vd = e->dyn_cast<VarDecl>()) {
-          if(!vd->type().isbool())
+          if(vd->type().bt() != Type::BT_BOOL)
             update(vd, Def, m);
             /*
           if(Expression* v_e = vd->e()) {
