@@ -1555,7 +1555,7 @@ namespace MiniZinc {
 
           frame->reg.assign(this, r_res, v);
           frame->reg.assign(this, r_cond, Val(success));
-          DBG_INTERPRETER(" R" << r_res <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ") R" << r_cond<< "(" << Val(succes).toString(DBG_TRIM_OUTPUT) << ")"<<  "\n");
+          DBG_INTERPRETER(" R" << r_res <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ") R" << r_cond<< "(" << Val(success).toString(DBG_TRIM_OUTPUT) << ")"<<  "\n");
         }
           break;
         case BytecodeStream::LB:
