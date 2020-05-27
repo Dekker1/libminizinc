@@ -96,6 +96,10 @@ namespace MiniZinc {
       BUILTIN, // i, n, R1, ..., Rn : call builtin function i
       TCALL, // m, i : call code i in mode m (arguments are assumed to be in correct registers already)
 
+      ITER_VEC, // R, l: Iterate over vector in R, jump to l when finished.
+      ITER_RANGE, // R1, R2, l: Iterate over values in [R1, R2]
+      ITER_NEXT, // R: increment the topmost loop, binding the result to R. Pop and jump to loop exit if finished.
+      
       TRACE, // R: output string representation of R
       ABORT, // abort execution
 
@@ -188,6 +192,7 @@ namespace MiniZinc {
     static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
     bool exists() const { return _ref_count > 0; }
     bool alive() const { return _ref_count+_weak_ref_count>0; }
+    bool unique() const { return _ref_count==1; }
 
     void addWRef(Interpreter* interpreter) {
 //      assert(_ref_count > 0); // TODO: Assertion is not true when a new definition is created in CSE. The definition is added to CSE before it is returned to the interpreter
@@ -216,6 +221,7 @@ namespace MiniZinc {
       return reinterpret_cast<RefCountedObject*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(1));
     }
     bool exists() const { return !isRCO() || toRCO()->exists(); }
+    bool unique() const { return !isRCO() || toRCO()->unique(); }
     bool isVec(void) const {
       return isRCO() && toRCO()->rcoType()==RefCountedObject::VEC;
     }
@@ -404,6 +410,9 @@ namespace MiniZinc {
       }
       return count;
     }
+
+    const Val* begin(void) const { return _data; }
+    const Val* end(void) const { return _data + _size; }
   };
 
   /// Iterator over a Vec interpreted as a range set
@@ -674,8 +683,6 @@ namespace MiniZinc {
     /// Destroy and unlink this variable
     void destroy(Interpreter* interpreter);
     void reconstruct(Interpreter* interpreter);
-    /// Set the reference count to 1
-    void makeUniqueReference(void) { _ref_count = 1; }
     void alias(Interpreter* interpreter, Val v);
     void unalias(Interpreter* interpreter, Val dom);
     Val alias(void) { assert(aliased()); return _domain; };
@@ -1004,6 +1011,27 @@ namespace MiniZinc {
     void untrail(Interpreter* interpreter);
   };
   
+  // Structure for active loops
+  struct LoopState {
+    LoopState(Vec* vec, int _exit_pc)
+      : pos(vec->begin())
+      , end(vec->end())
+      , exit_pc(_exit_pc)
+      , is_range(false) { }
+
+    LoopState(int l, int u, int _exit_pc)
+      : pos( ((Val*) nullptr) + l )
+      , end( ((Val*) nullptr) + u + 1)
+      , exit_pc(_exit_pc)
+      , is_range(true) { }
+
+    const Val* pos;
+    const Val* end;
+
+    int exit_pc : 31;
+    int is_range : 1;
+  };
+
   class Interpreter {
     friend class Trail;
     friend class MznSolver;
@@ -1013,6 +1041,7 @@ namespace MiniZinc {
   protected:
     std::vector<BytecodeFrame> _stack;
     std::vector<AggregationCtx> _agg;
+    std::vector<LoopState> _loops;
     std::vector<BytecodeProc>& _procs;
     int _identCount;
     std::vector<CSETable> cse;

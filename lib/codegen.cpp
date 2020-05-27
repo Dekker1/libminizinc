@@ -95,6 +95,10 @@ const char* instr_names[] = {
       "BUILTIN",
       "TCALL",
 
+      "ITER_VEC",
+      "ITER_RANGE",
+      "ITER_NEXT",
+      
       "TRACE",
       "ABORT",
     };
@@ -2717,9 +2721,32 @@ CG_Cond::T eval_isfixed_b(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 CG::Binding bind_fix(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
 
-  CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
-  if (call->arg(0)->type().ispar()) {
+  Expression* arg(call->arg(0));
+  CG::Binding b_arg(CG::bind(arg, cg, frag));
+  if (arg->type().ispar()) {
     return b_arg;
+  } else if(arg->type().isintarray() || arg->type().isboolarray()) {
+    int r_elts(GET_REG(cg));
+    int r_cond(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_arg.first), CG::r(bind_cst(1, cg, frag)), CG::r(r_elts));
+    // Init the condition
+    PUSH_INSTR(frag, BytecodeStream::ISPAR, CG::r(r_elts), CG::r(r_cond));
+    // Construct the vec
+    OPEN_VEC(cg, frag);
+    ITER_VEC(cg, frag, r_elts, [](CodeGen& cg, CG_Builder& frag, int r_elt) {
+      PUSH_INSTR(frag, BytecodeStream::LB, CG::r(r_elt), CG::r(r_elt));
+      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_elt));
+      });
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_elts));
+    // Now construct the array.
+    OPEN_VEC(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_elts));
+    PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_arg.first), CG::r(bind_cst(2, cg, frag)), CG::r(r_elts));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_elts));
+    CLOSE_AGG(cg, frag);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_elts));
+    return {r_elts, CG_Cond::forall(ctx, b_arg.second, CG_Cond::reg(r_cond, true))};
   } else {
     int r(GET_REG(cg));
     int r_cond(GET_REG(cg));

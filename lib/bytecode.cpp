@@ -362,6 +362,43 @@ namespace MiniZinc {
 
   void Variable::addDefinition(Interpreter* interpreter, Constraint* c) {
     _definitions.push_back(c);
+    if (this != interpreter->root()) {
+      // Remove reference counts for this variable from each argument in c
+      for (int i=0; i<c->size(); i++) {
+        if (c->arg(i).isVar()) {
+          if (c->arg(i).timestamp()==_timestamp) {
+            RefCountedObject::rmRef(interpreter, this);
+          }
+        } else if (c->arg(i).isVec()) {
+          assert(c->arg(i).size()==2);
+          assert(c->arg(i)[0].isVec());
+          bool hasVar = false;
+          for (int j=0; j<c->arg(i)[0].size(); j++) {
+            if (c->arg(i)[0].isVar() && c->arg(i)[0].timestamp()==_timestamp) {
+              hasVar = true;
+              break;
+            }
+          }
+          if (hasVar) {
+            if (!c->arg(i).unique() || !c->arg(i)[0].unique()) {
+              // make vectors unique so that we can safely decrement reference counts
+              std::vector<Val> vals(c->arg(i)[0].size());
+              for (int i=0; i<vals.size(); i++) {
+                vals[i] = c->arg(i)[0][i];
+              }
+              Vec* vv = Vec::a(interpreter, interpreter->newIdent(), vals);
+              Vec* v = Vec::a(interpreter, interpreter->newIdent(), {Val(vv), c->arg(i)[1]});
+              c->arg(interpreter, i, Val(v));
+            }
+            for (int j=0; j<c->arg(i)[0].size(); j++) {
+              if (c->arg(i)[0][j].timestamp()==_timestamp) {
+                RefCountedObject::rmRef(interpreter, this);
+              }
+            }
+          }
+        }
+      }
+    }
     interpreter->trail.trail_add_def(this,c);
   }
 
@@ -800,8 +837,10 @@ namespace MiniZinc {
               new_val = Val(new_var);
               auto c = Constraint::a(interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {v, new_val});
               assert(c.first);
+              new_var->addRef(interpreter);
               new_var->addDefinition(interpreter, c.first);
               interpreter->cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
+              RefCountedObject::rmRef(interpreter, new_var);
             } else {
               nkey.destroy();
             }
@@ -866,8 +905,10 @@ namespace MiniZinc {
               new_val = Val(new_var);
               auto c = Constraint::a(interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {val, new_val});
               assert(c.first);
+              new_var->addRef(interpreter);
               new_var->addDefinition(interpreter, c.first);
               interpreter->cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
+              RefCountedObject::rmRef(interpreter, new_var);
             } else {
               nkey.destroy();
             }
@@ -1109,6 +1150,21 @@ namespace MiniZinc {
           } else {
             oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << " % " << cur_pc << "\n";
           }
+        }
+          break;
+        case BytecodeStream::ITER_VEC:
+        {
+          oss << "ITER_VEC " << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
+        }
+          break;
+        case BytecodeStream::ITER_RANGE:
+        {
+          oss << "ITER_RANGE " << reg(pc) << " " << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
+        }
+          break;
+        case BytecodeStream::ITER_NEXT:
+        {
+          oss << "ITER_NEXT " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::OPEN_AGGREGATION:
@@ -1977,6 +2033,50 @@ execute_ret:
           }
         }
           break;
+        case BytecodeStream::ITER_VEC:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int l = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("ITER_VEC " << r1  << " " << l << "\n");
+          assert(frame->reg[r1].isVec());
+          Vec* v(frame->reg[r1].toVec()); 
+          _loops.push_back(LoopState(v, l));
+        }
+          break;
+        case BytecodeStream::ITER_RANGE:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int lbl = frame->bs->reg(frame->pc);
+
+          Val lb = Val::follow_alias(frame->reg[r1], this);
+          Val ub = Val::follow_alias(frame->reg[r2], this);
+          assert(lb.isInt());
+          assert(ub.isInt());
+          DBG_INTERPRETER("ITER_RANGE " << r1  << " " << r2 << " " << lbl << "\n");
+          _loops.push_back(LoopState(lb().toInt(), ub().toInt(), lbl));
+        }
+          break;
+        case BytecodeStream::ITER_NEXT:
+        {
+          int r1 = frame->bs->reg(frame->pc); 
+          DBG_INTERPRETER("ITER_NEXT " << r1  << "\n");
+          assert(_loops.size() > 0);
+          LoopState& outer(_loops.back());
+          if(outer.pos < outer.end) {
+            Val v = outer.is_range ?
+              IntVal(outer.pos - (Val*) nullptr)
+              : Val::follow_alias(*outer.pos, this);
+
+            frame->reg.assign(this, r1, v);
+            ++outer.pos;
+            DBG_INTERPRETER(" R" << r1 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
+          } else {
+            frame->pc = outer.exit_pc;
+            _loops.pop_back();
+          }
+        }
+          break;
         case BytecodeStream::TRACE:
         {
           int r = frame->bs->reg(frame->pc);
@@ -2141,9 +2241,10 @@ execute_ret:
                   result = Variable::a(this,boolean_domain(),false, newIdent());
                   auto def_c = Constraint::a(this, PrimitiveMap::FORALL, BytecodeProc::ROOT, {Val(arr), Val(result)});
                   assert(def_c.first);
+                  result->addRef(this);
                   result->addDefinition(this, def_c.first);
                   pushAgg(Val(result),-2);
-                  result->makeUniqueReference();
+                  RefCountedObject::rmRef(this, result);
                 }
               }
                 break;
@@ -2204,9 +2305,10 @@ execute_ret:
                     result = Variable::a(this,boolean_domain(),false, newIdent());
                     auto def_c = Constraint::a(this, PrimitiveMap::CLAUSE_REIF, BytecodeProc::ROOT, {Val(vpos), Val(vneg), Val(result)});
                     assert(def_c.first);
+                    result->addRef(this);
                     result->addDefinition(this, def_c.first);
                     pushAgg(Val(result),-2);
-                    result->makeUniqueReference();
+                    RefCountedObject::rmRef(this, result);
                   }
                 }
               }
@@ -2242,7 +2344,6 @@ execute_ret:
                 _agg.back().constraints.clear();
                 // INVARIANT: The result of aggregation is not referenced by any of the registers.
                 assert(std::none_of(frame->reg.cbegin(), frame->reg.cend(), [result](Val v) { return v.contains(Val(result)); }));
-                result->makeUniqueReference();
               }
             }
             if (!_agg.back().constraints.empty()) {
