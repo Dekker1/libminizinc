@@ -374,7 +374,7 @@ namespace MiniZinc {
           assert(c->arg(i)[0].isVec());
           bool hasVar = false;
           for (int j=0; j<c->arg(i)[0].size(); j++) {
-            if (c->arg(i)[0].isVar() && c->arg(i)[0].timestamp()==_timestamp) {
+            if (c->arg(i)[0][j].isVar() && c->arg(i)[0][j].timestamp()==_timestamp) {
               hasVar = true;
               break;
             }
@@ -2344,6 +2344,7 @@ execute_ret:
                 _agg.back().constraints.clear();
                 // INVARIANT: The result of aggregation is not referenced by any of the registers.
                 assert(std::none_of(frame->reg.cbegin(), frame->reg.cend(), [result](Val v) { return v.contains(Val(result)); }));
+                result->binding(this, false);
               }
             }
             if (!_agg.back().constraints.empty()) {
