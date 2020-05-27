@@ -270,6 +270,7 @@ struct EmitPost {
 };
 
 struct Foreach : public EmitPost {
+#if 0
   Foreach(CodeGen& _cg, int _r, int k = 1)
     : cg(_cg), lblCont(-1), lblH(GET_LABEL(cg)), lblE(GET_LABEL(cg))
     , r(_r), rB(GET_REG(cg)), rE(GET_REG(cg)) {
@@ -318,9 +319,47 @@ struct Foreach : public EmitPost {
   int rB;
   int rE;
   std::vector<int> rVS; 
+#else
+  Foreach(CodeGen& _cg, int _r, int k = 1)
+    : cg(_cg), lblH(GET_LABEL(cg)), lblE(GET_LABEL(cg))
+    , r(_r) {
+    assert(k > 0);
+    for(int ii = 0; ii < k; ++ii)
+      rVS.push_back(GET_REG(cg));
+  }
+  
+  void emit_pre(CG_Builder& frag) {
+    // Set up the iterators
+    PUSH_INSTR(frag, BytecodeStream::ITER_VEC, CG::r(r), CG::l(lblE));
+    PUSH_LABEL(frag, lblH);
+    // Dereference the iterator
+    for(int rv : rVS) {
+      PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(rv));
+    }
+  }
+
+  void emit_post(CG_Builder& frag) {
+    // Now increment and loop back.
+    PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(lblH));
+    PUSH_LABEL(frag, lblE);
+  }
+
+  int val(void) const { return rVS[0]; }
+  int val(int i) const { return rVS[i]; }
+  int cont(void) {
+    return lblH;
+  }
+
+  CodeGen& cg;
+  int lblH;
+  int lblE;
+  int r;
+  std::vector<int> rVS; 
+#endif
 };
 
 struct Forrange : public EmitPost {
+#if 0
   Forrange(CodeGen& _cg, int _rL, int _rU)
     : cg(_cg)
     , lblH(GET_LABEL(cg)), lblE(GET_LABEL(cg)), lblCont(-1)
@@ -361,6 +400,40 @@ struct Forrange : public EmitPost {
   int rU;
   int rV;
   int rC;
+#else
+  Forrange(CodeGen& _cg, int _rL, int _rU)
+    : cg(_cg)
+    , lblH(GET_LABEL(cg)), lblE(GET_LABEL(cg))
+    , rL(_rL), rU(_rU)
+    , rV(GET_REG(cg)) {
+
+  }
+  
+  void emit_pre(CG_Builder& frag) {
+    // Set up the loop, and get the first element.
+     PUSH_INSTR(frag, BytecodeStream::ITER_RANGE, CG::r(rL), CG::r(rU), CG::l(lblE));
+     PUSH_LABEL(frag, lblH);
+     PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(rV));
+  }
+
+  void emit_post(CG_Builder& frag) {
+    // Jump back if we made it.
+    PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(lblH));
+    PUSH_LABEL(frag, lblE);
+  }
+
+  int val(void) const { return rV; }
+  int cont(void) {
+    return lblH;
+  }
+
+  CodeGen& cg;
+  int lblH;
+  int lblE;
+  int rL;
+  int rU;
+  int rV;
+#endif
 };
 
 struct Forset : public EmitPost {

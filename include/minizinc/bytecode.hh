@@ -97,6 +97,7 @@ namespace MiniZinc {
       TCALL, // m, i : call code i in mode m (arguments are assumed to be in correct registers already)
 
       ITER_VEC, // R, l: Iterate over vector in R, jump to l when finished.
+      ITER_RANGE, // R1, R2, l: Iterate over values in [R1, R2]
       ITER_NEXT, // R: increment the topmost loop, binding the result to R. Pop and jump to loop exit if finished.
       
       TRACE, // R: output string representation of R
@@ -1015,11 +1016,20 @@ namespace MiniZinc {
     LoopState(Vec* vec, int _exit_pc)
       : pos(vec->begin())
       , end(vec->end())
-      , exit_pc(_exit_pc) { }
+      , exit_pc(_exit_pc)
+      , is_range(false) { }
+
+    LoopState(int l, int u, int _exit_pc)
+      : pos( ((Val*) nullptr) + l )
+      , end( ((Val*) nullptr) + u + 1)
+      , exit_pc(_exit_pc)
+      , is_range(true) { }
 
     const Val* pos;
     const Val* end;
-    int exit_pc;
+
+    int exit_pc : 31;
+    int is_range : 1;
   };
 
   class Interpreter {

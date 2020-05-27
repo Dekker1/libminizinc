@@ -128,6 +128,7 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
 %token<bValue> MZA_TCALL
 
 %token<bValue> MZA_ITER_VEC
+%token<bValue> MZA_ITER_RANGE
 %token<bValue> MZA_ITER_NEXT
 
 %token<bValue> MZA_TRACE
@@ -135,7 +136,7 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
 
 
 %type<iValue> delay instruction mode
-%type<bValue> instr instrIR instrR instrRR instrRS instrRRR instrRRRR instrS
+%type<bValue> instr instrIR instrR instrRR instrRS instrRRR instrRRS instrRRRR instrS
 %type<sValue> label
 %type<liValue> registers
 %type<sliValue> labels
@@ -252,6 +253,15 @@ instruction:
       ctx.proc_body.addInstr($1);
       ctx.proc_body.addReg($2);
       ctx.patch_labels.emplace_back(ctx.proc_body.size(), $3);
+      ctx.proc_body.addSmallInt(0);
+    }
+  | instrRRS MZA_REG MZA_REG MZA_ID
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addReg($2);
+      ctx.proc_body.addReg($3);
+      ctx.patch_labels.emplace_back(ctx.proc_body.size(), $4);
       ctx.proc_body.addSmallInt(0);
     }
   | instrRRR MZA_REG MZA_REG MZA_REG
@@ -400,6 +410,9 @@ instrRRR:
   | MZA_INTERSECTION
   | MZA_UNION
   | MZA_INTERSECT_DOMAIN
+
+instrRRS:
+    MZA_ITER_RANGE
 
 instrRRRR:
     MZA_SIMPLIFY_LIN

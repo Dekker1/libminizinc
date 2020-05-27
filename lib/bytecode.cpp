@@ -1157,6 +1157,11 @@ namespace MiniZinc {
           oss << "ITER_VEC " << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
+        case BytecodeStream::ITER_RANGE:
+        {
+          oss << "ITER_RANGE " << reg(pc) << " " << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
+        }
+          break;
         case BytecodeStream::ITER_NEXT:
         {
           oss << "ITER_NEXT " << reg(pc) << " % " << cur_pc << "\n";
@@ -2038,6 +2043,20 @@ execute_ret:
           _loops.push_back(LoopState(v, l));
         }
           break;
+        case BytecodeStream::ITER_RANGE:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int r2 = frame->bs->reg(frame->pc);
+          int lbl = frame->bs->reg(frame->pc);
+
+          Val lb = Val::follow_alias(frame->reg[r1], this);
+          Val ub = Val::follow_alias(frame->reg[r2], this);
+          assert(lb.isInt());
+          assert(ub.isInt());
+          DBG_INTERPRETER("ITER_RANGE " << r1  << " " << r2 << " " << lbl << "\n");
+          _loops.push_back(LoopState(lb().toInt(), ub().toInt(), lbl));
+        }
+          break;
         case BytecodeStream::ITER_NEXT:
         {
           int r1 = frame->bs->reg(frame->pc); 
@@ -2045,7 +2064,10 @@ execute_ret:
           assert(_loops.size() > 0);
           LoopState& outer(_loops.back());
           if(outer.pos < outer.end) {
-            Val v = Val::follow_alias(*outer.pos, this);
+            Val v = outer.is_range ?
+              IntVal(outer.pos - (Val*) nullptr)
+              : Val::follow_alias(*outer.pos, this);
+
             frame->reg.assign(this, r1, v);
             ++outer.pos;
             DBG_INTERPRETER(" R" << r1 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
