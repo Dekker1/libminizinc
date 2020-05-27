@@ -96,6 +96,9 @@ namespace MiniZinc {
       BUILTIN, // i, n, R1, ..., Rn : call builtin function i
       TCALL, // m, i : call code i in mode m (arguments are assumed to be in correct registers already)
 
+      ITER_VEC, // R, l: Iterate over vector in R, jump to l when finished.
+      ITER_NEXT, // R: increment the topmost loop, binding the result to R. Pop and jump to loop exit if finished.
+      
       TRACE, // R: output string representation of R
       ABORT, // abort execution
 
@@ -404,6 +407,9 @@ namespace MiniZinc {
       }
       return count;
     }
+
+    const Val* begin(void) const { return _data; }
+    const Val* end(void) const { return _data + _size; }
   };
 
   /// Iterator over a Vec interpreted as a range set
@@ -1004,6 +1010,18 @@ namespace MiniZinc {
     void untrail(Interpreter* interpreter);
   };
   
+  // Structure for active loops
+  struct LoopState {
+    LoopState(Vec* vec, int _exit_pc)
+      : pos(vec->begin())
+      , end(vec->end())
+      , exit_pc(_exit_pc) { }
+
+    const Val* pos;
+    const Val* end;
+    int exit_pc;
+  };
+
   class Interpreter {
     friend class Trail;
     friend class MznSolver;
@@ -1013,6 +1031,7 @@ namespace MiniZinc {
   protected:
     std::vector<BytecodeFrame> _stack;
     std::vector<AggregationCtx> _agg;
+    std::vector<LoopState> _loops;
     std::vector<BytecodeProc>& _procs;
     int _identCount;
     std::vector<CSETable> cse;

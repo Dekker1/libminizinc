@@ -142,6 +142,7 @@ _FOREACH<V, E> FOREACH(V&& v, E&& e) { return _FOREACH<V, E> { std::move(v), std
 // Slightly nicer version of FOREACH.
 template<class E>
 void ITER_VEC(CodeGen& cg, CG_Builder& frag, int r, E e) {
+#if 0
   int rB(GET_REG(cg));
   int rE(GET_REG(cg));
   int rV(GET_REG(cg));
@@ -163,6 +164,17 @@ void ITER_VEC(CodeGen& cg, CG_Builder& frag, int r, E e) {
   PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rB), CG::r(rE), CG::r(rV));
   PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(rV), CG::l(lblH));
   PUSH_LABEL(frag, lblE);
+#else
+  int rV(GET_REG(cg));
+  int lblH(GET_LABEL(cg));
+  int lblE(GET_LABEL(cg));
+  PUSH_INSTR(frag, BytecodeStream::ITER_VEC, CG::r(r), CG::l(lblE));
+  PUSH_LABEL(frag, lblH);
+  PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(rV));
+  e(cg, frag, rV);
+  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(lblH));
+  PUSH_LABEL(frag, lblE);
+#endif
 }
 
 // Same as FOREACH, but when working with a vector of pairs (i.e. sets)

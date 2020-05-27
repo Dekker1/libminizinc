@@ -127,6 +127,9 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
 %token<bValue> MZA_BUILTIN
 %token<bValue> MZA_TCALL
 
+%token<bValue> MZA_ITER_VEC
+%token<bValue> MZA_ITER_NEXT
+
 %token<bValue> MZA_TRACE
 %token<bValue> MZA_ABORT
 
@@ -360,6 +363,7 @@ instrR:
   | MZA_PUSH
   | MZA_POP
   | MZA_POST
+  | MZA_ITER_NEXT
   | MZA_TRACE
 
 instrRR:
@@ -377,6 +381,7 @@ instrRR:
 instrRS:
     MZA_JMPIF
   | MZA_JMPIFNOT
+  | MZA_ITER_VEC
 
 instrRRR:
     MZA_ADDI

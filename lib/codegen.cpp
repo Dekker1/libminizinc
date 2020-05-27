@@ -95,6 +95,9 @@ const char* instr_names[] = {
       "BUILTIN",
       "TCALL",
 
+      "ITER_VEC",
+      "ITER_NEXT",
+      
       "TRACE",
       "ABORT",
     };

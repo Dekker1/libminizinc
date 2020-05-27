@@ -1111,6 +1111,16 @@ namespace MiniZinc {
           }
         }
           break;
+        case BytecodeStream::ITER_VEC:
+        {
+          oss << "ITER_VEC " << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
+        }
+          break;
+        case BytecodeStream::ITER_NEXT:
+        {
+          oss << "ITER_NEXT " << reg(pc) << " % " << cur_pc << "\n";
+        }
+          break;
         case BytecodeStream::OPEN_AGGREGATION:
         {
           oss << "OPEN_AGGREGATION ";
@@ -1974,6 +1984,33 @@ execute_ret:
             frame->bs = &_procs[code].mode[mode];
             frame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
             frame->pc = 0;
+          }
+        }
+          break;
+        case BytecodeStream::ITER_VEC:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int l = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("ITER_VEC " << r1  << " " << l << "\n");
+          assert(frame->reg[r1].isVec());
+          Vec* v(frame->reg[r1].toVec()); 
+          _loops.push_back(LoopState(v, l));
+        }
+          break;
+        case BytecodeStream::ITER_NEXT:
+        {
+          int r1 = frame->bs->reg(frame->pc); 
+          DBG_INTERPRETER("ITER_NEXT " << r1  << "\n");
+          assert(_loops.size() > 0);
+          LoopState& outer(_loops.back());
+          if(outer.pos < outer.end) {
+            Val v = Val::follow_alias(*outer.pos, this);
+            frame->reg.assign(this, r1, v);
+            ++outer.pos;
+            DBG_INTERPRETER(" R" << r1 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
+          } else {
+            frame->pc = outer.exit_pc;
+            _loops.pop_back();
           }
         }
           break;
