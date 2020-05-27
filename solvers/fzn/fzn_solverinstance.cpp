@@ -296,12 +296,31 @@ namespace MiniZinc {
     GCLock lock;
     const BytecodeProc& proc = bs[c->pred()];
     const std::string& name = proc.name;
-    if (name == "minimize_this") {
-      _model->addItem(SolveI::min(Location().introduce(), val_to_expr(Type::varint(), c->arg(0))));
-      return;
-    }
-    if (name == "maximize_this") {
-      _model->addItem(SolveI::max(Location().introduce(), val_to_expr(Type::varint(), c->arg(0))));
+    if (name == "solve_this") {
+      IntVal solve_mode = c->arg(0)();
+      Val obj = c->arg(1);
+      Val search_a = c->arg(2);
+      IntVal var_sel = c->arg(3)();
+      IntVal val_sel = c->arg(4)();
+      SolveI* si;
+      if (solve_mode==0) {
+        si = SolveI::sat(Location().introduce());
+      } else if (solve_mode==1) {
+        si = SolveI::min(Location().introduce(), val_to_expr(Type::varint(), obj));
+      } else {
+        assert(solve_mode==2);
+        si = SolveI::max(Location().introduce(), val_to_expr(Type::varint(), obj));
+      }
+      if (search_a.isVec() && search_a.size()>0 && var_sel>0 && val_sel>0) {
+        Expression* search_vars = val_to_expr(Type::varint(1), search_a);
+        ASTString var_sel_s(var_sel==1 ? "input_order" : "first_fail");
+        ASTString val_sel_s(val_sel==1 ? "indomain_min" : "indomain_max");
+        Id* var_sel_id = new Id(Location().introduce(), var_sel_s, nullptr);
+        Id* val_sel_id = new Id(Location().introduce(), val_sel_s, nullptr);
+        Id* complete_id = new Id(Location().introduce(), "complete", nullptr);
+        si->ann().add(new Call(Location().introduce(), ASTString("int_search"), {search_vars, var_sel_id, val_sel_id, complete_id}));
+      }
+      _model->addItem(si);
       return;
     }
     auto fnit = _model->fnmap.find(ASTString(name));

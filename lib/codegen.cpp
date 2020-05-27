@@ -2165,13 +2165,38 @@ private:
     if (si->st() == SolveI::ST_SAT) {
       return;
     }
-    ASTString ident;
-    if (si->st() == SolveI::ST_MIN) {
-      ident = ASTString("minimize_this");
-    } else {
-      ident = ASTString("maximize_this");
+    ASTString ident("solve_this");
+    int mode;
+    Expression* objective;
+    switch (si->st()) {
+      case SolveI::ST_SAT: mode=0; objective=IntLit::a(0); break;
+      case SolveI::ST_MIN: mode=1; objective=si->e(); break;
+      case SolveI::ST_MAX: mode=2; objective=si->e(); break;
     }
-    auto c = new Call(si->loc(), ident, {si->e()});
+    Expression* search_a;
+    int search_var = 0;
+    int search_val = 0;
+    if (Call* ann = si->ann().getCall(ASTString("int_search"))) {
+      search_a = ann->arg(0);
+      Id* varsel = ann->arg(1)->cast<Id>();
+      if (varsel->idn()==-1 && varsel->v()==ASTString("input_order")) {
+        search_var=1;
+      } else if (varsel->idn()==-1 && varsel->v()==ASTString("first_fail")) {
+        search_var=2;
+      }
+      Id* valsel = ann->arg(2)->cast<Id>();
+      if (valsel->idn()==-1 && valsel->v()==ASTString("indomain_min")) {
+        search_val=1;
+      } else if (valsel->idn()==-1 && valsel->v()==ASTString("indomain_max")) {
+        search_val=2;
+      }
+    } else {
+      std::vector<Expression*> empty;
+      search_a = new ArrayLit(Location().introduce(), empty);
+      search_var = 0;
+      search_val = 0;
+    }
+    auto c = new Call(si->loc(), ident, {IntLit::a(mode),objective,search_a,IntLit::a(search_var),IntLit::a(search_val)});
     c->type(Type::varbool());
     post_cond(cg, root_frag, CG::compile(c, cg, root_frag));
   }

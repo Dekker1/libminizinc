@@ -427,19 +427,27 @@ namespace MiniZinc {
 
   void GecodeSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
     const std::string& name = bs[c->pred()].name;
-    if (name == "minimize_this" || name == "maximize_this") {
-      _current_space->_optVarIsInt = true;
-      _current_space->_solveType = name == "minimize_this" ? MiniZinc::SolveI::SolveType::ST_MIN : MiniZinc::SolveI::SolveType::ST_MAX;
-      GecodeVariable var = resolveVar(c->arg(0).toVar());
-      IntVar intVar = var.intVar(_current_space);
-      for(unsigned int i=0; i<_current_space->iv.size(); i++) {
-        if(_current_space->iv[i].varimp()==intVar.varimp()) {
-          _current_space->_optVarIdx = i;
-          break;
+    if (name == "solve_this") {
+      IntVal solve_mode = c->arg(0)();
+      Val obj = c->arg(1);
+      Val search_a = c->arg(2);
+      IntVal var_sel = c->arg(3)();
+      IntVal val_sel = c->arg(4)();
+      /// TODO: handle solve annotation
+      if (solve_mode != 0) {
+        _current_space->_optVarIsInt = true;
+        _current_space->_solveType = solve_mode==1 ? MiniZinc::SolveI::SolveType::ST_MIN : MiniZinc::SolveI::SolveType::ST_MAX;
+        GecodeVariable var = resolveVar(obj.toVar());
+        IntVar intVar = var.intVar(_current_space);
+        for(unsigned int i=0; i<_current_space->iv.size(); i++) {
+          if(_current_space->iv[i].varimp()==intVar.varimp()) {
+            _current_space->_optVarIdx = i;
+            break;
+          }
         }
+        GCLock lock;
+        solveExpr = new Id(Location().introduce(), c->arg(0).timestamp(), nullptr);
       }
-      GCLock lock;
-      solveExpr = new Id(Location().introduce(), c->arg(0).timestamp(), nullptr);
       return;
     }
     _constraintRegistry.post(name, c);

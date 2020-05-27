@@ -770,8 +770,7 @@ function var int: objective_deopt_(var opt int: x, bool: direction) =
 /* TODO: predicate to temporarily replace the output items */
 
 predicate output_this(array[int] of var int: arr);
-predicate maximize_this(var int: x);
-predicate minimize_this(var int: x);
+predicate solve_this(int: mode, var int: objective, array[int] of var int: x, int: varsel, int: valsel);
 
 function int: sol(var int: x);
 
