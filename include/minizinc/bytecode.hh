@@ -191,6 +191,7 @@ namespace MiniZinc {
     static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
     bool exists() const { return _ref_count > 0; }
     bool alive() const { return _ref_count+_weak_ref_count>0; }
+    bool unique() const { return _ref_count==1; }
 
     void addWRef(Interpreter* interpreter) {
 //      assert(_ref_count > 0); // TODO: Assertion is not true when a new definition is created in CSE. The definition is added to CSE before it is returned to the interpreter
@@ -219,6 +220,7 @@ namespace MiniZinc {
       return reinterpret_cast<RefCountedObject*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(1));
     }
     bool exists() const { return !isRCO() || toRCO()->exists(); }
+    bool unique() const { return !isRCO() || toRCO()->unique(); }
     bool isVec(void) const {
       return isRCO() && toRCO()->rcoType()==RefCountedObject::VEC;
     }
@@ -680,8 +682,6 @@ namespace MiniZinc {
     /// Destroy and unlink this variable
     void destroy(Interpreter* interpreter);
     void reconstruct(Interpreter* interpreter);
-    /// Set the reference count to 1
-    void makeUniqueReference(void) { _ref_count = 1; }
     void alias(Interpreter* interpreter, Val v);
     void unalias(Interpreter* interpreter, Val dom);
     Val alias(void) { assert(aliased()); return _domain; };
