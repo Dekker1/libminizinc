@@ -249,6 +249,12 @@ void bind_binop_var(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r
       PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
     }
+    case BOT_MOD: {
+      auto fun = find_call_fun(cg, {"op_modulus"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
+      return;
+    }
     case BOT_DOTDOT: {
       // The values in r_lhs and r_rhs had better be IMMIs.
       OPEN_OTHER(cg, frag);

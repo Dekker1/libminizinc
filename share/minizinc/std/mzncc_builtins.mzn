@@ -138,6 +138,13 @@ function var int: op_int_division(var int: x, var int: y) =
   if mzn_in_root_context(y) \/ not (0 in dom(y)) then div_t(x,y) else
   let { constraint y != 0 } in div_mt(x,y) endif;
 
+/** @group builtins.arithmetic Return result of integer division \a x / \a y */
+function int: op_modulus(int: x, int: y) = x mod y;
+/** @group builtins.arithmetic Return result of integer division \a x / \a y */
+function var int: op_modulus(var int: x, var int: y) =
+  if mzn_in_root_context(y) \/ not (0 in dom(y)) then mod_t(x,y) else
+  let { constraint y != 0 } in mod_mt(x,y) endif;
+
 /** @group builtins.arithmetic Return result of floating point division \a x / \a y */
 function float: op_float_division(float: x, float: y) = x / y;
 /** @group builtins.arithmetic Return result of floating point division \a x / \a y */
