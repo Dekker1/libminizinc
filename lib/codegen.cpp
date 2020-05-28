@@ -3254,6 +3254,15 @@ CG::Binding bind_dom_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) 
   return {r_agg, b_A.second};
 }
 
+CG::Binding bind_index_set(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+  assert(call->arg(0)->type().dim() == 1);
+  int r(GET_REG(cg));
+  CG::Binding b_arg(CG::bind(call->arg(0), cg, frag));
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_arg.first), CG::r(bind_cst(2, cg, frag)), CG::r(r));
+  return {r, b_arg.second};
+}
+
 template<int X, int Y>
 CG::Binding bind_index_set_XofY(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
