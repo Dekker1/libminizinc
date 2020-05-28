@@ -192,6 +192,13 @@ function var int: sum_cc(array[$T] of var int: x) ::promise_total =
     constraint int_lin_eq([1 | i in index_set(xs)] ++ [-1], xs ++ [res], 0);
   } in res;
 
+function int: abs(int: x) =
+  if x<0 then
+    -x
+  else
+    x
+  endif;
+
 % ---------------
 
 /***
