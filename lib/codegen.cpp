@@ -3303,33 +3303,15 @@ CG::Binding bind_set_max(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
   int r(GET_REG(cg));
-  int r_i(GET_REG(cg));
   int r_sz(GET_REG(cg));
-  int r_test(GET_REG(cg));
-  int r_elt(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_i));
   PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_A.first), CG::r(r_sz));
   int l_fst(GET_LABEL(cg));
-  int l_hd(GET_LABEL(cg));
-  int l_tl(GET_LABEL(cg));
-  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_test), CG::l(l_fst));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(bind_cst(0, cg, frag)), CG::r(r_sz), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r), CG::l(l_fst));
   PUSH_INSTR(frag, BytecodeStream::ABORT);
   PUSH_LABEL(frag, l_fst);
 
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r));
-
-  PUSH_LABEL(frag, l_hd);
-  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
-  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_tl));
-
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_elt));
-  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r), CG::r(r_elt), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_hd));
-  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_elt), CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
-  PUSH_LABEL(frag, l_tl);
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_sz), CG::r(r));
 
   // TODO: Also should not be allowed on empty sets
   return CG::Binding(r, b_A.second);
@@ -3416,33 +3398,16 @@ CG::Binding bind_set_min(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
   int r(GET_REG(cg));
-  int r_i(GET_REG(cg));
   int r_sz(GET_REG(cg));
-  int r_test(GET_REG(cg));
-  int r_elt(GET_REG(cg));
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_i));
   PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_A.first), CG::r(r_sz));
   int l_fst(GET_LABEL(cg));
-  int l_hd(GET_LABEL(cg));
-  int l_tl(GET_LABEL(cg));
-  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_test), CG::l(l_fst));
+  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(bind_cst(1, cg, frag)), CG::r(r_sz), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r), CG::l(l_fst));
   PUSH_INSTR(frag, BytecodeStream::ABORT);
+
   PUSH_LABEL(frag, l_fst);
+  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(bind_cst(1, cg, frag)), CG::r(r));
 
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r));
-
-  PUSH_LABEL(frag, l_hd);
-  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
-  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_tl));
-
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_elt));
-  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_elt), CG::r(r), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_hd));
-  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_elt), CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
-  PUSH_LABEL(frag, l_tl);
   return CG::Binding(r, CG_Cond::ttt());
 }
 
