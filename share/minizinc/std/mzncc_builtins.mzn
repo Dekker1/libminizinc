@@ -147,6 +147,7 @@ function var float: op_float_division(var float: x, var float: y) =
 
 
 function int: internal_max(array[$U] of int: x);
+function int: internal_set_max(set of int: x);
 function bool: internal_max(array[$U] of bool: x);
 /** @group builtins.arithmetic Return maximum of \a x and \a y */
 function $T: max($T: x, $T: y) =
@@ -156,13 +157,14 @@ function $T: max($T: x, $T: y) =
     y
   endif;
 /** @group builtins.arithmetic Return maximum of elements in set \a x */
-function int: max(set of int: x) = internal_max(set2array(x));
+function int: max(set of int: x) = internal_set_max(x);
 /** @group builtins.arithmetic Return maximum of elements in array \a x */
 function int: max(array[$U] of int: x) = internal_max(array1d(x));
 /** @group builtins.arithmetic Return maximum of elements in array \a x */
 function bool: max(array[$U] of bool: x) = internal_max(array1d(x));
 
 function int: internal_min(array[$U] of int: x);
+function int: internal_set_min(set of int: x);
 function bool: internal_min(array[$U] of bool: x);
 /** @group builtins.arithmetic Return minimum of \a x and \a y */
 function $T: min($T: x, $T: y) =
@@ -171,7 +173,7 @@ function $T: min($T: x, $T: y) =
   else
     y
   endif;
-function int: min(set of int: x) = internal_min(set2array(x));
+function int: min(set of int: x) = internal_set_min(x);
 function int: min(array[$U] of int: x) = internal_min(array1d(x));
 function bool: min(array[$U] of bool: x) = internal_min(array1d(x));
 
