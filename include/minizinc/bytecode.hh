@@ -1014,19 +1014,19 @@ namespace MiniZinc {
   // Structure for active loops
   struct LoopState {
     LoopState(Vec* vec, int _exit_pc)
-      : pos(vec->begin())
-      , end(vec->end())
+      : pos(reinterpret_cast<intptr_t>(vec->begin()))
+      , end(reinterpret_cast<intptr_t>(vec->end()))
       , exit_pc(_exit_pc)
       , is_range(false) { }
 
     LoopState(int l, int u, int _exit_pc)
-      : pos( ((Val*) nullptr) + l )
-      , end( ((Val*) nullptr) + u + 1)
+      : pos(l)
+      , end(u + 1)
       , exit_pc(_exit_pc)
       , is_range(true) { }
 
-    const Val* pos;
-    const Val* end;
+    intptr_t pos;
+    intptr_t end;
 
     int exit_pc : 31;
     int is_range : 1;

@@ -2064,12 +2064,16 @@ execute_ret:
           assert(_loops.size() > 0);
           LoopState& outer(_loops.back());
           if(outer.pos < outer.end) {
-            Val v = outer.is_range ?
-              IntVal(outer.pos - (Val*) nullptr)
-              : Val::follow_alias(*outer.pos, this);
-
+            Val v;
+            if(outer.is_range) {
+              v = IntVal(outer.pos);
+              outer.pos++;
+            } else {
+              Val* ptr(reinterpret_cast<Val*>(outer.pos));
+              v = Val::follow_alias(*ptr, this);
+              outer.pos += sizeof(Val*);
+            }
             frame->reg.assign(this, r1, v);
-            ++outer.pos;
             DBG_INTERPRETER(" R" << r1 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
           } else {
             frame->pc = outer.exit_pc;
