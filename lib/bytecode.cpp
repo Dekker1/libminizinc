@@ -2242,9 +2242,9 @@ execute_ret:
           DBG_INTERPRETER("SIMPLIFY_LIN");
 
           int r0 = frame->bs->reg(frame->pc);
+          int r1 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER(" R" << r0 << "(" << frame->reg[r0].toString(DBG_TRIM_OUTPUT) << ")");
           DBG_INTERPRETER(" R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-          int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
           int r4 = frame->bs->reg(frame->pc);
