@@ -1239,7 +1239,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           break;
         case BytecodeStream::ITER_BREAK:
         {
-          oss << "ITER_NEXT " << reg(pc) << " % " << cur_pc << "\n";
+          oss << "ITER_BREAK " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::OPEN_AGGREGATION:
