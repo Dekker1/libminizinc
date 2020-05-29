@@ -593,7 +593,7 @@ namespace MiniZinc {
     int pred(void) const { return _pred; }
     char mode(void) const { return _mode; }
     int size(void) const { return _size; }
-    Val arg(int i) const { assert(i < _size); return _args[i]; }
+    const Val& arg(int i) const { assert(i < _size); return _args[i]; }
     void arg(Interpreter* interpreter, int i, Val nv) {
       assert(i < _size);
       assert(_pred != 8 || i!=1 || nv.isVec());
