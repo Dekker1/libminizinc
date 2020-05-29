@@ -166,7 +166,7 @@ namespace MiniZinc {
         assert(c->mode() == BytecodeProc::ROOT);
         bool propImmediately = true;
         for (int j = 0; j < _n_args; ++j) {
-          Val arg = c->arg(j);
+          Val arg = Val::follow_alias(c->arg(j), &i);
           if (arg.isVar()) {
             arg.toVar()->subscribe(c, Variable::SES_ANY);
             if (j <= 1 && !arg.toVar()->isBounded()) {
@@ -182,7 +182,7 @@ namespace MiniZinc {
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
         for (int j = 0; j < _n_args; ++j) {
-          Val arg = Val::follow_alias(c->arg(j), &i);
+          Val arg = Val::follow_alias(c->arg(j));
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
@@ -199,9 +199,8 @@ namespace MiniZinc {
         IntVal lb, ub;
         if ((a.isVar() && !a.toVar()->isBounded()) || (b.isVar() && !b.toVar()->isBounded())) {
           return PS_OK;
-        } else if (a.isInt() && a.lb() == IntVal(1)) {
-//          res.alias(&i, b);
-          /// TODO! needs aliasing
+        } else if (a.isInt() && a() == 1) {
+          res.toVar()->alias(&i, b);
           return PS_ENTAILED;
         }
 
