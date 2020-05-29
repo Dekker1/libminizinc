@@ -137,7 +137,7 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
 
 
 %type<iValue> delay instruction mode
-%type<bValue> instr instrI instrIR instrR instrRR instrRS instrRRR instrRRS instrRRRRR instrS
+%type<bValue> instr instrI instrIR instrR instrRR instrRS instrRRR instrRRS instrRRIRRR instrS
 %type<sValue> label
 %type<liValue> registers
 %type<sliValue> labels
@@ -279,15 +279,16 @@ instruction:
       ctx.proc_body.addReg($3);
       ctx.proc_body.addReg($4);
     }
-  | instrRRRRR MZA_REG MZA_REG MZA_REG MZA_REG MZA_REG
+  | instrRRIRRR MZA_REG MZA_REG MZA_INT MZA_REG MZA_REG MZA_REG
     {
       $$ = ctx.proc_body.size();
       ctx.proc_body.addInstr($1);
       ctx.proc_body.addReg($2);
       ctx.proc_body.addReg($3);
-      ctx.proc_body.addReg($4);
+      ctx.proc_body.addIntVal($4);
       ctx.proc_body.addReg($5);
       ctx.proc_body.addReg($6);
+      ctx.proc_body.addReg($7);
     }
   | instrS MZA_ID
     {
@@ -425,7 +426,7 @@ instrRRR:
 instrRRS:
     MZA_ITER_RANGE
 
-instrRRRRR:
+instrRRIRRR:
     MZA_SIMPLIFY_LIN
 
 instrS:

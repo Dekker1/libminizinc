@@ -85,7 +85,8 @@ namespace MiniZinc {
 
       OPEN_AGGREGATION, // i: Create a new aggregation context with symbol i
       CLOSE_AGGREGATION,  // Close current aggregation context, put result onto context above
-      SIMPLIFY_LIN, // R1, R2 -> R3, R4, R5: simplify linear expression in R1, return coefficients (R3), variables (R4), R2-constant (R5)
+      
+      SIMPLIFY_LIN, // R1, R2, i -> R3, R4, R5: simplify linear expression (R1-R2-i), return coefficients (R3), variables (R4), constant (R5)
 
       PUSH,  // R: push R onto value stack
       POP,   // R: pop from value stack into R
