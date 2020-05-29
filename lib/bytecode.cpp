@@ -695,7 +695,7 @@ namespace MiniZinc {
         int j=0;
         for (unsigned int i=0; i<coeffs_simple.size(); i++) {
           if (coeffs_simple[i] != 0) {
-            coeffs[j++] = coeffs_simple[i];
+            coeffs[j] = coeffs_simple[i];
             vars[j++] = vars_simple[i];
           }
         }
