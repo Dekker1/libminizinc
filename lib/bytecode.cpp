@@ -116,6 +116,9 @@ namespace MiniZinc {
     for (unsigned int i=0; i<args.size(); i++) {
       new (&_args[i]) Val(args[i]);
       _args[i].construct(interpreter);
+      if (pred > PrimitiveMap::MAX_LIN) {
+        _args[i].finalizeLin(interpreter);
+      }
     }
   }
 
@@ -577,6 +580,66 @@ namespace MiniZinc {
         Variable* cur = stacktop.toVar();
         if (Constraint* defby = cur->defined_by()) {
           switch (defby->pred()) {
+            case PrimitiveMap::INT_PLUS: {
+              assert(stacktop == Val::follow_alias(defby->arg(2)));
+              for (int i = 0; i < 2; ++i) {
+                Val arg = Val::follow_alias(defby->arg(i));
+                if (arg.isInt()) {
+                  d += coeff * arg();
+                } else {
+                  defs.emplace_back(coeff, arg);
+                }
+              }
+              continue;
+            }
+            case PrimitiveMap::INT_MINUS: {
+              assert(stacktop == Val::follow_alias(defby->arg(2)));
+              Val lhs = Val::follow_alias(defby->arg(0));
+              if (lhs.isInt()) {
+                  d += coeff * lhs();
+              } else {
+                defs.emplace_back(coeff, lhs);
+              }
+              Val rhs = Val::follow_alias(defby->arg(1));
+              if (rhs.isInt()) {
+                d += coeff * -rhs();
+              } else {
+                defs.emplace_back(-coeff, rhs);
+              }
+              continue;
+            }
+            case PrimitiveMap::INT_SUM: {
+              assert(stacktop == Val::follow_alias(defby->arg(1)));
+              Val arr = defby->arg(0)[0];
+              for (int i = 0; i < arr.size(); ++i) {
+                Val arg = Val::follow_alias(arr[i]);
+                if (arg.isInt()) {
+                  d += coeff * arg();
+                } else {
+                  defs.emplace_back(coeff, arg);
+                }
+              }
+              continue;
+            }
+            case PrimitiveMap::INT_TIMES: {
+              assert(stacktop == Val::follow_alias(defby->arg(2)));
+              Val lhs = Val::follow_alias(defby->arg(0));
+              Val rhs = Val::follow_alias(defby->arg(1));
+              if (lhs.isInt()) {
+                if (rhs.isInt()) {
+                  // both constants, compute result
+                  d += coeff * lhs() * rhs();
+                } else {
+                  defs.emplace_back(coeff * lhs(), rhs);
+                }
+                continue;
+              }
+              if (rhs.isInt()) {
+                defs.emplace_back(coeff * rhs(), lhs);
+                continue;
+              }
+              break;
+            }
             case PrimitiveMap::INT_LIN_EQ: {
               // FIXME: Variables that are being replaced might have a smaller domain
               IntVal cur_coeff = 0;
@@ -611,25 +674,6 @@ namespace MiniZinc {
                   }
                 }
                 d += coeff * -defby->arg(2)();
-                continue;
-              }
-              break;
-            }
-            case PrimitiveMap::INT_TIMES: {
-              assert(stacktop == Val::follow_alias(defby->arg(2)));
-              Val lhs = Val::follow_alias(defby->arg(0));
-              Val rhs = Val::follow_alias(defby->arg(1));
-              if (lhs.isInt()) {
-                if (rhs.isInt()) {
-                  // both constants, compute result
-                  d += coeff * defby->arg(0)() * defby->arg(1)();
-                } else {
-                  defs.emplace_back(coeff * defby->arg(0)(), defby->arg(1));
-                }
-                continue;
-              }
-              if (rhs.isInt()) {
-                defs.emplace_back(coeff * defby->arg(1)(), defby->arg(0));
                 continue;
               }
               break;
@@ -771,6 +815,54 @@ namespace MiniZinc {
       return toVar()->ub();
     }
   }
+
+
+void Val::finalizeLin(Interpreter* interpreter) {
+  if (isInt()) {
+    return;
+  }
+  if (isVar()) {
+    Constraint* c = this->toVar()->defined_by();
+    if (c && c->pred() <= PrimitiveMap::PARTIAL_LINEAR) {
+      // Create linear equation
+      std::vector<Val> coeffs = {Val(1)};
+      std::vector<Val> vars = {*this};
+      IntVal d = 0;
+      simplify_linexp(coeffs, vars, d);
+
+      Constraint* nc = nullptr;
+      if (vars.empty()) {
+        bool succes = this->toVar()->setVal(interpreter, d);
+        assert(succes);
+      } else if (c->pred() == PrimitiveMap::INT_TIMES && vars.size() == 1 && vars[0] == *this) {
+        // Times operation between two variables. Just leave it as it is.
+        return;
+      } else {
+        assert(std::none_of(vars.begin(), vars.end(), [&](Val v) { return v == *this; }));
+        coeffs.push_back(Val(-1));
+        vars.push_back(*this);
+
+        Vec* ncoeffs = Vec::allocate_array(interpreter, interpreter->newIdent(), coeffs);
+        Vec* nvars = Vec::allocate_array(interpreter, interpreter->newIdent(), vars);
+        bool b;
+        std::tie(nc, b) = Constraint::a(interpreter, PrimitiveMap::INT_LIN_EQ, BytecodeProc::ROOT, {Val(ncoeffs), Val(nvars), Val(-d)});
+        assert(nc);
+      }
+
+      this->toVar()->_definitions.clear();
+      if (nc) {
+        this->toVar()->addDefinition(interpreter, nc);
+      }
+
+      // FIXME: c->destroy will remove a non-existing reference to this.
+      this->toVar()->addRef(interpreter);
+      c->destroy(interpreter);
+      Constraint::free(c);
+    }
+  } else {
+    this->toVec()->finalizeLin(interpreter);
+  }
+}
 
   CSETable::Key::Key(const std::vector<Val> &vec) {
     _size = vec.size();

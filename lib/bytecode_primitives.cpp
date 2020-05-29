@@ -14,6 +14,16 @@
 namespace MiniZinc {
 
   namespace BytecodePrimitives {
+    IntPlus int_plus;
+    IntMinus int_minus;
+    IntSum int_sum;
+    IntTimes int_times;
+
+    IntLinEq int_lin_eq;
+    IntLinEqReif int_lin_eq_reif;
+    IntLinLe int_lin_le;
+    IntLinLeReif int_lin_le_reif;
+
     MkIntVar mk_intvar;
     BoolNot boolnot;
     OpNot opnot;
@@ -21,11 +31,6 @@ namespace MiniZinc {
     ClauseReif clause_reif;
     Forall forall;
     Exists exists;
-    IntTimes inttimes;
-    IntLinEq int_lin_eq;
-    IntLinEqReif int_lin_eq_reif;
-    IntLinLe int_lin_le;
-    IntLinLeReif int_lin_le_reif;
     Uniform uniform;
     Sol sol;
     Sort sort;
@@ -37,7 +42,7 @@ namespace MiniZinc {
     SliceXd slice_xd;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &mk_intvar, &boolnot, &opnot, &clause, &clause_reif, &forall, &exists, &inttimes, &int_lin_eq, &int_lin_eq_reif, &int_lin_le, &int_lin_le_reif, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
+      &int_plus, &int_minus, &int_sum, &int_times, &int_lin_eq, &int_lin_eq_reif, &int_lin_le, &int_lin_le_reif, &mk_intvar, &boolnot, &opnot, &clause, &clause_reif, &forall, &exists, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
     };
   }
   

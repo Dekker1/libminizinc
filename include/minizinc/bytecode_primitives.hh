@@ -20,6 +20,18 @@ namespace MiniZinc {
   class PrimitiveMap {
   public:
     enum Id {
+      // Partial Linear Primitives
+      INT_PLUS,
+      INT_MINUS,
+      INT_SUM,
+      INT_TIMES,
+
+      // Linear Primitives
+      INT_LIN_EQ,
+      INT_LIN_EQ_REIF,
+      INT_LIN_LE,
+      INT_LIN_LE_REIF,
+
       MK_INTVAR,
       BOOLNOT,
       OP_NOT,
@@ -27,11 +39,6 @@ namespace MiniZinc {
       CLAUSE_REIF,
       FORALL,
       EXISTS,
-      INT_TIMES,
-      INT_LIN_EQ,
-      INT_LIN_EQ_REIF,
-      INT_LIN_LE,
-      INT_LIN_LE_REIF,
       UNIFORM,
       SOL,
       SORT,
@@ -41,6 +48,9 @@ namespace MiniZinc {
       INFINITE_DOMAIN,
       BOOLEAN_DOMAIN,
       SLICE_XD,
+
+      PARTIAL_LINEAR=INT_TIMES,
+      MAX_LIN=INT_LIN_LE_REIF,
       MAX_ID=SLICE_XD,
     };
     class Primitive {
@@ -89,15 +99,349 @@ namespace MiniZinc {
       assert(_p.size()==MAX_ID+1);
       return _p[i];
     }
-    
+
     std::vector<Primitive*>::iterator begin(void) { return _p.begin(); }
     std::vector<Primitive*>::iterator end(void) { return _p.end(); }
     int size(void) const { return _n.size(); }
   };
-  
+
   PrimitiveMap& primitiveMap(void);
-  
+
   namespace BytecodePrimitives {
+
+    class IntPlus : public PrimitiveMap::Primitive {
+    public:
+      IntPlus(void) : PrimitiveMap::Primitive("int_plus",PrimitiveMap::INT_PLUS,3) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        return PS_OK;
+      }
+    };
+
+    class IntMinus: public PrimitiveMap::Primitive {
+    public:
+      IntMinus(void) : PrimitiveMap::Primitive("int_min",PrimitiveMap::INT_MINUS,3) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        return PS_OK;
+      }
+    };
+
+    class IntSum : public PrimitiveMap::Primitive {
+    public:
+      IntSum(void) : PrimitiveMap::Primitive("int_sum", PrimitiveMap::INT_SUM, 2) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        return PS_OK;
+      }
+    };
+
+    class IntTimes : public PrimitiveMap::Primitive {
+    public:
+      IntTimes(void) : PrimitiveMap::Primitive("int_times",PrimitiveMap::INT_TIMES,3) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        assert(c->mode() == BytecodeProc::ROOT);
+        bool propImmediately = true;
+        for (int j = 0; j < _n_args; ++j) {
+          Val arg = c->arg(j);
+          if (arg.isVar()) {
+            arg.toVar()->subscribe(c, Variable::SES_ANY);
+            if (!arg.toVar()->isBounded()) {
+              propImmediately = false;
+            }
+          }
+        }
+        if (propImmediately) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (int j = 0; j < _n_args; ++j) {
+          Val arg = Val::follow_alias(c->arg(j), &i);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        Val a = Val::follow_alias(c->arg(0), &i);
+        Val b = Val::follow_alias(c->arg(1), &i);
+        Val res = Val::follow_alias(c->arg(2), &i);
+        if (b.isInt() && a.isVar()) {
+          std::swap(a, b);
+        }
+
+        IntVal lb, ub;
+        if ((a.isVar() && !a.toVar()->isBounded()) || (b.isVar() && !b.toVar()->isBounded())) {
+          return PS_OK;
+        } else if (a.isInt() && a.lb() == IntVal(1)) {
+//          res.alias(&i, b);
+          /// TODO! needs aliasing
+          return PS_ENTAILED;
+        }
+
+        lb = a.lb();
+        ub = a.ub();
+
+        lb *= b.lb();
+        ub *= b.ub();
+
+        /// TODO: what if res is not a var?
+        if (lb == ub) {
+          return res.toVar()->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+        } else {
+          return res.toVar()->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+        }
+        // TODO: Backwards Propagation
+      }
+    };
+
+    class IntLinEq : public PrimitiveMap::Primitive {
+    public:
+      IntLinEq(void) : PrimitiveMap::Primitive("int_lin_eq",PrimitiveMap::INT_LIN_EQ,3) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        // Check me: linear equation should be in its simplified form.
+
+        bool propImmediately = false;
+        int vars = 0;
+        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
+          Val v = c->arg(1)[0][j];
+          assert(v.isVar());
+          v.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(1)[0].size() <= 2 /* || propImmediately */) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
+          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        if (c->arg(1)[0].size() == 1) {
+          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+          if (v.isVar()) {
+            if (c->arg(2)() % c->arg(0)[0][0]()==0) {
+              return v.toVar()->setVal(&i, c->arg(2)() / c->arg(0)[0][0]()) ? PS_ENTAILED : PS_FAILED;
+            } else {
+              return PS_FAILED;
+            }
+          } else {
+            // aliased to val
+            return c->arg(0)[0][0]()*v() == c->arg(2)() ? PS_ENTAILED : PS_FAILED;
+          }
+        }
+        if (c->arg(1)[0].size() == 2) {
+          Val lhs = Val::follow_alias(c->arg(1)[0][0], &i);
+          Val rhs = Val::follow_alias(c->arg(1)[0][1], &i);
+          IntVal lhs_c = c->arg(0)[0][0]();
+          IntVal rhs_c = c->arg(0)[0][1]();
+          if (!lhs.isVar()) {
+            std::swap(lhs, rhs);
+            std::swap(lhs_c, rhs_c);
+          }
+          if (lhs.isVar()) {
+            if (rhs.isVar()) {
+              if (c->arg(2)() == 0 && (lhs_c+rhs_c) == 0) {
+                if (lhs.toVar()->timestamp() < rhs.toVar()->timestamp()) {
+                  std::swap(lhs, rhs);
+                }
+                bool success = rhs.toVar()->intersectDom(&i, Val(lhs.toVar()->domain()));
+                if (!success) {
+                  return PS_FAILED;
+                }
+                lhs.toVar()->alias(&i, rhs);
+                return PS_ENTAILED;
+              }
+            } else {
+              if (c->arg(2)() % lhs_c==0) {
+                return lhs.toVar()->setVal(&i, (c->arg(2)()-rhs_c*rhs()) / lhs_c) ? PS_ENTAILED : PS_FAILED;
+              } else {
+                return PS_FAILED;
+              }
+            }
+          } else {
+            return lhs()*lhs_c+rhs()*rhs_c==c->arg(2)() ? PS_ENTAILED : PS_FAILED;
+          }
+        }
+        // More propagation?
+        return PS_OK;
+      }
+    };
+
+    class IntLinEqReif : public PrimitiveMap::Primitive {
+    public:
+      IntLinEqReif(void) : PrimitiveMap::Primitive("int_lin_eq_reif",PrimitiveMap::INT_LIN_EQ_REIF,4) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        // Check me: linear equation should be in its simplified form.
+
+        bool propImmediately = false;
+        int vars = 0;
+        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
+          Val v = c->arg(1)[0][j];
+          assert(v.isVar());
+          v.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(3).isVar()) {
+          c->arg(3).toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(1)[0].size() <= 1 /* || propImmediately */) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
+          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+        Val r = Val::follow_alias(c->arg(3), &i);
+        if (r.isVar()) {
+          r.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        Val r = Val::follow_alias(c->arg(3), &i);
+        if (r.isInt()) {
+          // TODO: Rewrite to int_lin_eq
+          return PS_OK;
+        }
+        if (c->arg(1)[0].size() == 1) {
+          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+          Val mult = Val::follow_alias(c->arg(0)[0][0](), &i);
+          if (v.isVar()) {
+            if (c->arg(2)() % mult() == 0) {
+              IntVal res = c->arg(2)() / mult();
+              Vec* dom = v.toVar()->domain();
+              bool indom = true;
+              for (int j = 0; j < dom->size(); j+=2) {
+                if ((*dom)[j]() <= res && res <= (*dom)[j+1]()) {
+                  return PS_OK;
+                }
+              }
+              return r.toVar()->setVal(&i, IntVal(false)) ? PS_ENTAILED : PS_FAILED;
+            } else {
+              return PS_FAILED;
+            }
+          } else {
+            // aliased to val
+            return r.toVar()->setVal(&i, mult()*v() == c->arg(2)()) ? PS_ENTAILED : PS_FAILED;
+          }
+        }
+        // More propagation?
+        return PS_OK;
+      }
+    };
+
+    class IntLinLe : public PrimitiveMap::Primitive {
+    public:
+      IntLinLe(void) : PrimitiveMap::Primitive("int_lin_le",PrimitiveMap::INT_LIN_LE,3) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        // Check me: linear equation should be in its simplified form.
+
+        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
+          Val v = c->arg(1)[0][j];
+          assert(v.isVar()); // cannot be alias because of simplify_linexp
+          v.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(1)[0].size() <= 2 /* || propImmediately */) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
+          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        if (c->arg(1)[0].size() == 1) {
+          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+          if (v.isVar()) {
+            IntVal newBound = c->arg(2)() / c->arg(0)[0][0]();
+            if (c->arg(0)[0][0]() > 0) {
+              return v.toVar()->setMax(&i, newBound) ? PS_ENTAILED : PS_FAILED;
+            } else {
+              return v.toVar()->setMin(&i, newBound) ? PS_ENTAILED : PS_FAILED;
+            }
+          } else {
+            // aliased to val
+            return c->arg(0)[0][0]()*v() <= c->arg(2)() ? PS_ENTAILED : PS_FAILED;
+          }
+        }
+        // More propagation?
+        return PS_OK;
+      }
+    };
+
+    class IntLinLeReif : public PrimitiveMap::Primitive {
+    public:
+      IntLinLeReif(void) : PrimitiveMap::Primitive("int_lin_le_reif",PrimitiveMap::INT_LIN_LE_REIF,4) {}
+      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        // Check me: linear equation should be in its simplified form.
+
+        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
+          Val v = c->arg(1)[0][j];
+          assert(v.isVar()); // cannot be alias because of simplify_linexp
+          v.toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(3).isVar()) {
+          c->arg(3).toVar()->subscribe(c, Variable::SES_VAL);
+        }
+        if (c->arg(1)[0].size() <= 1 /* || propImmediately */) {
+          return propagate(i,c);
+        } else {
+          return PS_OK;
+        }
+      }
+      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
+        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
+          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+          if (arg.isVar()) {
+            arg.toVar()->unsubscribe(c);
+          }
+        }
+        Val r = Val::follow_alias(c->arg(3), &i);
+        if (r.isVar()) {
+          r.toVar()->unsubscribe(c);
+        }
+      }
+      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        Val r = Val::follow_alias(c->arg(3), &i);
+        if (r.isInt()) {
+          //TODO: Replace with int_lin_le
+          return PS_OK;
+        }
+        if (c->arg(1)[0].size() == 1) {
+          Val mult = c->arg(0)[0][0]();
+          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+          if (v.isVar()) {
+            if (mult()*v.lb() <= c->arg(2)() && mult()*v.ub() <= c->arg(2)()) {
+              return r.toVar()->setVal(&i, IntVal(true)) ? PS_ENTAILED : PS_FAILED;
+            } else if (mult()*v.lb() > c->arg(2)() && mult()*v.ub() > c->arg(2)()) {
+              return r.toVar()->setVal(&i, IntVal(false)) ? PS_ENTAILED : PS_FAILED;
+            }
+          } else {
+            // aliased to val
+            return r.toVar()->setVal(&i, mult()*v() <= c->arg(2)()) ? PS_ENTAILED : PS_FAILED;
+          }
+        }
+        // More propagation?
+        return PS_OK;
+      }
+    };
 
     class MkIntVar : public PrimitiveMap::Primitive {
     public:
@@ -317,359 +661,6 @@ namespace MiniZinc {
       }
     };
 
-    class IntTimes : public PrimitiveMap::Primitive {
-    public:
-      IntTimes(void) : PrimitiveMap::Primitive("int_times",PrimitiveMap::INT_TIMES,3) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
-        assert(c->mode() == BytecodeProc::ROOT);
-        bool propImmediately = true;
-        for (int j = 0; j < _n_args; ++j) {
-          Val arg = c->arg(j);
-          if (arg.isVar()) {
-            arg.toVar()->subscribe(c, Variable::SES_ANY);
-            if (!arg.toVar()->isBounded()) {
-              propImmediately = false;
-            }
-          }
-        }
-        if (propImmediately) {
-          return propagate(i,c);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < _n_args; ++j) {
-          Val arg = Val::follow_alias(c->arg(j), &i);
-          if (arg.isVar()) {
-            arg.toVar()->unsubscribe(c);
-          }
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
-        Val a = Val::follow_alias(c->arg(0), &i);
-        Val b = Val::follow_alias(c->arg(1), &i);
-        Val res = Val::follow_alias(c->arg(2), &i);
-        if (b.isInt() && a.isVar()) {
-          std::swap(a, b);
-        }
-
-        IntVal lb, ub;
-        if ((a.isVar() && !a.toVar()->isBounded()) || (b.isVar() && !b.toVar()->isBounded())) {
-          return PS_OK;
-        } else if (a.isInt() && a.lb() == IntVal(1)) {
-//          res.alias(&i, b);
-          /// TODO! needs aliasing
-          return PS_ENTAILED;
-        }
-
-        lb = a.lb();
-        ub = a.ub();
-
-        lb *= b.lb();
-        ub *= b.ub();
-
-        /// TODO: what if res is not a var?
-        if (lb == ub) {
-          return res.toVar()->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
-        } else {
-          return res.toVar()->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
-        }
-        // TODO: Backwards Propagation
-      }
-    };
-
-    class IntLinEq : public PrimitiveMap::Primitive {
-    public:
-      IntLinEq(void) : PrimitiveMap::Primitive("int_lin_eq",PrimitiveMap::INT_LIN_EQ,3) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
-        {
-          std::vector<Val> coeffs = c->arg(0)[0].toVec()->as_vector();
-          std::vector<Val> vars = c->arg(1)[0].toVec()->as_vector();
-          IntVal d = -c->arg(2)();
-          simplify_linexp(coeffs, vars, d);
-
-          Vec* ncoeffs = Vec::allocate_array(&i, i.newIdent(), coeffs);
-          Vec* nvars = Vec::allocate_array(&i, i.newIdent(), vars);
-          c->arg(&i, 0, Val(ncoeffs));
-          c->arg(&i, 1, Val(nvars));
-          c->arg(&i, 2, Val(-d));
-        }
-
-        bool propImmediately = false;
-        int vars = 0;
-        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
-          Val v = c->arg(1)[0][j];
-          assert(v.isVar());
-          v.toVar()->subscribe(c, Variable::SES_VAL);
-        }
-        if (c->arg(1)[0].size() <= 2 /* || propImmediately */) {
-          return propagate(i,c);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
-          if (arg.isVar()) {
-            arg.toVar()->unsubscribe(c);
-          }
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
-        if (c->arg(1)[0].size() == 1) {
-          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
-          if (v.isVar()) {
-            if (c->arg(2)() % c->arg(0)[0][0]()==0) {
-              return v.toVar()->setVal(&i, c->arg(2)() / c->arg(0)[0][0]()) ? PS_ENTAILED : PS_FAILED;
-            } else {
-              return PS_FAILED;
-            }
-          } else {
-            // aliased to val
-            return c->arg(0)[0][0]()*v() == c->arg(2)() ? PS_ENTAILED : PS_FAILED;
-          }
-        }
-        if (c->arg(1)[0].size() == 2) {
-          Val lhs = Val::follow_alias(c->arg(1)[0][0], &i);
-          Val rhs = Val::follow_alias(c->arg(1)[0][1], &i);
-          IntVal lhs_c = c->arg(0)[0][0]();
-          IntVal rhs_c = c->arg(0)[0][1]();
-          if (!lhs.isVar()) {
-            std::swap(lhs, rhs);
-            std::swap(lhs_c, rhs_c);
-          }
-          if (lhs.isVar()) {
-            if (rhs.isVar()) {
-              if (c->arg(2)() == 0 && (lhs_c+rhs_c) == 0) {
-                if (lhs.toVar()->timestamp() < rhs.toVar()->timestamp()) {
-                  std::swap(lhs, rhs);
-                }
-                bool success = rhs.toVar()->intersectDom(&i, Val(lhs.toVar()->domain()));
-                if (!success) {
-                  return PS_FAILED;
-                }
-                lhs.toVar()->alias(&i, rhs);
-                return PS_ENTAILED;
-              }
-            } else {
-              if (c->arg(2)() % lhs_c==0) {
-                return lhs.toVar()->setVal(&i, (c->arg(2)()-rhs_c*rhs()) / lhs_c) ? PS_ENTAILED : PS_FAILED;
-              } else {
-                return PS_FAILED;
-              }
-            }
-          } else {
-            return lhs()*lhs_c+rhs()*rhs_c==c->arg(2)() ? PS_ENTAILED : PS_FAILED;
-          }
-        }
-        // More propagation?
-        return PS_OK;
-      }
-    };
-
-    class IntLinEqReif : public PrimitiveMap::Primitive {
-    public:
-      IntLinEqReif(void) : PrimitiveMap::Primitive("int_lin_eq_reif",PrimitiveMap::INT_LIN_EQ_REIF,4) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
-        {
-          std::vector<Val> coeffs = c->arg(0)[0].toVec()->as_vector();
-          std::vector<Val> vars = c->arg(1)[0].toVec()->as_vector();
-          IntVal d = -c->arg(2)();
-          simplify_linexp(coeffs, vars, d);
-
-          Vec* ncoeffs = Vec::allocate_array(&i, i.newIdent(), coeffs);
-          Vec* nvars = Vec::allocate_array(&i, i.newIdent(), vars);
-          c->arg(&i, 0, Val(ncoeffs));
-          c->arg(&i, 1, Val(nvars));
-          c->arg(&i, 2, Val(-d));
-        }
-
-        bool propImmediately = false;
-        int vars = 0;
-        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
-          Val v = c->arg(1)[0][j];
-          assert(v.isVar());
-          v.toVar()->subscribe(c, Variable::SES_VAL);
-        }
-        if (c->arg(3).isVar()) {
-          c->arg(3).toVar()->subscribe(c, Variable::SES_VAL);
-        }
-        if (c->arg(1)[0].size() <= 1 /* || propImmediately */) {
-          return propagate(i,c);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
-          if (arg.isVar()) {
-            arg.toVar()->unsubscribe(c);
-          }
-        }
-        Val r = Val::follow_alias(c->arg(3), &i);
-        if (r.isVar()) {
-          r.toVar()->subscribe(c, Variable::SES_VAL);
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
-        Val r = Val::follow_alias(c->arg(3), &i);
-        if (r.isInt()) {
-          // TODO: Rewrite to int_lin_eq
-          return PS_OK;
-        }
-        if (c->arg(1)[0].size() == 1) {
-          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
-          Val mult = Val::follow_alias(c->arg(0)[0][0](), &i);
-          if (v.isVar()) {
-            if (c->arg(2)() % mult() == 0) {
-              IntVal res = c->arg(2)() / mult();
-              Vec* dom = v.toVar()->domain();
-              bool indom = true;
-              for (int j = 0; j < dom->size(); j+=2) {
-                if ((*dom)[j]() <= res && res <= (*dom)[j+1]()) {
-                  return PS_OK;
-                }
-              }
-              return r.toVar()->setVal(&i, IntVal(false)) ? PS_ENTAILED : PS_FAILED;
-            } else {
-              return PS_FAILED;
-            }
-          } else {
-            // aliased to val
-            return r.toVar()->setVal(&i, mult()*v() == c->arg(2)()) ? PS_ENTAILED : PS_FAILED;
-          }
-        }
-        // More propagation?
-        return PS_OK;
-      }
-    };
-
-    class IntLinLe : public PrimitiveMap::Primitive {
-    public:
-      IntLinLe(void) : PrimitiveMap::Primitive("int_lin_le",PrimitiveMap::INT_LIN_LE,3) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
-        {
-          std::vector<Val> coeffs = c->arg(0)[0].toVec()->as_vector();
-          std::vector<Val> vars = c->arg(1)[0].toVec()->as_vector();
-          IntVal d = -c->arg(2)();
-          simplify_linexp(coeffs, vars, d);
-
-          Vec* ncoeffs = Vec::allocate_array(&i, i.newIdent(), coeffs);
-          Vec* nvars = Vec::allocate_array(&i, i.newIdent(), vars);
-          c->arg(&i, 0, Val(ncoeffs));
-          c->arg(&i, 1, Val(nvars));
-          c->arg(&i, 2, Val(-d));
-        }
-
-        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
-          Val v = c->arg(1)[0][j];
-          assert(v.isVar()); // cannot be alias because of simplify_linexp
-          v.toVar()->subscribe(c, Variable::SES_VAL);
-        }
-        if (c->arg(1)[0].size() <= 2 /* || propImmediately */) {
-          return propagate(i,c);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
-          if (arg.isVar()) {
-            arg.toVar()->unsubscribe(c);
-          }
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
-        if (c->arg(1)[0].size() == 1) {
-          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
-          if (v.isVar()) {
-            IntVal newBound = c->arg(2)() / c->arg(0)[0][0]();
-            if (c->arg(0)[0][0]() > 0) {
-              return v.toVar()->setMax(&i, newBound) ? PS_ENTAILED : PS_FAILED;
-            } else {
-              return v.toVar()->setMin(&i, newBound) ? PS_ENTAILED : PS_FAILED;
-            }
-          } else {
-            // aliased to val
-            return c->arg(0)[0][0]()*v() <= c->arg(2)() ? PS_ENTAILED : PS_FAILED;
-          }
-        }
-        // More propagation?
-        return PS_OK;
-      }
-    };
-
-    class IntLinLeReif : public PrimitiveMap::Primitive {
-    public:
-      IntLinLeReif(void) : PrimitiveMap::Primitive("int_lin_le_reif",PrimitiveMap::INT_LIN_LE_REIF,4) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
-        {
-          std::vector<Val> coeffs = c->arg(0)[0].toVec()->as_vector();
-          std::vector<Val> vars = c->arg(1)[0].toVec()->as_vector();
-          IntVal d = -c->arg(2)();
-          simplify_linexp(coeffs, vars, d);
-
-          Vec* ncoeffs = Vec::allocate_array(&i, i.newIdent(), coeffs);
-          Vec* nvars = Vec::allocate_array(&i, i.newIdent(), vars);
-          c->arg(&i, 0, Val(ncoeffs));
-          c->arg(&i, 1, Val(nvars));
-          c->arg(&i, 2, Val(-d));
-        }
-
-        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
-          Val v = c->arg(1)[0][j];
-          assert(v.isVar()); // cannot be alias because of simplify_linexp
-          v.toVar()->subscribe(c, Variable::SES_VAL);
-        }
-        if (c->arg(3).isVar()) {
-          c->arg(3).toVar()->subscribe(c, Variable::SES_VAL);
-        }
-        if (c->arg(1)[0].size() <= 1 /* || propImmediately */) {
-          return propagate(i,c);
-        } else {
-          return PS_OK;
-        }
-      }
-      virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
-          if (arg.isVar()) {
-            arg.toVar()->unsubscribe(c);
-          }
-        }
-        Val r = Val::follow_alias(c->arg(3), &i);
-        if (r.isVar()) {
-          r.toVar()->unsubscribe(c);
-        }
-      }
-      virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
-        Val r = Val::follow_alias(c->arg(3), &i);
-        if (r.isInt()) {
-          //TODO: Replace with int_lin_le
-          return PS_OK;
-        }
-        if (c->arg(1)[0].size() == 1) {
-          Val mult = c->arg(0)[0][0]();
-          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
-          if (v.isVar()) {
-            if (mult()*v.lb() <= c->arg(2)() && mult()*v.ub() <= c->arg(2)()) {
-              return r.toVar()->setVal(&i, IntVal(true)) ? PS_ENTAILED : PS_FAILED;
-            } else if (mult()*v.lb() > c->arg(2)() && mult()*v.ub() > c->arg(2)()) {
-              return r.toVar()->setVal(&i, IntVal(false)) ? PS_ENTAILED : PS_FAILED;
-            }
-          } else {
-            // aliased to val
-            return r.toVar()->setVal(&i, mult()*v() <= c->arg(2)()) ? PS_ENTAILED : PS_FAILED;
-          }
-        }
-        // More propagation?
-        return PS_OK;
-      }
-    };
 
     class Uniform : public PrimitiveMap::Primitive {
     public:

@@ -322,6 +322,7 @@ namespace MiniZinc {
     IntVal lb() const;
     IntVal ub() const;
     bool isFixed() const;
+    void finalizeLin(Interpreter* interpreter);
   };
   
   class Vec : public RefCountedObject {
@@ -389,6 +390,12 @@ namespace MiniZinc {
         }
       }
       return count;
+    }
+
+    void finalizeLin(Interpreter* interpreter) {
+      for (int i = 0; i < _size; ++i) {
+        _data[i].finalizeLin(interpreter);
+      }
     }
 
     const Val* begin(void) const { return _data; }
@@ -605,6 +612,7 @@ namespace MiniZinc {
   class Variable : public RefCountedObject {
     friend class Trail;
     friend class Interpreter;
+    friend class Val;
   public:
     enum SubscriptionEvent { SEV_VAL, SEV_UNIFY, SEV_DOM, SEV };
     /// Event sets propagators can subscribe to: only value events, value+unification, or any change

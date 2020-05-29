@@ -207,23 +207,9 @@ void bind_binop_var(CodeGen& cg, CG_Builder& frag, Mode ctx, BinOpType op, int r
   switch(op) {
     // Actual builtins
     case BOT_PLUS: {
-      if (ENABLE_PLUS) {
-        auto fun = find_call_fun(cg, {"op_plus"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
-        assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-        PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
-      } else {
-        OPEN_OTHER(cg, frag);
-        OPEN_VEC(cg, frag);
-        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_lhs));
-        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_rhs));
-        CLOSE_AGG(cg, frag);
-        CLOSE_AGG(cg, frag);
-        int r = GET_REG(cg);
-        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-        auto fun = find_call_fun(cg, {"sum"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
-        assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
-        PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r));
-      }
+      auto fun = find_call_fun(cg, {"op_plus"}, Type::varint(), {Type::varint(), Type::varint()}, ctx);
+      assert(BytecodeProc::is_neg(ctx) == BytecodeProc::is_neg(fun.second));
+      PUSH_INSTR(frag, BytecodeStream::CALL, fun.second, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       return;
     }
     case BOT_MINUS: {

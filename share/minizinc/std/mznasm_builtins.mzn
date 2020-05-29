@@ -11,3 +11,5 @@ predicate bool_clause(array[int] of var bool: as, array[int] of var bool: bs);
   Constrains \( \a b \leftrightarrow \bigvee_i \a as[i] \lor \bigvee_j \lnot \a bs[j] \)
  */
 predicate bool_clause_reif(array[int] of var bool: as, array[int] of var bool: bs, var bool: b);
+/** @group flatzinc.int Constrains \( \a c = \sum_i \a as[i]*\a bs[i] \) */
+predicate int_lin_eq(array[int] of int: as, array[int] of var int: bs, int: c);
