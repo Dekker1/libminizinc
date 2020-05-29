@@ -640,44 +640,6 @@ namespace MiniZinc {
               }
               break;
             }
-            case PrimitiveMap::INT_LIN_EQ: {
-              // FIXME: Variables that are being replaced might have a smaller domain
-              IntVal cur_coeff = 0;
-              for (int i = defby->arg(1)[0].size() - 1; i >= 0; --i) {
-                Val arg = Val::follow_alias(defby->arg(1)[0][i]);
-                if (arg == stacktop) {
-                  cur_coeff += defby->arg(0)[0][i]();
-                  break; // TODO: Can we assume no duplicates?
-                }
-                assert(i != 0);
-              }
-              assert(cur_coeff != 0);
-              if (std::abs(coeff) == std::abs(cur_coeff)) {
-                IntVal mult = ((coeff > 0) == (cur_coeff > 0)) ? -1 : 1;
-                for (int i = 0; i < defby->arg(0)[0].size(); i++) {
-                  Val arg = Val::follow_alias(defby->arg(1)[0][i]);
-                  if (arg != stacktop) {
-                    defs.emplace_back(mult * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
-                  }
-                }
-                d += mult * -defby->arg(2)();
-                continue;
-              }
-              if (std::abs(cur_coeff) == 1) {
-                if (((coeff > 0) == (cur_coeff > 0))) {
-                  coeff = -1 * coeff;
-                }
-                for (int i = 0; i < defby->arg(0)[0].size(); i++) {
-                  Val arg = Val::follow_alias(defby->arg(1)[0][i]);
-                  if (arg != stacktop) {
-                    defs.emplace_back(coeff * defby->arg(0)[0][i](), defby->arg(1)[0][i]);
-                  }
-                }
-                d += coeff * -defby->arg(2)();
-                continue;
-              }
-              break;
-            }
             default: {}
           }
         }
