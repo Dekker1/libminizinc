@@ -39,7 +39,7 @@ using namespace MiniZinc;
 
 int main(int argc, const char** argv) {
   Timer starttime;
-
+  GCLock lock;
   try {
     MznReader r(std::cout,std::cerr);
     Model* m(nullptr);
