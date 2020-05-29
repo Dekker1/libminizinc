@@ -1099,6 +1099,9 @@ namespace MiniZinc {
       return cse[proc].insert(this, key, mode, val);
     }
     void set_global(int i, const Val& val) { globals.assign(this, i, val); }
+    void clear_globals() {
+      globals.destroy(this);
+    }
     const Val get_global(int i) { return globals[i]; }
     PropStatus subscribe(Constraint* c);
     void unsubscribe(Constraint* d);

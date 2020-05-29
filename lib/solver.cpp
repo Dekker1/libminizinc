@@ -712,7 +712,6 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     return;
   }
   bool verbose = flag_compiler_verbose;
-  Timer tm01;
   std::ifstream t(filename, std::ifstream::in);
   std::string line;
   std::string mzn_defs;
@@ -809,6 +808,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     }
   }
   // Start interpreter
+  Timer tm01;
   if (verbose) {
     std::cerr << "Run:\n";
   }
@@ -817,6 +817,9 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   while (interpreter->status() == Interpreter::ROGER && delayed) {
     delayed = interpreter->runDelayed();
   }
+  flatten_time = tm01.s();
+  // FIXME: Global registers should not be removed, merely hidden
+  interpreter->clear_globals();
   if (verbose) {
     std::cerr << "Status: " << Interpreter::status_to_string[interpreter->status()] << std::endl;
     if (interpreter->status() == Interpreter::ROGER) {
@@ -836,7 +839,6 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
       interpreter_status = SolverInstance::UNSAT;
       break;
   }
-  flatten_time = tm01.s();
 }
 
 std::pair<SolverInstance::Status, std::string> MznSolver::solve()
