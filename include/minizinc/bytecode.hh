@@ -309,29 +309,8 @@ namespace MiniZinc {
     /// Access value as vector
     Vec* toVec(void) const;
   public:
-    Val(const IntVal& i=IntVal(0)) {
-      static const unsigned int pointerBits = sizeof(void*)*8;
-      static const long long int maxUnboxedVal = (static_cast<long long int>(1) << (pointerBits - 3)) - static_cast<long long int>(1);
-      assert(!i.isFinite() || i >= -maxUnboxedVal && i <= maxUnboxedVal);
-      long long int j;
-      if (i.isFinite()) {
-        j = i < 0 ? -i.toInt() : i.toInt();
-      } else {
-        j = 1;
-      }
-      ptrdiff_t ubi_p = (static_cast<ptrdiff_t>(j) << 3);
-      if (!i.isFinite()) {
-        ubi_p = ubi_p | static_cast<ptrdiff_t>(2);
-      }
-      if (i < 0) {
-        ubi_p = ubi_p | static_cast<ptrdiff_t>(4);
-      }
-      _v = reinterpret_cast<void*>(ubi_p);
-    }
-    explicit Val(const RefCountedObject* d) {
-      assert(d != nullptr);
-      _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(d) | static_cast<ptrdiff_t>(1));
-    }
+    Val(const IntVal& i=IntVal(0));
+    explicit Val(const RefCountedObject* d);
     ~Val(void);
     Val(const Val& v);
     Val(Val&& v);
@@ -458,7 +437,30 @@ namespace MiniZinc {
     IntVal width(void) const { return (*rs)[n+1]()-(*rs)[n]()+1; }
   };
 
-  
+  inline
+  Val::Val(const IntVal& i) {
+    static const unsigned int pointerBits = sizeof(void*)*8;
+    static const long long int maxUnboxedVal = (static_cast<long long int>(1) << (pointerBits - 3)) - static_cast<long long int>(1);
+    assert(!i.isFinite() || i >= -maxUnboxedVal && i <= maxUnboxedVal);
+    ptrdiff_t ubi_p;
+    long long int j = i.toIntUnsafe();
+    if (i.isFinite()) {
+      ubi_p = (static_cast<ptrdiff_t>(j < 0 ? -j : j) << 3);
+    } else {
+      ubi_p = (static_cast<ptrdiff_t>(1) << 3);
+      ubi_p = ubi_p | static_cast<ptrdiff_t>(2);
+    }
+    if (j < 0) {
+      ubi_p = ubi_p | static_cast<ptrdiff_t>(4);
+    }
+    _v = reinterpret_cast<void*>(ubi_p);
+  }
+  inline
+  Val::Val(const RefCountedObject* d) {
+    assert(d != nullptr);
+    _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(d) | static_cast<ptrdiff_t>(1));
+  }
+
   inline
   Val::~Val(void) { }
   inline
