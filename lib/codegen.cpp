@@ -575,8 +575,7 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
       return CG_Cond::call({"int_lin_eq"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_LQ:
@@ -591,8 +590,7 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
       return CG_Cond::call({"int_lin_le"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_LE:
@@ -607,8 +605,7 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
       return CG_Cond::call({"int_lin_le"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_NQ:
@@ -4296,7 +4293,7 @@ CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG::Binding CG::bind(Comprehension* comp, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  // Lift out the ourter-most comprehension, since it will always
+  // Lift out the outer-most comprehension, since it will always
   // be executed.
   CG::bind(comp->in(0), cg, frag);
 
@@ -4550,6 +4547,34 @@ CG_Cond::T CG::compile(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   }
 }
 
+CG_Cond::T shortcut_par_or(Mode ctx, CodeGen& cg, CG_Builder& frag, Expression* lhs, Expression* rhs) {
+  Mode f_mode(ctx.strength(), false); // Check
+  assert(lhs->type().ispar());
+  int r(GET_REG(cg));
+  int l_exit(GET_LABEL(cg));
+  int r_lhs(CG::force(CG::compile(lhs, cg, frag), f_mode, cg, frag));
+  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_lhs), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r), CG::l(l_exit));
+  int r_rhs(CG::force(CG::compile(rhs, cg, frag), f_mode, cg, frag));
+  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_rhs), CG::r(r));
+  PUSH_LABEL(frag, l_exit);
+  return CG_Cond::reg(r, rhs->type().ispar());
+}
+
+CG_Cond::T shortcut_par_and(Mode ctx, CodeGen& cg, CG_Builder& frag, Expression* lhs, Expression* rhs) {
+  Mode f_mode(ctx.strength(), false); // Check
+  assert(lhs->type().ispar());
+  int r(GET_REG(cg));
+  int l_exit(GET_LABEL(cg));
+  int r_lhs(CG::force(CG::compile(lhs, cg, frag), f_mode, cg, frag));
+  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_lhs), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_exit));
+  int r_rhs(CG::force(CG::compile(rhs, cg, frag), f_mode, cg, frag));
+  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_rhs), CG::r(r));
+  PUSH_LABEL(frag, l_exit);
+  return CG_Cond::reg(r, rhs->type().ispar());
+}
+
 CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> cond;
   // For anything we force here, its calling mode is considered positive (because
@@ -4566,6 +4591,17 @@ CG_Cond::T CG::compile(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         {CG::r(r_lhs), CG::r(r_rhs)}
     ));
     return CG_Cond::forall(ctx, cond);
+  }
+  if(b->op() == BOT_AND) {
+    if(b->lhs()->type().ispar())
+      return shortcut_par_and(ctx, cg, frag, b->lhs(), b->rhs());
+    if(b->rhs()->type().ispar())
+      return shortcut_par_and(ctx, cg, frag, b->rhs(), b->lhs());
+  } else if(b->op() == BOT_OR) {
+    if(b->lhs()->type().ispar())
+      return shortcut_par_or(ctx, cg, frag, b->lhs(), b->rhs());
+    if(b->rhs()->type().ispar())
+      return shortcut_par_or(ctx, cg, frag, b->rhs(), b->lhs());
   }
   if(b->type().ispar()) {
     int r_lhs = CG::force_or_bind(b->lhs(), f_mode, cond, cg, frag);
