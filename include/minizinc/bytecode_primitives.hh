@@ -113,6 +113,13 @@ namespace MiniZinc {
     public:
       IntPlus(void) : PrimitiveMap::Primitive("int_plus",PrimitiveMap::INT_PLUS,3) {}
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        Val lb = c->arg(0).lb() + c->arg(1).lb();
+        Val ub = c->arg(0).ub() + c->arg(1).ub();
+
+        std::vector<Val> ndom = {lb, ub};
+        // TODO: We officially don't know that it is not binding
+        c->arg(2).toVar()->domain(&i, ndom, false);
+
         return PS_OK;
       }
     };
@@ -121,6 +128,13 @@ namespace MiniZinc {
     public:
       IntMinus(void) : PrimitiveMap::Primitive("int_min",PrimitiveMap::INT_MINUS,3) {}
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        Val lb = c->arg(0).lb() - c->arg(1).ub();
+        Val ub = c->arg(0).ub() - c->arg(1).lb();
+
+        std::vector<Val> ndom = {lb, ub};
+        // TODO: We officially don't know that it is not binding
+        c->arg(2).toVar()->domain(&i, ndom, false);
+
         return PS_OK;
       }
     };
@@ -129,6 +143,18 @@ namespace MiniZinc {
     public:
       IntSum(void) : PrimitiveMap::Primitive("int_sum", PrimitiveMap::INT_SUM, 2) {}
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+        IntVal lb(0);
+        IntVal ub(0);
+
+        for (int i = 0; i < c->arg(0)[0].size(); ++i) {
+          lb += c->arg(0)[0][i].lb();
+          ub += c->arg(0)[0][i].ub();
+        }
+
+        std::vector<Val> ndom = {lb, ub};
+        // TODO: We officially don't know that it is not binding
+        c->arg(1).toVar()->domain(&i, ndom, false);
+
         return PS_OK;
       }
     };
@@ -143,7 +169,7 @@ namespace MiniZinc {
           Val arg = c->arg(j);
           if (arg.isVar()) {
             arg.toVar()->subscribe(c, Variable::SES_ANY);
-            if (!arg.toVar()->isBounded()) {
+            if (j <= 1 && !arg.toVar()->isBounded()) {
               propImmediately = false;
             }
           }

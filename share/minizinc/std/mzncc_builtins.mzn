@@ -65,7 +65,7 @@ function int: op_minus(int: x) ::promise_total = -x;
 /** @group builtins.arithmetic Return \a x - \a y */
 function var int: op_minus(var int: x) ::promise_total =
   let {
-    var -ub(x)..-lb(x): y;
+    var int: y;
     constraint int_min(0,x,y);
   } in y;
 
@@ -77,14 +77,14 @@ function var int: op_minus(var int: x, int: y) ::promise_total =
     x
   else
     let {
-      var lb(x)-y..ub(x)-y: z;
+      var int: z;
       constraint int_min(x,y,z);
     } in z
   endif;
 /** @group builtins.arithmetic Return \a x - \a y */
 function var int: op_minus(var int: x,  var int: y) ::promise_total =
   let {
-    var lb(x)-ub(y)..ub(x)-lb(y): z;
+    var int: z;
     constraint int_min(x, y, z);
   } in z;
 /** @group builtins.arithmetic Return \a x + \a y */
@@ -95,7 +95,7 @@ function var int: op_plus(int: x, var int: y) ::promise_total =
     y
   else
     let {
-      var x+lb(y)..x+ub(y): z;
+      var int: z;
       constraint int_plus(x, y, z);
     } in z
   endif;
@@ -104,7 +104,7 @@ function var int: op_plus(var int: x, int: y) = op_plus(y, x);
 /** @group builtins.arithmetic Return \a x + \a y */
 function var int: op_plus(var int: x, var int: y) ::promise_total =
   let {
-    var lb(x)+lb(y)..ub(x)+ub(y): z;
+    var int: z;
     constraint int_plus(x, y, z);
   } in z;
 
@@ -113,7 +113,7 @@ function int: op_times(int: x, int: y) = x * y;
 /** @group builtins.arithmetic Return \a x * \a y */
 function var int: op_times(var int: x, var int: y) ::promise_total =
   let {
-    var lb(x)*lb(y)..ub(x)*ub(y): z;
+    var int: z;
     constraint int_times(x, y, z);
   } in z;
 
@@ -181,7 +181,7 @@ predicate int_sum(array[int] of var int: xs, var int: x);
 function var int: sum_cc(array[$T] of var int: x) ::promise_total =
   let {
     array[int] of var int: xs = array1d(x);
-    var sum([lb(xi) | xi in xs])..sum([ub(xi) | xi in xs]): res;
+    var int: res;
     constraint int_sum(xs, res);
   } in res;
 
