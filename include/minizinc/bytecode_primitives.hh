@@ -142,18 +142,18 @@ namespace MiniZinc {
     class IntSum : public PrimitiveMap::Primitive {
     public:
       IntSum(void) : PrimitiveMap::Primitive("int_sum", PrimitiveMap::INT_SUM, 2) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
+      virtual PropStatus subscribe(Interpreter& interpreter, Constraint* c) const {
         IntVal lb(0);
         IntVal ub(0);
 
         for (int i = 0; i < c->arg(0)[0].size(); ++i) {
-          lb += c->arg(0)[0][i].lb();
-          ub += c->arg(0)[0][i].ub();
+          lb += Val::follow_alias(c->arg(0)[0][i],&interpreter).lb();
+          ub += Val::follow_alias(c->arg(0)[0][i],&interpreter).ub();
         }
 
         std::vector<Val> ndom = {lb, ub};
         // TODO: We officially don't know that it is not binding
-        c->arg(1).toVar()->domain(&i, ndom, false);
+        c->arg(1).toVar()->domain(&interpreter, ndom, false);
 
         return PS_OK;
       }
