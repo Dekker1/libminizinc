@@ -246,7 +246,10 @@ namespace MiniZinc {
 
   bool Variable::intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding) {
     if (!isBounded()) {
-      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), dom)), binding);
+      Val ndom(Vec::a(interpreter, interpreter->newIdent(), dom));
+      ndom.construct(interpreter);
+      domain(interpreter, ndom, binding);
+      ndom.destroy(interpreter);
       return true;
     }
     assert(!aliased());
@@ -310,7 +313,10 @@ namespace MiniZinc {
   void
   Variable::domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding0) {
     if (!isBounded()) {
-      domain(interpreter, Val(Vec::a(interpreter, interpreter->newIdent(), newDomain)), binding0);
+      Val ndom(Vec::a(interpreter, interpreter->newIdent(), newDomain));
+      ndom.construct(interpreter);
+      domain(interpreter, ndom, binding0);
+      ndom.destroy(interpreter);
     } else {
       bool did_update = false;
       if (newDomain.size() != _domain.size()) {
