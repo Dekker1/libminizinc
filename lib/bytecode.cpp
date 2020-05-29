@@ -564,7 +564,9 @@ namespace MiniZinc {
     std::vector<std::pair<IntVal,Val>> defs;
     defs.reserve(vars.size());
     for (int j = vars.size()-1; j >= 0; --j) {
-      defs.emplace_back(coeffs[j](), vars[j]);
+      if (coeffs[j]() != 0) {
+        defs.emplace_back(coeffs[j](), vars[j]);
+      }
     }
     coeffs.clear();
     vars.clear();
@@ -574,6 +576,8 @@ namespace MiniZinc {
       IntVal coeff = defs.back().first;
       Val stacktop = Val::follow_alias(defs.back().second);
       defs.pop_back();
+      if (coeff==0)
+        continue;
       if (stacktop.isInt()) {
         d += coeff*stacktop();
       } else {
@@ -682,12 +686,15 @@ namespace MiniZinc {
         }
       }
       if (foundDuplicates) {
+        int j=0;
         for (unsigned int i=0; i<coeffs_simple.size(); i++) {
-          coeffs[i] = coeffs_simple[i];
-          vars[i] = vars_simple[i];
+          if (coeffs_simple[i] != 0) {
+            coeffs[j++] = coeffs_simple[i];
+            vars[j++] = vars_simple[i];
+          }
         }
-        coeffs.resize(coeffs_simple.size());
-        vars.resize(vars_simple.size());
+        coeffs.resize(j);
+        vars.resize(j);
       }
     }
   }
