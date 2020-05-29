@@ -198,7 +198,7 @@ namespace MiniZinc {
     assert(!aliased());
     assert(_domain.isVec());
     assert(_domain.size() % 2 == 0);
-    size_t j = _domain.size() - 1;
+    int j = _domain.size() - 1;
     while (j >= 0 && _domain[j]() > i) {
       --j;
     }
