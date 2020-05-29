@@ -176,7 +176,7 @@ function int: min(set of int: x) = internal_set_min(x);
 function int: min(array[$U] of int: x) = internal_min(array1d(x));
 function bool: min(array[$U] of bool: x) = internal_min(array1d(x));
 
-predicate int_sum(array[$T] of var int: xs, var int: x);
+predicate int_sum(array[int] of var int: xs, var int: x);
 /** @group builtins.arithmetic Return sum of elements in array \a x */
 function var int: sum_cc(array[$T] of var int: x) ::promise_total =
   let {
