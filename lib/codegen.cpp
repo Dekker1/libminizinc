@@ -4522,8 +4522,10 @@ CG_Cond::T shortcut_par_or(Mode ctx, CodeGen& cg, CG_Builder& frag, Expression* 
   int r_lhs(CG::force(CG::compile(lhs, cg, frag), f_mode, cg, frag));
   PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_lhs), CG::r(r));
   PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r), CG::l(l_exit));
+  cg.env_push();
   int r_rhs(CG::force(CG::compile(rhs, cg, frag), f_mode, cg, frag));
   PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_rhs), CG::r(r));
+  cg.env_pop();
   PUSH_LABEL(frag, l_exit);
   return CG_Cond::reg(r, rhs->type().ispar());
 }
@@ -4536,8 +4538,10 @@ CG_Cond::T shortcut_par_and(Mode ctx, CodeGen& cg, CG_Builder& frag, Expression*
   int r_lhs(CG::force(CG::compile(lhs, cg, frag), f_mode, cg, frag));
   PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_lhs), CG::r(r));
   PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_exit));
+  cg.env_push();
   int r_rhs(CG::force(CG::compile(rhs, cg, frag), f_mode, cg, frag));
   PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_rhs), CG::r(r));
+  cg.env_pop();
   PUSH_LABEL(frag, l_exit);
   return CG_Cond::reg(r, rhs->type().ispar());
 }
