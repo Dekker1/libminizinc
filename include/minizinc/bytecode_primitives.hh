@@ -112,13 +112,13 @@ namespace MiniZinc {
     class IntPlus : public PrimitiveMap::Primitive {
     public:
       IntPlus(void) : PrimitiveMap::Primitive("int_plus",PrimitiveMap::INT_PLUS,3) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
-        Val lb = c->arg(0).lb() + c->arg(1).lb();
-        Val ub = c->arg(0).ub() + c->arg(1).ub();
+      virtual PropStatus subscribe(Interpreter& interpreter, Constraint* c) const {
+        Val lb = Val::follow_alias(c->arg(0),&interpreter).lb() + Val::follow_alias(c->arg(1),&interpreter).lb();
+        Val ub = Val::follow_alias(c->arg(0),&interpreter).ub() + Val::follow_alias(c->arg(1),&interpreter).ub();
 
         std::vector<Val> ndom = {lb, ub};
         // TODO: We officially don't know that it is not binding
-        c->arg(2).toVar()->domain(&i, ndom, false);
+        c->arg(2).toVar()->domain(&interpreter, ndom, false);
 
         return PS_OK;
       }
@@ -127,13 +127,13 @@ namespace MiniZinc {
     class IntMinus: public PrimitiveMap::Primitive {
     public:
       IntMinus(void) : PrimitiveMap::Primitive("int_min",PrimitiveMap::INT_MINUS,3) {}
-      virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
-        Val lb = c->arg(0).lb() - c->arg(1).ub();
-        Val ub = c->arg(0).ub() - c->arg(1).lb();
+      virtual PropStatus subscribe(Interpreter& interpreter, Constraint* c) const {
+        Val lb = Val::follow_alias(c->arg(0),&interpreter).lb() - Val::follow_alias(c->arg(1),&interpreter).lb();
+        Val ub = Val::follow_alias(c->arg(0),&interpreter).ub() - Val::follow_alias(c->arg(1),&interpreter).ub();
 
         std::vector<Val> ndom = {lb, ub};
         // TODO: We officially don't know that it is not binding
-        c->arg(2).toVar()->domain(&i, ndom, false);
+        c->arg(2).toVar()->domain(&interpreter, ndom, false);
 
         return PS_OK;
       }
