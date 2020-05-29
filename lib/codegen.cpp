@@ -98,6 +98,7 @@ const char* instr_names[] = {
       "ITER_VEC",
       "ITER_RANGE",
       "ITER_NEXT",
+      "ITER_BREAK",
       
       "TRACE",
       "ABORT",
@@ -392,6 +393,7 @@ int bind_binop_par_int(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, i
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       return r;
     case BOT_IN: {
+#if 0
       OPEN_OTHER(cg, frag);
       OPEN_VEC(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_lhs));
@@ -406,6 +408,26 @@ int bind_binop_par_int(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, i
       PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l));
       PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
       PUSH_LABEL(frag, l);
+#else
+      int l_head(GET_LABEL(cg));
+      int l_stop(GET_LABEL(cg));
+      int l_exit(GET_LABEL(cg));
+      r = GET_REG(cg);
+      PUSH_INSTR(frag, BytecodeStream::ITER_VEC, CG::r(r_rhs), CG::l(l_exit));
+      PUSH_LABEL(frag, l_head);
+      PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(r));
+      // Start of interval.
+      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r), CG::r(r_lhs), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r), CG::l(l_stop));
+      // End of interval
+      PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_lhs), CG::r(r), CG::r(r));
+      PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r), CG::l(l_stop));
+      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_head));
+      PUSH_LABEL(frag, l_stop);
+      PUSH_INSTR(frag, BytecodeStream::ITER_BREAK, CG::i(1));
+      PUSH_LABEL(frag, l_exit);
+#endif
       }
       return r;
     case BOT_PLUSPLUS:
@@ -2549,6 +2571,8 @@ void execute_comprehension_generic(Comprehension* c, Mode ctx, CodeGen& cg, CG_B
    // Build up the object to build the generator.
   std::vector<EmitPost*> nesting;
   
+  int depth = 0;
+  
   int g = c->n_generators();
   int n_gen = c->n_generators();
   for(int g = 0; g < n_gen; ++g) {
@@ -2563,6 +2587,7 @@ void execute_comprehension_generic(Comprehension* c, Mode ctx, CodeGen& cg, CG_B
       assert(in->type().ispar());
       for(int d = 0; d < c->n_decls(g); ++d) {
         Forset* iter(new Forset(cg, r));
+        depth += 2; // Forset first iterates over the range, then values in the range.
         nesting.push_back(iter);
         iter->emit_pre(frag);
         // Bind vd->id() to iter.val()
@@ -2580,6 +2605,7 @@ void execute_comprehension_generic(Comprehension* c, Mode ctx, CodeGen& cg, CG_B
         Foreach* iter(new Foreach(cg, r));
         nesting.push_back(iter);
         iter->emit_pre(frag);
+        depth += 1;
 
         VarDecl* vd(c->decl(g, d));
         ASTString id(vd->id()->str());
@@ -2596,7 +2622,7 @@ void execute_comprehension_generic(Comprehension* c, Mode ctx, CodeGen& cg, CG_B
     }
   }
   // We're now in the deepest scope. Generate code for the body.
-  f(c->e(), ctx, cg, frag);
+  f(c->e(), ctx, cg, frag, nesting.back()->cont(), depth);
 
   // Now close the iterators _in reverse order_, and restore the environment.
   for(int ii = nesting.size()-1; ii >= 0; --ii) {
@@ -2609,7 +2635,7 @@ void execute_comprehension_generic(Comprehension* c, Mode ctx, CodeGen& cg, CG_B
 
 // Specialized version when we're binding and pushing the body.
 void execute_comprehension_bind(Comprehension* c, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  execute_comprehension_generic(c, ctx, cg, frag, [](Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  execute_comprehension_generic(c, ctx, cg, frag, [](Expression* e, Mode ctx, CodeGen& cg, CG_Builder& frag, int lbl_cont, int depth) {
       // Bind and push everything in the comprehension.
   CG::Binding b_e = CG::force_or_bind(e, ctx, cg, frag);
   PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b_e.first)); // FIXME: Discarding partiality
@@ -2634,14 +2660,46 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       }
       break;
     case Expression::E_COMP: {
+      Comprehension* c(param->cast<Comprehension>());
+      // Special cases: if we're in root, just post everything.
       if(ctx == BytecodeProc::ROOT) {
         execute_comprehension_generic(param->cast<Comprehension>(), ctx, cg, frag,
-                                      [](Expression* elt, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+                                      [](Expression* elt, Mode ctx, CodeGen& cg, CG_Builder& frag, int lbl_cont, int depth) {
                                         CG_Cond::T c = CG::compile(elt, cg, frag);
                                         post_cond(cg, frag,  c);
                                       });;
         return CG_Cond::T::ttt();
       }
+      // If it's par, do shortcutting.
+      if(c->e()->type().ispar()) {
+        int r(GET_REG(cg));
+        PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
+        execute_comprehension_generic(c, ctx, cg, frag,
+                                      [r](Expression* elt, Mode ctx, CodeGen& cg, CG_Builder& frag, int lbl_cont, int depth) {
+                  int r_cond = CG::force(CG::compile(elt, cg, frag), BytecodeProc::FUN, cg, frag);
+                  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_cond), CG::l(lbl_cont));
+                  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
+                  PUSH_INSTR(frag, BytecodeStream::ITER_BREAK, CG::i(depth));
+                                      });;
+        return CG_Cond::reg(r, true);
+      } else {
+        // General case, just aggregate the values.
+        OPEN_OTHER(cg, frag);
+        OPEN_AND(cg, frag);
+        execute_comprehension_generic(c, ctx, cg, frag,
+          [](Expression* elt, Mode ctx, CodeGen& cg, CG_Builder& frag, int lbl_cont, int depth) {
+            int r_cond = CG::force(CG::compile(elt, cg, frag),
+                CG::Mode(ctx.strength(), false), cg, frag);
+            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_cond));
+          });
+        CLOSE_AGG(cg, frag);
+        CLOSE_AGG(cg, frag);
+        int r(GET_REG(cg));
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+        return CG_Cond::reg(r, false);
+      }
+    }
+      /*
       OPEN_OTHER(cg, frag);
       OPEN_AND(cg, frag);
       CLOSE_AGG(cg, frag);
@@ -2650,6 +2708,7 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       return CG_Cond::reg(r, call->type().ispar());
       }
+      */
     default:
       {
         int r(GET_REG(cg));
@@ -2705,6 +2764,37 @@ CG_Cond::T eval_exists(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       }
       break;
       */
+#if 1
+    case Expression::E_COMP: {
+      Comprehension* c(param->cast<Comprehension>());
+      if(c->e()->type().ispar()) {
+        int r(GET_REG(cg));
+        PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
+        execute_comprehension_generic(c, ctx, cg, frag,
+                                      [r](Expression* elt, Mode ctx, CodeGen& cg, CG_Builder& frag, int lbl_cont, int depth) {
+                  int r_cond = CG::force(CG::compile(elt, cg, frag), BytecodeProc::FUN, cg, frag);
+                  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT,CG::r(r_cond),  CG::l(lbl_cont));
+                  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
+                  PUSH_INSTR(frag, BytecodeStream::ITER_BREAK, CG::i(depth));
+                                      });
+        return CG_Cond::reg(r, true);
+      } else {
+        OPEN_OTHER(cg, frag);
+        OPEN_OR(cg, frag);
+        execute_comprehension_generic(c, ctx, cg, frag,
+          [](Expression* elt, Mode ctx, CodeGen& cg, CG_Builder& frag, int lbl_cont, int depth) {
+            int r_cond = CG::force(CG::compile(elt, cg, frag),
+                CG::Mode(ctx.strength(), false), cg, frag);
+            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_cond));
+          });
+        CLOSE_AGG(cg, frag);
+        CLOSE_AGG(cg, frag);
+        int r(GET_REG(cg));
+        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+        return CG_Cond::reg(r, false);
+      }
+    } // Fallthrough
+#endif
     default:
       {
         int r(GET_REG(cg));

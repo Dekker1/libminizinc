@@ -95,6 +95,7 @@ using namespace MiniZinc;
 "ITER_VEC"  { yylval->bValue = BytecodeStream::ITER_VEC; return MZA_ITER_VEC; }
 "ITER_RANGE" { yylval->bValue = BytecodeStream::ITER_RANGE; return MZA_ITER_RANGE; }
 "ITER_NEXT" { yylval->bValue = BytecodeStream::ITER_NEXT; return MZA_ITER_NEXT; }
+"ITER_BREAK" { yylval->bValue = BytecodeStream::ITER_BREAK; return MZA_ITER_BREAK; }
 "TRACE"     { yylval->bValue = BytecodeStream::TRACE; return MZA_TRACE; }
 "ABORT"     { yylval->bValue = BytecodeStream::ABORT; return MZA_ABORT; }
 

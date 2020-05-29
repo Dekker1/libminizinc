@@ -1167,6 +1167,11 @@ namespace MiniZinc {
           oss << "ITER_NEXT " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
+        case BytecodeStream::ITER_BREAK:
+        {
+          oss << "ITER_NEXT " << reg(pc) << " % " << cur_pc << "\n";
+        }
+          break;
         case BytecodeStream::OPEN_AGGREGATION:
         {
           oss << "OPEN_AGGREGATION ";
@@ -2079,6 +2084,16 @@ execute_ret:
             frame->pc = outer.exit_pc;
             _loops.pop_back();
           }
+        }
+          break;
+        case BytecodeStream::ITER_BREAK:
+        {
+          int num = frame->bs->reg(frame->pc); 
+          DBG_INTERPRETER("ITER_BREAK " << num  << "\n");
+          assert(_loops.size() >= num);
+          auto it(_loops.end() - num);
+          frame->pc = it->exit_pc;
+          _loops.erase(it, _loops.end());
         }
           break;
         case BytecodeStream::TRACE:

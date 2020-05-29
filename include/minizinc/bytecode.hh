@@ -99,6 +99,7 @@ namespace MiniZinc {
       ITER_VEC, // R, l: Iterate over vector in R, jump to l when finished.
       ITER_RANGE, // R1, R2, l: Iterate over values in [R1, R2]
       ITER_NEXT, // R: increment the topmost loop, binding the result to R. Pop and jump to loop exit if finished.
+      ITER_BREAK, // i : drop i iterators, jump to the exit of the last.
       
       TRACE, // R: output string representation of R
       ABORT, // abort execution

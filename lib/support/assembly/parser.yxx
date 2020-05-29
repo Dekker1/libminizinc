@@ -130,13 +130,14 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s);
 %token<bValue> MZA_ITER_VEC
 %token<bValue> MZA_ITER_RANGE
 %token<bValue> MZA_ITER_NEXT
+%token<bValue> MZA_ITER_BREAK
 
 %token<bValue> MZA_TRACE
 %token<bValue> MZA_ABORT
 
 
 %type<iValue> delay instruction mode
-%type<bValue> instr instrIR instrR instrRR instrRS instrRRR instrRRS instrRRRR instrS
+%type<bValue> instr instrI instrIR instrR instrRR instrRS instrRRR instrRRS instrRRRR instrS
 %type<sValue> label
 %type<liValue> registers
 %type<sliValue> labels
@@ -226,6 +227,12 @@ instruction:
     {
       $$ = ctx.proc_body.size();
       ctx.proc_body.addInstr($1);
+    }
+  | instrI MZA_INT
+    {
+      $$ = ctx.proc_body.size();
+      ctx.proc_body.addInstr($1);
+      ctx.proc_body.addIntVal($2);
     }
   | instrIR MZA_INT MZA_REG
     {
@@ -366,6 +373,9 @@ instruction:
 
 instrIR:
     MZA_IMMI
+
+instrI:
+    MZA_ITER_BREAK
 
 instrR:
     MZA_INCI
