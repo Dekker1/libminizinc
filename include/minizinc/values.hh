@@ -111,6 +111,8 @@ namespace MiniZinc {
       return _v;
     }
     
+    long long int toIntUnsafe(void) const;
+    
     bool isFinite(void) const { return !_infinity; }
     bool isPlusInfinity(void) const { return _infinity && _v==1; }
     bool isMinusInfinity(void) const { return _infinity && _v==-1; }
@@ -209,6 +211,12 @@ namespace MiniZinc {
     }
     
   };
+
+  inline
+  long long int IntVal::toIntUnsafe(void) const {
+    return _v;
+  }
+
 
   inline
   bool operator ==(const IntVal& x, const IntVal& y) {
