@@ -123,6 +123,15 @@ predicate int_lin_le_neg(array[int] of int: as, array[int] of var int: bs, int: 
 predicate int_lin_eq_neg(array[int] of int: as, array[int] of var int: bs, int: c) =
   int_lin_ne(as, bs, c);
 
+predicate pre_int_lin_eq(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then c=0 else int_lin_eq(as,bs,c) endif;
+
+predicate pre_int_lin_eq_neg(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then c!=0 else int_lin_ne(as,bs,c) endif;
+
+predicate pre_int_lin_le(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then c<=0 else int_lin_le(as,bs,c) endif;
+
+predicate pre_int_lin_le_neg(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then c<=0 else int_lin_le_neg(as,bs,c) endif;
+
+
 /** @group builtins.arithmetic Return result of integer division \a x / \a y */
 function int: op_int_division(int: x, int: y) = x div y;
 /** @group builtins.arithmetic Return result of integer division \a x / \a y */
@@ -263,6 +272,7 @@ function var bool: if_then_else_partiality(array[int] of var bool: c, array[int]
     var bool: b;
     constraint fzn_if_then_else_partiality(c, d, b);
   } in b;
+
 
 
 % Include solver-specific redefinitions for any FlatZinc built-ins.

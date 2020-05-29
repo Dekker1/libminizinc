@@ -564,14 +564,13 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
   switch(op) {
     // Actual builtins
     case BOT_EQUIV:
+    case BOT_LQ:
+    case BOT_LE:
     case BOT_EQ: {
       int c = GET_REG(cg);
       int x = GET_REG(cg);
       int k = GET_REG(cg);
-      int z = bind_cst(0, cg, frag);
-      int e = GET_REG(cg);
-      int l_exit(GET_LABEL(cg));
-      int l_nonempty(GET_LABEL(cg));
+      int z = bind_cst(op==BOT_LE ? -1 : 0, cg, frag);
       OPEN_OTHER(cg, frag);
       auto fun = find_call_fun(cg, {"op_minus"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
       assert(fun.second == BytecodeProc::FUN);
@@ -579,70 +578,8 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(c), CG::r(e));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(e), CG::l(l_nonempty));
-      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(z), CG::r(k), CG::r(e));
-      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_exit));
-      PUSH_LABEL(frag, l_nonempty);
-      CG_Cond::T cond = CG_Cond::call({"int_lin_eq"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
-      int r_cond = CG::force(cond, ctx, cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_cond), CG::r(e));
-      PUSH_LABEL(frag, l_exit);
-      return CG_Cond::reg(e, false);
-    }
-    case BOT_LQ:
-    {
-      int c = GET_REG(cg);
-      int x = GET_REG(cg);
-      int k = GET_REG(cg);
-      int z = bind_cst(0, cg, frag);
-      int e = GET_REG(cg);
-      int l_exit(GET_LABEL(cg));
-      int l_nonempty(GET_LABEL(cg));
-      OPEN_OTHER(cg, frag);
-      auto fun = find_call_fun(cg, {"op_minus"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
-      assert(fun.second == BytecodeProc::FUN);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
-      CLOSE_AGG(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(c), CG::r(e));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(e), CG::l(l_nonempty));
-      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(z), CG::r(k), CG::r(e));
-      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_exit));
-      PUSH_LABEL(frag, l_nonempty);
-      CG_Cond::T cond = CG_Cond::call({"int_lin_le"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
-      int r_cond = CG::force(cond, ctx, cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_cond), CG::r(e));
-      PUSH_LABEL(frag, l_exit);
-      return CG_Cond::reg(e, false);
-    }
-    case BOT_LE:
-    {
-      int c = GET_REG(cg);
-      int x = GET_REG(cg);
-      int k = GET_REG(cg);
-      int z = bind_cst(-1, cg, frag);
-      int e = GET_REG(cg);
-      int l_exit(GET_LABEL(cg));
-      int l_nonempty(GET_LABEL(cg));
-      OPEN_OTHER(cg, frag);
-      auto fun = find_call_fun(cg, {"op_minus"}, Type::varint(), {Type::varint(), Type::varint()}, BytecodeProc::FUN);
-      assert(fun.second == BytecodeProc::FUN);
-      PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
-      CLOSE_AGG(cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(c), CG::r(e));
-      PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(e), CG::l(l_nonempty));
-      PUSH_INSTR(frag, BytecodeStream::EQI, CG::r(z), CG::r(k), CG::r(e));
-      PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_exit));
-      PUSH_LABEL(frag, l_nonempty);
-      CG_Cond::T cond = CG_Cond::call({"int_lin_le"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
-      int r_cond = CG::force(cond, ctx, cg, frag);
-      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_cond), CG::r(e));
-      PUSH_LABEL(frag, l_exit);
-      return CG_Cond::reg(e, false);
+      const char* ident = (op==BOT_LE || op==BOT_LQ) ? "pre_int_lin_le" : "pre_int_lin_eq";
+      return CG_Cond::call({ident}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_NQ:
       return ~linear_cond(cg, frag, BOT_EQ, -ctx, r_lhs, r_rhs);

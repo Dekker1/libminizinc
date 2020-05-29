@@ -2265,15 +2265,10 @@ execute_ret:
           std::tie(coeffs, vars, d) = simplify_linexp(frame->reg[r0]);
           d = frame->reg[r1]()-d;
 
-          if (coeffs.size()==0) {
-            frame->reg.assign(this, r2, IntVal(0));
-            frame->reg.assign(this, r3, IntVal(0));
-          } else {
-            Val coeffs_v = Val(Vec::allocate_array(this, newIdent(), coeffs));
-            Val vars_v = Val(Vec::allocate_array(this, newIdent(), vars));
-            frame->reg.assign(this, r2, coeffs_v);
-            frame->reg.assign(this, r3, vars_v);
-          }
+          Val coeffs_v = Val(Vec::allocate_array(this, newIdent(), coeffs));
+          Val vars_v = Val(Vec::allocate_array(this, newIdent(), vars));
+          frame->reg.assign(this, r2, coeffs_v);
+          frame->reg.assign(this, r3, vars_v);
           frame->reg.assign(this, r4, d);
           DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
           DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString(DBG_TRIM_OUTPUT) << ")\n");
