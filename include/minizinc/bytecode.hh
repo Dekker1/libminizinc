@@ -560,6 +560,10 @@ namespace MiniZinc {
         v.destroy(interpreter);
       }
     }
+    void clear(Interpreter* interpreter) {
+      destroy(interpreter);
+      _r.clear();
+    }
     void dump(std::ostream& os) {
       for (unsigned int i=0; i<_r.size(); i++) {
         os << "  R" << i << " = " << _r[i].toString() << "\n";
@@ -1100,7 +1104,7 @@ namespace MiniZinc {
     }
     void set_global(int i, const Val& val) { globals.assign(this, i, val); }
     void clear_globals() {
-      globals.destroy(this);
+      globals.clear(this);
     }
     const Val get_global(int i) { return globals[i]; }
     PropStatus subscribe(Constraint* c);
