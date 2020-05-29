@@ -749,6 +749,9 @@ namespace MiniZinc {
     }
   }
 
+  // WARNING: Provide interpreter variable only if v is an uncopied reference
+  // with a strong reference count. The reference (and the reference count of
+  // the RCO) will be adjusted in case of an alias.
   Val Val::follow_alias(const Val& v, Interpreter* interpreter) {
     if (v.isVar() && v.toVar()->aliased()) {
       Val nval = v;
@@ -2132,7 +2135,7 @@ execute_ret:
         case BytecodeStream::ITER_NEXT:
         {
           int r1 = frame->bs->reg(frame->pc); 
-          DBG_INTERPRETER("ITER_NEXT " << r1  << "\n");
+          DBG_INTERPRETER("ITER_NEXT");
           assert(_loops.size() > 0);
           LoopState& outer(_loops.back());
           if(outer.pos < outer.end) {
@@ -2142,7 +2145,7 @@ execute_ret:
               outer.pos++;
             } else {
               Val* ptr(reinterpret_cast<Val*>(outer.pos));
-              v = Val::follow_alias(*ptr, this);
+              v = Val::follow_alias(*ptr);
               outer.pos += sizeof(Val*);
             }
             frame->reg.assign(this, r1, v);
