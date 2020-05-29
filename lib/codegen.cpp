@@ -575,8 +575,7 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
       return CG_Cond::call({"int_lin_eq"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_LQ:
@@ -591,8 +590,7 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
       return CG_Cond::call({"int_lin_le"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_LE:
@@ -607,8 +605,7 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, fun.first, CG::r(r_lhs), CG::r(r_rhs));
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(c));
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(c), CG::r(x), CG::r(k));
-      PUSH_INSTR(frag, BytecodeStream::SUBI, CG::r(z), CG::r(k), CG::r(k));
+      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(c), CG::r(z), CG::r(c), CG::r(x), CG::r(k));
       return CG_Cond::call({"int_lin_le"}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
     }
     case BOT_NQ:
