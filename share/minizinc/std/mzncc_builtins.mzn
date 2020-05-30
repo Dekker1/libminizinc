@@ -129,9 +129,9 @@ predicate pre_int_lin_eq(array[int] of int: as, array[int] of var int: bs, int: 
 
 predicate pre_int_lin_eq_neg(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then c!=0 else int_lin_ne(as,bs,c) endif;
 
-predicate pre_int_lin_le(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then c<=0 else int_lin_le(as,bs,c) endif;
+predicate pre_int_lin_le(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then 0<=c else int_lin_le(as,bs,c) endif;
 
-predicate pre_int_lin_le_neg(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then c<=0 else int_lin_le_neg(as,bs,c) endif;
+predicate pre_int_lin_le_neg(array[int] of int: as, array[int] of var int: bs, int: c) = if length(as)=0 then 0<=c else int_lin_le_neg(as,bs,c) endif;
 
 
 /** @group builtins.arithmetic Return result of integer division \a x / \a y */
