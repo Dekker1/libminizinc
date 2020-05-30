@@ -584,6 +584,8 @@ namespace MiniZinc {
       return false;
     } else if (lhs.isVec() && rhs.isVec()) {
       return (*lhs.toVec()) == (*rhs.toVec());
+    } else if (lhs.isInt() && rhs.isInt()) {
+      return lhs.toInt()==rhs.toInt();
     } else {
       return reinterpret_cast<ptrdiff_t>(lhs._v) == reinterpret_cast<ptrdiff_t>(rhs._v);
     }
