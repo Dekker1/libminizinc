@@ -826,7 +826,6 @@ void Val::finalizeLin(Interpreter* interpreter) {
         std::tie(nc, b) = Constraint::a(interpreter, PrimitiveMap::INT_LIN_EQ, BytecodeProc::ROOT, {Val(ncoeffs), Val(nvars), Val(-d)});
         assert(nc || b);
       }
-      
       // Need to check whether variable still has a definition
       // (may have been aliased during the construction of nc)
       c = this->toVar()->defined_by();
@@ -835,10 +834,10 @@ void Val::finalizeLin(Interpreter* interpreter) {
         this->toVar()->addDefinition(interpreter, nc);
       }
 
-      // FIXME: c->destroy will remove a non-existing reference to this.
-      this->toVar()->addRef(interpreter);
       if (c) {
         // still had a definition, so destroy it
+        // FIXME: c->destroy will remove a non-existing reference to this.
+        this->toVar()->addRef(interpreter);
         c->destroy(interpreter);
         Constraint::free(c);
       }
