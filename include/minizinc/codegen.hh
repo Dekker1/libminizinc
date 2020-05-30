@@ -106,135 +106,6 @@ struct CG_Builder {
   void clear(void) { instrs.clear(); }
 };
 
-// An environment should never outlive its parent.
-template<class T>
-class CG_Env {
-private:
-  CG_Env(CG_Env<T>* _p)
-    : p(_p), sz(p ? p->sz : 0) { }
-
-  // Forbid copy and assignment operators.
-  CG_Env(const CG_Env& _o) = delete;
-  CG_Env& operator=(const CG_Env& o) = delete;
-public:
-  CG_Env(void)
-    : p(nullptr), sz(0) { }
-  CG_Env(CG_Env&& o)
-    : bindings(std::move(o.bindings))
-    , available(std::move(o.available))
-    , available_csts(std::move(o.available_csts))
-    , available_ranges(std::move(o.available_ranges))
-    , occurs(std::move(o.occurs)), p(o.p), sz(o.sz) { }
-
-
-  class NotFound : public std::exception {
-  public:
-    NotFound(void) { }
-  };
- 
-  T lookup(const ASTString& s) const {
-    auto it(bindings.find(s));
-    if(it != bindings.end())
-      return (*it).second;
-    if(!p)
-      throw NotFound();
-
-    return p->lookup(s);
-  }
-
-  void bind(const ASTString& s, T val) {
-    auto it(bindings.find(s));
-    if(it != bindings.end())
-      bindings.erase(it);
-    else
-      sz++;
-    bindings.insert(std::make_pair(s, val));
-
-    // Invalidate any cached values mentioning s.
-    auto o_it(occurs.find(s));
-    if(o_it != occurs.end()) {
-      // We're lazy here, in that we don't remove e from
-      // other occurs lists.
-      for(Expression* e : (*o_it).second)
-        available.erase(e);
-      occurs.erase(o_it);
-    }
-  }
-
-  // Check whether e is already available in an enclosing environment.
-  T cache_lookup(Expression* e, ASTStSet e_scope) {
-    auto it(available.find(e));
-    // Anything in the current table is hasn't been invalidated.
-    if(it != available.end()) {
-      return (*it).second;
-    }
-    if(!p) throw NotFound();
-
-    // If there's a parent table, check whether we've re-bound
-    // something in its scope.
-    for(auto p : bindings) {
-      if(e_scope.find(p.first) != e_scope.end())
-        throw NotFound();
-    }
-    // If the scope hasn't been invalidated, check the parent.
-    return p->cache_lookup(e, e_scope);
-  }
-
-  void cache_store(Expression* e, ASTStSet e_scope, T val) {
-    available.insert(std::make_pair(e, val));
-    // Add e to the occurs lists for variables in its scope.
-    for(ASTString s : e_scope)
-      occurs[s].push_back(e);
-  }
-
-  bool cache_lookup_cst(int x, T& ret) {
-    auto it(available_csts.find(x));
-    // Anything in the current table is hasn't been invalidated.
-    if(it != available_csts.end()) {
-      ret = (*it).second;
-      return true; 
-    }
-    if(!p) return false;
-    return p->cache_lookup_cst(x, ret);
-  }
-  void cache_store_cst(int x, T val) {
-    available_csts.insert(std::make_pair(x, val));
-  }
-
-  static uint64_t range_key(int l, int u) {
-    return (((uint64_t) u)<<32ull | (uint64_t) l);
-  }
-  bool cache_lookup_range(int l, int u, T& ret) {
-    auto it(available_ranges.find(range_key(l, u)));
-    // Anything in the current table is hasn't been invalidated.
-    if(it != available_ranges.end()) {
-      ret = (*it).second;
-      return true; 
-    }
-    if(!p) return false;
-    return p->cache_lookup_range(l, u, ret);
-  }
-  void cache_store_range(int l, int u, T val) {
-    available_ranges.insert(std::make_pair(range_key(l, u), val));
-  }
-
-  static CG_Env* spawn(CG_Env* p) { return new CG_Env<T>(p); }
-
-  unsigned int size(void) const { return sz; }
-
-  typename ASTStringMap<T>::t bindings;
-
-  typename ExprMap<T>::t available;
-  std::unordered_map<int, T> available_csts;
-  std::unordered_map<uint64_t, T> available_ranges;
-//  std::unordered_map<std::pair<int, int>, T> available_ranges;
-  typename ASTStringMap<std::vector<Expression*> >::t occurs;
-
-  // Parent environment.
-  CG_Env<T>* p;
-  unsigned int sz;
-};
-
 // When we bind a non-Boolean expression, we also construct
 // a set of conditions we need to insert into any use-contexts.
 
@@ -404,6 +275,147 @@ struct CG_Cond {
     return _exists(m, vec, args...);
   }
   static T exists(BytecodeProc::Mode m, std::vector<T>& args) { return _exists(m, args); }
+};
+
+// An environment should never outlive its parent.
+template<class T>
+class CG_Env {
+private:
+  CG_Env(CG_Env<T>* _p)
+    : p(_p), sz(p ? p->sz : 0) { }
+
+  // Forbid copy and assignment operators.
+  CG_Env(const CG_Env& _o) = delete;
+  CG_Env& operator=(const CG_Env& o) = delete;
+public:
+  CG_Env(void)
+    : p(nullptr), sz(0) { }
+  CG_Env(CG_Env&& o)
+    : bindings(std::move(o.bindings))
+    , available(std::move(o.available))
+    , available_csts(std::move(o.available_csts))
+    , available_ranges(std::move(o.available_ranges))
+    , cached_conds(std::move(o.cached_conds))
+    , occurs(std::move(o.occurs)), p(o.p), sz(o.sz) { }
+
+  void clear_cached_conds() {
+    for(CG_Cond::T c : cached_conds) {
+      CG_Cond::_T* p(c.get());
+      bool sign(c.sign());
+      p->reg[sign].reg = -1;
+    }
+    cached_conds.clear();
+  }
+  void record_cached_cond(CG_Cond::T c) { cached_conds.push_back(c); }
+
+  class NotFound : public std::exception {
+  public:
+    NotFound(void) { }
+  };
+ 
+  T lookup(const ASTString& s) const {
+    auto it(bindings.find(s));
+    if(it != bindings.end())
+      return (*it).second;
+    if(!p)
+      throw NotFound();
+
+    return p->lookup(s);
+  }
+
+  void bind(const ASTString& s, T val) {
+    auto it(bindings.find(s));
+    if(it != bindings.end())
+      bindings.erase(it);
+    else
+      sz++;
+    bindings.insert(std::make_pair(s, val));
+
+    // Invalidate any cached values mentioning s.
+    auto o_it(occurs.find(s));
+    if(o_it != occurs.end()) {
+      // We're lazy here, in that we don't remove e from
+      // other occurs lists.
+      for(Expression* e : (*o_it).second)
+        available.erase(e);
+      occurs.erase(o_it);
+    }
+  }
+
+  // Check whether e is already available in an enclosing environment.
+  T cache_lookup(Expression* e, ASTStSet e_scope) {
+    auto it(available.find(e));
+    // Anything in the current table is hasn't been invalidated.
+    if(it != available.end()) {
+      return (*it).second;
+    }
+    if(!p) throw NotFound();
+
+    // If there's a parent table, check whether we've re-bound
+    // something in its scope.
+    for(auto p : bindings) {
+      if(e_scope.find(p.first) != e_scope.end())
+        throw NotFound();
+    }
+    // If the scope hasn't been invalidated, check the parent.
+    return p->cache_lookup(e, e_scope);
+  }
+
+  void cache_store(Expression* e, ASTStSet e_scope, T val) {
+    available.insert(std::make_pair(e, val));
+    // Add e to the occurs lists for variables in its scope.
+    for(ASTString s : e_scope)
+      occurs[s].push_back(e);
+  }
+
+  bool cache_lookup_cst(int x, T& ret) {
+    auto it(available_csts.find(x));
+    // Anything in the current table is hasn't been invalidated.
+    if(it != available_csts.end()) {
+      ret = (*it).second;
+      return true; 
+    }
+    if(!p) return false;
+    return p->cache_lookup_cst(x, ret);
+  }
+  void cache_store_cst(int x, T val) {
+    available_csts.insert(std::make_pair(x, val));
+  }
+
+  static uint64_t range_key(int l, int u) {
+    return (((uint64_t) u)<<32ull | (uint64_t) l);
+  }
+  bool cache_lookup_range(int l, int u, T& ret) {
+    auto it(available_ranges.find(range_key(l, u)));
+    // Anything in the current table is hasn't been invalidated.
+    if(it != available_ranges.end()) {
+      ret = (*it).second;
+      return true; 
+    }
+    if(!p) return false;
+    return p->cache_lookup_range(l, u, ret);
+  }
+  void cache_store_range(int l, int u, T val) {
+    available_ranges.insert(std::make_pair(range_key(l, u), val));
+  }
+
+  static CG_Env* spawn(CG_Env* p) { return new CG_Env<T>(p); }
+
+  unsigned int size(void) const { return sz; }
+
+  typename ASTStringMap<T>::t bindings;
+
+  typename ExprMap<T>::t available;
+  std::unordered_map<int, T> available_csts;
+  std::unordered_map<uint64_t, T> available_ranges;
+//  std::unordered_map<std::pair<int, int>, T> available_ranges;
+  typename ASTStringMap<std::vector<Expression*> >::t occurs;
+
+  std::vector<CG_Cond::T> cached_conds;
+
+  // Parent environment.
+  CG_Env<T>* p;
+  unsigned int sz;
 };
 
 struct CG {
@@ -840,6 +852,7 @@ struct CodeGen {
   void env_pop(void) {
     assert(current_env);
     CG_Env<Binding>* c(current_env);
+    c->clear_cached_conds();
     current_env = current_env->p;
     delete c;
   }

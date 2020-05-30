@@ -1353,7 +1353,10 @@ void force_and_leaves(std::vector<int>& var_leaves, std::vector<int>& par_leaves
   };
   if(p->reg[sign].has_reg()) {
     push(p->reg[sign].reg, p->reg[sign].is_par);
-  } else if(p->reg[1 - sign].has_reg()) {
+    return;
+  }
+  cg.env().record_cached_cond(child);
+  if(p->reg[1 - sign].has_reg()) {
     // Create the negation
     int r(GET_REG(cg));
     if (p->reg[1 - sign].is_par) {
@@ -1394,7 +1397,10 @@ void force_or_leaves(std::vector<int>& var_leaves, std::vector<int>& par_leaves,
   };
   if(p->reg[1 - sign].has_reg()) {
     push(p->reg[1 - sign].reg, p->reg[1 - sign].is_par);
-  } else if(p->reg[sign].has_reg()) {
+    return;
+  }
+  cg.env().record_cached_cond(~child);
+  if(p->reg[sign].has_reg()) {
     // Create the negation
     int r(GET_REG(cg));
     if (p->reg[sign].is_par) {
@@ -1429,6 +1435,7 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     // return CG::locate_immi(1 - cond.sign(), cg, frag);
     return {bind_cst(1 - cond.sign(), cg, frag), true};
   }
+  cg.env().record_cached_cond(cond);
   if(p->kind() == CG_Cond::CC_Reg) {
     throw InternalError("_force_cond called on value in register.");
   } else if(p->kind() == CG_Cond::CC_Call) {
