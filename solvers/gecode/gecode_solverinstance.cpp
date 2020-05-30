@@ -428,7 +428,7 @@ namespace MiniZinc {
   void GecodeSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
     const std::string& name = bs[c->pred()].name;
     if (name == "solve_this") {
-      IntVal solve_mode = c->arg(0)();
+      IntVal solve_mode = c->arg(0).toIntVal();
       Val obj = c->arg(1);
 //      Val search_a = c->arg(2);
 //      IntVal var_sel = c->arg(3)();
@@ -741,7 +741,7 @@ namespace MiniZinc {
     for (int i=offset; i--;)
       ia[i] = 0;
     for (int i=vec.size(); i--;) {
-      ia[i+offset] = vec[i]().toInt();
+      ia[i+offset] = vec[i].toInt();
     }
     return ia;
   }
@@ -774,7 +774,7 @@ namespace MiniZinc {
     for (int i=offset; i--;)
       ia[i] = 0;
     for (int i=vec.size(); i--;) {
-      ia[i+offset] = vec[i]().toInt();
+      ia[i+offset] = vec[i].toInt();
     }
     return ia;
   }
@@ -826,7 +826,7 @@ namespace MiniZinc {
     assert(sl.size() >= 2 && sl.size() % 2 == 0);
     std::vector<IntSetVal::Range> ranges;
     for (int i = 0; i < sl.size(); i += 2) {
-      ranges.emplace_back(sl[i](), sl[i+1]());
+      ranges.emplace_back(sl[i].toIntVal(), sl[i+1].toIntVal());
     }
     IntSetVal* isv = IntSetVal::a(ranges);
     IntSetRanges isr(isv);
@@ -880,7 +880,7 @@ namespace MiniZinc {
               ia[i+offset] = v;
             }
         } else {
-            long long int value = val().toInt();
+            long long int value = val.toInt();
             if(valueWithinBounds(value)) {
               IntVar iv(*this->_current_space, value, value);
               ia[i+offset] = iv;
@@ -953,7 +953,7 @@ namespace MiniZinc {
               throw InternalError(ssm.str());
             }
         } else {
-          long long int i = v().toInt();
+          long long int i = v.toInt();
           if(i >= 0 && i <= 1) {
             BoolVar iv(*this->_current_space, i, i);
             ia[offset++] = iv;
@@ -1027,7 +1027,7 @@ namespace MiniZinc {
       assert(var.isbool());
       x0 = var.boolVar(_current_space);
     } else {
-      long long int i = _v().toInt();
+      long long int i = _v.toInt();
       if(i < 0 || i > 1) {
         std::stringstream ssm; ssm << "Expected bool literal instead of: " << _v.toString();
         throw new InternalError(ssm.str());
@@ -1098,7 +1098,7 @@ namespace MiniZinc {
         x0 = var.intVar(_current_space);
       }
     } else {
-      IntVal i = _val();
+      IntVal i = _val.toIntVal();
       x0 = IntVar(*this->_current_space, i.toInt(), i.toInt());
     }
     return x0;
@@ -1136,7 +1136,7 @@ namespace MiniZinc {
       return true;
     for (int i=arr.size(); i--;) {
       const Val& val = Val::follow_alias(arr[i]);
-      if (val.isInt() && val().toInt() >= 0 && val().toInt() <= 1) {
+      if (val.isInt() && val >= 0 && val <= 1) {
         continue;
       } else if (val.isVar()) {
         if (val.lb().toInt() >= 0 && val.ub().toInt() <= 1) {

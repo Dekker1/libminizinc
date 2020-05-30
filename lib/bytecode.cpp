@@ -75,7 +75,7 @@ namespace MiniZinc {
 
   Vec* Vec::allocate_array(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) {
     Vec* values = a(interpreter, interpreter->newIdent(), v);
-    Vec* idx = a(interpreter, interpreter->newIdent(), {IntVal(1), IntVal(v.size())});
+    Vec* idx = a(interpreter, interpreter->newIdent(), {1, v.size()});
     Vec* nv = a(interpreter, timestamp, {Val(values), Val(idx)});
     return nv;
   }
@@ -162,12 +162,12 @@ namespace MiniZinc {
     v->_prev = this;
   }
 
-  bool Variable::setMin(Interpreter* interpreter, IntVal i, bool binding) {
+  bool Variable::setMin(Interpreter* interpreter, Val i, bool binding) {
     assert(!aliased());
     assert(_domain.isVec());
     assert(_domain.size() % 2 == 0);
     size_t j = 0;
-    while (j < _domain.size() && _domain[j]() < i) {
+    while (j < _domain.size() && _domain[j] < i) {
       ++j;
     }
     if (j == 0) {
@@ -194,12 +194,12 @@ namespace MiniZinc {
     return true;
   }
 
-  bool Variable::setMax(Interpreter* interpreter, IntVal i, bool binding) {
+  bool Variable::setMax(Interpreter* interpreter, Val i, bool binding) {
     assert(!aliased());
     assert(_domain.isVec());
     assert(_domain.size() % 2 == 0);
     int j = _domain.size() - 1;
-    while (j >= 0 && _domain[j]() > i) {
+    while (j >= 0 && _domain[j] > i) {
       --j;
     }
     if (j == _domain.size() - 1) {
@@ -226,14 +226,14 @@ namespace MiniZinc {
     return true;
   }
 
-  bool Variable::setVal(Interpreter* interpreter, IntVal i, bool binding) {
+  bool Variable::setVal(Interpreter* interpreter, Val i, bool binding) {
     assert(!aliased());
     assert(_domain.isVec());
     assert(_domain.size() % 2 == 0);
     for (int j = 0; j < _domain.size(); j+=2) {
-      if (_domain[j]() <= i && i <= _domain[j+1]()) {
+      if (_domain[j] <= i && i <= _domain[j+1]) {
         this->binding(interpreter, binding);
-        alias(interpreter, Val(i));
+        alias(interpreter, i);
         return true;
       }
     }
@@ -257,7 +257,7 @@ namespace MiniZinc {
     assert(_domain.size() % 2 == 0);
     VecSetRanges vsr1(_domain.toVec());
     StdVecSetRanges vsr2(&dom);
-    Ranges::Inter<IntVal,VecSetRanges,StdVecSetRanges> inter(vsr1,vsr2);
+    Ranges::Inter<Val,VecSetRanges,StdVecSetRanges> inter(vsr1,vsr2);
     std::vector<Val> result;
     for (; inter(); ++inter) {
       result.emplace_back(inter.min());
@@ -273,7 +273,7 @@ namespace MiniZinc {
   bool Variable::intersectDom(Interpreter* interpreter, Val dom, bool binding) {
     assert(!dom.isVar());
     if (dom.isInt()) {
-      return setVal(interpreter, dom());
+      return setVal(interpreter, dom);
     }
     // TODO: Allocation is not really necessary;
     std::vector<Val> vdom(dom.size());
@@ -293,7 +293,7 @@ namespace MiniZinc {
     if (newDomain.isInt()) {
       alias(interpreter, newDomain);
       sev = SEV_VAL;
-    } else if (newDomain.size() == 2 && newDomain[0]() == newDomain[1]()) {
+    } else if (newDomain.size() == 2 && newDomain[0] == newDomain[1]) {
       alias(interpreter, newDomain[0]);
       sev = SEV_VAL;
     } else {
@@ -323,7 +323,7 @@ namespace MiniZinc {
         did_update = true;
       } else {
         for (int i=0; i<newDomain.size(); i++) {
-          if (newDomain[i]() != _domain[i]()) {
+          if (newDomain[i] != _domain[i]) {
             did_update = true;
             break;
           }
@@ -433,7 +433,7 @@ namespace MiniZinc {
     // Destroy old domain
     _domain.destroy(interpreter);
     _ann.destroy(interpreter);
-    _ann = Val(IntVal(0));
+    _ann = 0;
 
     // Transfer subscriptions to new value and schedule propagators
     for (auto& s : _subscriptions) {
@@ -557,21 +557,21 @@ namespace MiniZinc {
     } while (d != head);
   }
 
-  std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v) {
+  std::tuple<std::vector<Val>, std::vector<Val>, Val> simplify_linexp(Val v) {
     std::vector<Val> coeffs = {Val(1)};
     std::vector<Val> vars = {v};
-    IntVal d = 0;
+    Val d = 0;
     simplify_linexp(coeffs, vars, d);
     return {coeffs, vars, d};
   };
 
-  void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d) {
+  void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, Val& d) {
     assert(coeffs.size() == vars.size());
-    std::vector<std::pair<IntVal,Val>> defs;
+    std::vector<std::pair<Val,Val>> defs;
     defs.reserve(vars.size());
     for (int j = vars.size()-1; j >= 0; --j) {
-      if (coeffs[j]() != 0) {
-        defs.emplace_back(coeffs[j](), vars[j]);
+      if (coeffs[j] != 0) {
+        defs.emplace_back(coeffs[j], vars[j]);
       }
     }
     coeffs.clear();
@@ -579,13 +579,13 @@ namespace MiniZinc {
 
     std::vector<int> idx;
     while (!defs.empty()) {
-      IntVal coeff = defs.back().first;
+      Val coeff = defs.back().first;
       Val stacktop = Val::follow_alias(defs.back().second);
       defs.pop_back();
       if (coeff==0)
         continue;
       if (stacktop.isInt()) {
-        d += coeff*stacktop();
+        d += coeff*stacktop;
       } else {
         Variable* cur = stacktop.toVar();
         if (Constraint* defby = cur->defined_by()) {
@@ -595,7 +595,7 @@ namespace MiniZinc {
               for (int i = 0; i < 2; ++i) {
                 Val arg = Val::follow_alias(defby->arg(i));
                 if (arg.isInt()) {
-                  d += coeff * arg();
+                  d += coeff * arg;
                 } else {
                   defs.emplace_back(coeff, arg);
                 }
@@ -606,13 +606,13 @@ namespace MiniZinc {
               assert(stacktop == Val::follow_alias(defby->arg(2)));
               Val lhs = Val::follow_alias(defby->arg(0));
               if (lhs.isInt()) {
-                  d += coeff * lhs();
+                  d += coeff * lhs;
               } else {
                 defs.emplace_back(coeff, lhs);
               }
               Val rhs = Val::follow_alias(defby->arg(1));
               if (rhs.isInt()) {
-                d += coeff * -rhs();
+                d += coeff * -rhs;
               } else {
                 defs.emplace_back(-coeff, rhs);
               }
@@ -624,7 +624,7 @@ namespace MiniZinc {
               for (int i = 0; i < arr.size(); ++i) {
                 Val arg = Val::follow_alias(arr[i]);
                 if (arg.isInt()) {
-                  d += coeff * arg();
+                  d += coeff * arg;
                 } else {
                   defs.emplace_back(coeff, arg);
                 }
@@ -638,14 +638,14 @@ namespace MiniZinc {
               if (lhs.isInt()) {
                 if (rhs.isInt()) {
                   // both constants, compute result
-                  d += coeff * lhs() * rhs();
+                  d += coeff * lhs * rhs;
                 } else {
-                  defs.emplace_back(coeff * lhs(), rhs);
+                  defs.emplace_back(coeff * lhs, rhs);
                 }
                 continue;
               }
               if (rhs.isInt()) {
-                defs.emplace_back(coeff * rhs(), lhs);
+                defs.emplace_back(coeff * rhs, lhs);
                 continue;
               }
               break;
@@ -672,21 +672,21 @@ namespace MiniZinc {
         }
       };
       std::sort(idx.begin(),idx.end(),CmpValIdx(vars));
-      std::vector<IntVal> coeffs_simple;
+      std::vector<Val> coeffs_simple;
       coeffs_simple.reserve(coeffs.size());
       std::vector<Val> vars_simple;
       vars_simple.reserve(vars.size());
 
       int ci=0;
-      coeffs_simple.push_back(coeffs[idx[0]]());
+      coeffs_simple.push_back(coeffs[idx[0]]);
       vars_simple.push_back(vars[idx[0]]);
       bool foundDuplicates = false;
       for (unsigned int i=1; i<idx.size(); i++) {
         if (vars[idx[i]].timestamp() == vars_simple[ci].timestamp()) {
-          coeffs_simple[ci] += coeffs[idx[i]]();
+          coeffs_simple[ci] += coeffs[idx[i]];
           foundDuplicates = true;
         } else {
-          coeffs_simple.push_back(coeffs[idx[i]]());
+          coeffs_simple.push_back(coeffs[idx[i]]);
           vars_simple.push_back(vars[idx[i]]);
           ci++;
         }
@@ -714,7 +714,7 @@ namespace MiniZinc {
   Val::toString(bool trim) const {
     std::ostringstream oss;
     if (isInt()) {
-      oss << (*this)();
+      oss << toIntVal();
     } else if (isVar()) {
       if (timestamp() >= 0) {
         oss << "X" << timestamp() << "(";
@@ -739,16 +739,6 @@ namespace MiniZinc {
     return oss.str();
   }
 
-  bool Val::operator==(const Val &rhs) const {
-    if ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(3)) != (reinterpret_cast<ptrdiff_t>(rhs._v) & static_cast<ptrdiff_t>(3))) {
-      return false;
-    } else if (isVec() && rhs.isVec()) {
-      return (*toVec()) == (*rhs.toVec());
-    } else {
-      return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v);
-    }
-  }
-
   // WARNING: Provide interpreter variable only if v is an uncopied reference
   // with a strong reference count. The reference (and the reference count of
   // the RCO) will be adjusted in case of an alias.
@@ -770,25 +760,25 @@ namespace MiniZinc {
     }
   }
 
-  IntVal Val::lb() const {
+  Val Val::lb() const {
     if (isInt()) {
-      return operator()();
+      return *this;
     } else if (isVec()) {
       // Assume it is a set (sorted Vec of integer ranges)
       assert(operator[](0).isInt());
-      return operator[](0)();
+      return operator[](0);
     } else {
       return toVar()->lb();
     }
   }
 
-  IntVal Val::ub() const {
+  Val Val::ub() const {
     if (isInt()) {
-      return operator()();
+      return *this;
     } else if (isVec()) {
       // Assume it is a set (sorted Vec of integer ranges)
       assert(operator[](size()-1).isInt());
-      return operator[](size()-1)();
+      return operator[](size()-1);
     } else {
       return toVar()->ub();
     }
@@ -805,7 +795,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
       // Create linear equation
       std::vector<Val> coeffs = {Val(1)};
       std::vector<Val> vars = {*this};
-      IntVal d = 0;
+      Val d = 0;
       simplify_linexp(coeffs, vars, d);
 
       Constraint* nc = nullptr;
@@ -899,8 +889,8 @@ void Val::finalizeLin(Interpreter* interpreter) {
         assert(!v.isVec());
         if (BytecodeProc::is_neg(mode) != BytecodeProc::is_neg(val_m)) {
           if (v.isInt()) {
-            assert(v().toInt() == 0 || v().toInt() == 1);
-            return Val(1 - v().toInt());
+            assert(v==0 || v==1);
+            return 1 - v;
           } else {
             Key nkey({v});
             Val new_val;
@@ -959,7 +949,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
       if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
         if (oldVal.isVar()) {
           Variable* v = oldVal.toVar();
-          v->alias(interpreter, BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode) ? Val(IntVal(1)) : Val(IntVal(0)));
+          v->alias(interpreter, BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode) ? 1 : 0);
         }
       } else if (mode == BytecodeProc::FUN || mode == BytecodeProc::FUN_NEG) {
         if (oldVal.isVar()) {
@@ -1042,7 +1032,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           break;
         case BytecodeStream::IMMI:
         {
-          oss << "IMMI " << intval(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
+          oss << "IMMI " << intval(pc).toIntVal() << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::CLEAR:
@@ -1138,9 +1128,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
         case BytecodeStream::GET_VEC_NDIM:
         {
           oss << "GET_VEC_NDIM ";
-          IntVal n=intval(pc);
+          long long int n=intval(pc).toInt();
           oss << n;
-          for (int i=0; i < (n + 3); ++i) {
+          for (long long int i=0; i < (n + 3); ++i) {
             oss << " R" << reg(pc);
           }
           oss << " % " << cur_pc << "\n";
@@ -1239,12 +1229,12 @@ void Val::finalizeLin(Interpreter* interpreter) {
           break;
         case BytecodeStream::ITER_NEXT:
         {
-          oss << "ITER_NEXT " << reg(pc) << " % " << cur_pc << "\n";
+          oss << "ITER_NEXT R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::ITER_BREAK:
         {
-          oss << "ITER_BREAK " << reg(pc) << " % " << cur_pc << "\n";
+          oss << "ITER_BREAK " << intval(pc).toString() << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::OPEN_AGGREGATION:
@@ -1279,7 +1269,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           break;
         case BytecodeStream::SIMPLIFY_LIN:
         {
-          oss << "SIMPLIFY_LIN R" << reg(pc) << " R" << reg(pc) << " " << intval(pc) << " R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
+          oss << "SIMPLIFY_LIN R" << reg(pc) << " R" << reg(pc) << " " << intval(pc).toIntVal() << " R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::PUSH:
@@ -1388,9 +1378,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("ADDI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, frame->reg[r1]() + frame->reg[r2]());
-          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("ADDI R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          frame->reg.assign(this, r3, frame->reg[r1] + frame->reg[r2]);
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::SUBI:
@@ -1398,9 +1388,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("SUBI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, frame->reg[r1]() - frame->reg[r2]());
-          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("SUBI R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          frame->reg.assign(this, r3, frame->reg[r1] - frame->reg[r2]);
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::MULI:
@@ -1408,9 +1398,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("MULI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, frame->reg[r1]() * frame->reg[r2]());
-          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("MULI R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          frame->reg.assign(this, r3, frame->reg[r1] * frame->reg[r2]);
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::DIVI:
@@ -1418,12 +1408,12 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          if(frame->reg[r2]() == 0)
+          if(frame->reg[r2] == 0)
             frame->pc = frame->bs->size()-1;
           else
-            frame->reg.assign(this, r3, frame->reg[r1]() / frame->reg[r2]());
-          frame->reg.assign(this, r3, frame->reg[r1]() / frame->reg[r2]());
-          DBG_INTERPRETER("DIVI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+            frame->reg.assign(this, r3, frame->reg[r1] / frame->reg[r2]);
+          frame->reg.assign(this, r3, frame->reg[r1] / frame->reg[r2]);
+          DBG_INTERPRETER("DIVI R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")" << " " << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::MODI:
@@ -1431,33 +1421,33 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          if(frame->reg[r2]() == 0)
+          if(frame->reg[r2] == 0)
             frame->pc = frame->bs->size()-1;
           else
-            frame->reg.assign(this, r3, frame->reg[r1]() % frame->reg[r2]());
-          DBG_INTERPRETER("MODI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")" << " " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+            frame->reg.assign(this, r3, frame->reg[r1] % frame->reg[r2]);
+          DBG_INTERPRETER("MODI R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")" << " " << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::INCI:
         {
           int r1 = frame->bs->reg(frame->pc);
-          frame->reg.assign(this, r1, frame->reg[r1]()+1);
-          DBG_INTERPRETER("INCI R" << r1 << "(" << frame->reg[r1]() << ")" << "\n");
+          frame->reg.assign(this, r1, frame->reg[r1]+1);
+          DBG_INTERPRETER("INCI R" << r1 << "(" << frame->reg[r1].toString() << ")" << "\n");
         }
           break;
         case BytecodeStream::DECI:
         {
           int r1 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("DECI R" << r1 << "(" << frame->reg[r1]() << ")" << "\n");
-          frame->reg.assign(this, r1, frame->reg[r1]()-1);
+          DBG_INTERPRETER("DECI R" << r1 << "(" << frame->reg[r1].toString() << ")" << "\n");
+          frame->reg.assign(this, r1, frame->reg[r1]-1);
         }
           break;
         case BytecodeStream::IMMI:
         {
-          IntVal i = frame->bs->intval(frame->pc);
+          Val i = frame->bs->intval(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
           frame->reg.assign(this, r1, i);
-          DBG_INTERPRETER("IMMI " << i << " R" << r1 << "(" << frame->reg[r1]() << ")" << "\n");
+          DBG_INTERPRETER("IMMI " << i << " R" << r1 << "(" << frame->reg[r1].toString() << ")" << "\n");
         }
           break;
         case BytecodeStream::CLEAR:
@@ -1466,7 +1456,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r2 = frame->bs->reg(frame->pc);
           assert(r1<=r2);
           for (int i=r1; i<=r2; i++) {
-            frame->reg.assign(this, i, IntVal(0));
+            frame->reg.assign(this, i, 0);
           }
           DBG_INTERPRETER("CLEAR " << " R" << r1 << " " << r2 << "\n");
         }
@@ -1507,8 +1497,8 @@ void Val::finalizeLin(Interpreter* interpreter) {
         {
           int r0 = frame->bs->reg(frame->pc);
           int i = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("JMPIF R" << r0 << "(" << frame->reg[r0]() << ")" << " " << i << "\n");
-          if (frame->reg[r0]() != 0) {
+          DBG_INTERPRETER("JMPIF R" << r0 << "(" << frame->reg[r0].toString() << ")" << " " << i << "\n");
+          if (frame->reg[r0] != 0) {
             frame->pc = i;
           }
         }
@@ -1517,8 +1507,8 @@ void Val::finalizeLin(Interpreter* interpreter) {
         {
           int r0 = frame->bs->reg(frame->pc);
           int i = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("JMPIFNOT R" << r0 << "(" << frame->reg[r0]() << ")" << " " << i << "\n");
-          if (frame->reg[r0]() == 0) {
+          DBG_INTERPRETER("JMPIFNOT R" << r0 << "(" << frame->reg[r0].toString() << ")" << " " << i << "\n");
+          if (frame->reg[r0] == 0) {
             frame->pc = i;
           }
         }
@@ -1528,9 +1518,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("EQI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, IntVal(frame->reg[r1]() == frame->reg[r2]()));
-          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("EQI R" << r1  << "(" << frame->reg[r1] << ")" << " R" << r2  << "(" << frame->reg[r2] << ")");
+          frame->reg.assign(this, r3, frame->reg[r1] == frame->reg[r2]);
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LTI:
@@ -1538,9 +1528,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("LTI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, IntVal(frame->reg[r1]() < frame->reg[r2]()));
-          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("LTI R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          frame->reg.assign(this, r3, (frame->reg[r1] < frame->reg[r2]));
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::LEI:
@@ -1548,9 +1538,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("LEI R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, IntVal(frame->reg[r1]() <= frame->reg[r2]()));
-          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("LEI R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          frame->reg.assign(this, r3, (frame->reg[r1] <= frame->reg[r2]));
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::AND:
@@ -1558,9 +1548,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("AND R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, IntVal(frame->reg[r1]()!=0 && frame->reg[r2]()!=0));
-          DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("AND R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          frame->reg.assign(this, r3, (frame->reg[r1]!=0 && frame->reg[r2]!=0));
+          DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::OR:
@@ -1568,9 +1558,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("OR R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, IntVal(frame->reg[r1]()!=0 || frame->reg[r2]()!=0));
-          DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("OR R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          frame->reg.assign(this, r3, (frame->reg[r1]!=0 || frame->reg[r2]!=0));
+          DBG_INTERPRETER(" " << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::NOT:
@@ -1578,8 +1568,8 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("NOT R" << r1);
-          frame->reg.assign(this, r2, IntVal(frame->reg[r1]()==0));
-          DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2]() << ")" << "\n");
+          frame->reg.assign(this, r2, (frame->reg[r1]==0));
+          DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString() << ")" << "\n");
         }
           break;
         case BytecodeStream::XOR:
@@ -1587,9 +1577,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("XOR R" << r1  << "(" << frame->reg[r1]() << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
-          frame->reg.assign(this, r3, IntVal( (frame->reg[r1]()!=0) ^ (frame->reg[r2]()!=0)));
-          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3]() << ")" <<  "\n");
+          DBG_INTERPRETER("XOR R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          frame->reg.assign(this, r3, ( (frame->reg[r1]!=0) ^ (frame->reg[r2]!=0)));
+          DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::ISPAR:
@@ -1599,15 +1589,15 @@ void Val::finalizeLin(Interpreter* interpreter) {
           DBG_INTERPRETER("ISPAR R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           Val v = Val::follow_alias(frame->reg[r1], this);
           if (v.isInt()) {
-            frame->reg.assign(this, r2, IntVal(1));
+            frame->reg.assign(this, r2, 1);
           } else if (v.isVar()) {
-            frame->reg.assign(this, r2, IntVal(0));
+            frame->reg.assign(this, r2, 0);
           } else {
             assert(v.isVec());
-            IntVal ret = IntVal(v.toVec()->isPar());
+            Val ret = v.toVec()->isPar();
             frame->reg.assign(this, r2, ret);
           }
-          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::ISEMPTY:
@@ -1616,7 +1606,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("ISEMPTY R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           assert(frame->reg[r1].isInt() || frame->reg[r1].isVec());
-          frame->reg.assign(this, r2, IntVal(frame->reg[r1].isInt() || frame->reg[r1].size()==0));
+          frame->reg.assign(this, r2, (frame->reg[r1].isInt() || frame->reg[r1].size()==0));
           DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2]() << ")" << "\n");
         }
           break;
@@ -1626,8 +1616,8 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("LENGTH R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           assert(frame->reg[r1].isVec());
-          frame->reg.assign(this, r2, IntVal(frame->reg[r1].size()));
-          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2]() << ")" <<  "\n");
+          frame->reg.assign(this, r2, frame->reg[r1].size());
+          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2].toString() << ")" <<  "\n");
         }
           break;
         case BytecodeStream::GET_VEC:
@@ -1635,25 +1625,25 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("GET_VEC R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2]() << ")");
+          DBG_INTERPRETER("GET_VEC R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
           assert(frame->reg[r1].isVec());
           assert(frame->reg[r2].isInt());
-          assert(frame->reg[r2]() > 0 && frame->reg[r2]() <= frame->reg[r1].size());
-          Val v = Val::follow_alias(frame->reg[r1][frame->reg[r2]().toInt()-1], this);
+          assert(frame->reg[r2] > 0 && frame->reg[r2] <= frame->reg[r1].size());
+          Val v = Val::follow_alias(frame->reg[r1][frame->reg[r2].toInt()-1], this);
           frame->reg.assign(this, r3, v);
           DBG_INTERPRETER(" R" << r3 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
         case BytecodeStream::GET_VEC_NDIM:
         {
-          IntVal n = frame->bs->intval(frame->pc);
+          Val n = frame->bs->intval(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("GET_VEC_NDIM " << n << "R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-          std::vector<IntVal> idx(n.toInt());
+          std::vector<Val> idx(n.toInt());
           for (int i=0; i<n; i++) {
             int rr = frame->bs->reg(frame->pc);
             DBG_INTERPRETER(" R" << rr  << "(" << frame->reg[rr].toString(DBG_TRIM_OUTPUT) << ")");
-            idx[i] = frame->reg[rr]();
+            idx[i] = frame->reg[rr];
           }
           int r_res = frame->bs->reg(frame->pc);
           int r_cond = frame->bs->reg(frame->pc);
@@ -1662,19 +1652,19 @@ void Val::finalizeLin(Interpreter* interpreter) {
           assert(frame->reg[r1][0].isVec());
           assert(frame->reg[r1][1].isVec());
 
-          std::vector<std::pair<IntVal,IntVal>> dimensions;
-          IntVal realdim = 1;
+          std::vector<std::pair<Val,Val>> dimensions;
+          Val realdim = 1;
           for (int i=0; i<frame->reg[r1][1].size(); i+=2) {
-            IntVal a = frame->reg[r1][1][i]();
-            IntVal b = frame->reg[r1][1][i+1]();
+            Val a = frame->reg[r1][1][i];
+            Val b = frame->reg[r1][1][i+1];
             dimensions.emplace_back(a,b);
             realdim *= b-a+1;
           }
 
           bool success = true;
-          IntVal realidx = 0;
+          Val realidx = 0;
           for (int i=0; i<idx.size(); i++) {
-            IntVal ix = idx[i];
+            Val ix = idx[i];
             if (ix < dimensions[i].first || ix > dimensions[i].second) {
               success = false;
               break;
@@ -1684,7 +1674,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           }
           assert(realidx >= 0 && realidx < frame->reg[r1][0].size());
 
-          Val v(IntVal(0));
+          Val v = 0;
           if (success) {
             v = Val::follow_alias(frame->reg[r1][0][realidx.toInt()], this);
           }
@@ -1742,13 +1732,13 @@ void Val::finalizeLin(Interpreter* interpreter) {
 
           std::vector<Val> result;
           if(a1->size() > 0) {
-            std::vector<IntVal> vals(a1->size());
+            std::vector<Val> vals(a1->size());
             for (int i=0; i<a1->size(); i++)
-              vals[i] = (*a1)[i]();
+              vals[i] = (*a1)[i];
 
             std::sort(vals.begin(), vals.end());
-            IntVal l(vals[0]);
-            IntVal u(vals[0]);
+            Val l(vals[0]);
+            Val u(vals[0]);
             for(int i = 1; i < vals.size(); ++i) {
               if(u+1 < vals[i]) {
                 result.emplace_back(l);
@@ -1783,7 +1773,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
             Vec* s2 = v2.toVec();
             VecSetRanges vsr1(s1);
             VecSetRanges vsr2(s2);
-            Ranges::Inter<IntVal,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
+            Ranges::Inter<Val,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
             std::vector<Val> result;
             for (; inter(); ++inter) {
               result.emplace_back(inter.min());
@@ -1813,7 +1803,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
             Vec* s2 = v2.toVec();
             VecSetRanges vsr1(s1);
             VecSetRanges vsr2(s2);
-            Ranges::Union<IntVal,VecSetRanges,VecSetRanges> union_r(vsr1,vsr2);
+            Ranges::Union<Val,VecSetRanges,VecSetRanges> union_r(vsr1,vsr2);
             std::vector<Val> result;
             for (; union_r(); ++union_r) {
               result.emplace_back(union_r.min());
@@ -1838,7 +1828,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           Vec* s2 = v2.toVec();
           VecSetRanges vsr1(s1);
           VecSetRanges vsr2(s2);
-          Ranges::Diff<IntVal,VecSetRanges,VecSetRanges> diff_r(vsr1,vsr2);
+          Ranges::Diff<Val,VecSetRanges,VecSetRanges> diff_r(vsr1,vsr2);
           std::vector<Val> result;
           for (; diff_r(); ++diff_r) {
             result.emplace_back(diff_r.min());
@@ -1865,7 +1855,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
             Vec* s1 = v1.toVar()->domain();
             VecSetRanges vsr1(s1);
             VecSetRanges vsr2(s2);
-            Ranges::Inter<IntVal,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
+            Ranges::Inter<Val,VecSetRanges,VecSetRanges> inter(vsr1,vsr2);
             std::vector<Val> result;
             for (; inter(); ++inter) {
               result.emplace_back(inter.min());
@@ -1882,13 +1872,13 @@ void Val::finalizeLin(Interpreter* interpreter) {
             if (v1a.isVar()) {
               result_val = Val(v1a.toVar()->domain());
             } else {
-              result_val = Val(Vec::a(this, newIdent(), {v1a(),v1a()}));
+              result_val = Val(Vec::a(this, newIdent(), {v1a,v1a}));
             }
           } else {
-            Ranges::Const<IntVal> vsr1(v1(),v1());
+            Ranges::Const<Val> vsr1(v1,v1);
             VecSetRanges vsr2(s2);
             if (Ranges::subset(vsr1, vsr2)) {
-              result_val = Val(Vec::a(this, newIdent(), {v1(),v1()}));
+              result_val = Val(Vec::a(this, newIdent(), {v1,v1}));
             } else {
               _status = INCONSISTENT;
               // Invariant: Last instruction in the frame is always an ABORT instruction
@@ -1968,7 +1958,7 @@ execute_ret:
               cse_key.destroy();
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(lookup.first.isInt());
-                if (lookup.first().toInt() != 1) {
+                if (lookup.first.toInt() != 1) {
                   _status = INCONSISTENT;
                   // Invariant: Last instruction in the frame is always an ABORT instruction
                   frame->pc = frame->bs->size()-1;
@@ -2062,7 +2052,7 @@ execute_ret:
               // RET with CSE found value
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(ret.isInt());
-                if (ret().toInt() != 1) {
+                if (ret.toInt() != 1) {
                   _status = INCONSISTENT;
                   // Invariant: Last instruction in the frame is always an ABORT instruction
                   frame->pc = frame->bs->size()-1;
@@ -2134,7 +2124,7 @@ execute_ret:
           assert(lb.isInt());
           assert(ub.isInt());
           DBG_INTERPRETER("ITER_RANGE " << r1  << " " << r2 << " " << lbl << "\n");
-          _loops.push_back(LoopState(lb().toInt(), ub().toInt(), lbl));
+          _loops.push_back(LoopState(lb.toInt(), ub.toInt(), lbl));
         }
           break;
         case BytecodeStream::ITER_NEXT:
@@ -2146,7 +2136,7 @@ execute_ret:
           if(outer.pos < outer.end) {
             Val v;
             if(outer.is_range) {
-              v = IntVal(outer.pos);
+              v = outer.pos;
               outer.pos++;
             } else {
               Val* ptr(reinterpret_cast<Val*>(outer.pos));
@@ -2163,7 +2153,7 @@ execute_ret:
           break;
         case BytecodeStream::ITER_BREAK:
         {
-          int num = frame->bs->reg(frame->pc); 
+          int num = frame->bs->intval(frame->pc).toInt();
           DBG_INTERPRETER("ITER_BREAK " << num  << "\n");
           assert(_loops.size() >= num);
           auto it(_loops.end() - num);
@@ -2219,7 +2209,7 @@ execute_ret:
           DBG_INTERPRETER("POST R" << r << " (" << frame->reg[r].toString(DBG_TRIM_OUTPUT) << ")\n");
           Val v1 = Val::follow_alias(frame->reg[r], this);
           if (v1.isInt()) {
-            if (v1() == 0) {
+            if (v1 == 0) {
               _status = INCONSISTENT;
               // Invariant: Last instruction in the frame is always an ABORT instruction
               frame->pc = frame->bs->size()-1;
@@ -2257,7 +2247,7 @@ execute_ret:
 
           int r0 = frame->bs->reg(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
-          IntVal i = frame->bs->intval(frame->pc);
+          Val i = frame->bs->intval(frame->pc);
           DBG_INTERPRETER(" R" << r0 << "(" << frame->reg[r0].toString(DBG_TRIM_OUTPUT) << ")");
           DBG_INTERPRETER(" R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           DBG_INTERPRETER(" " << i);
@@ -2265,9 +2255,9 @@ execute_ret:
           int r3 = frame->bs->reg(frame->pc);
           int r4 = frame->bs->reg(frame->pc);
 
-          std::vector<Val> coeffs({IntVal(1),IntVal(-1)});
+          std::vector<Val> coeffs({1,-1});
           std::vector<Val> vars({frame->reg[r0],frame->reg[r1]});
-          IntVal d=i;
+          Val d=i;
 
           simplify_linexp(coeffs,vars,d);
 
@@ -2302,7 +2292,7 @@ execute_ret:
                 for (int i=0; i<_agg.back().size(); i++) {
                   const Val& v = _agg.back()[i];
                   if (v.isInt()) {
-                    if ( v()==0 ) {
+                    if ( v==0 ) {
                       // Disjunction is constant false
                       isFalse = true;
                       break;
@@ -2314,7 +2304,7 @@ execute_ret:
                 if (isFalse || args.empty()) {
                   /// TODO: check, what if _agg.size()==2 as below?
                   // Conjunction is constant true or false
-                  pushAgg(IntVal(!isFalse),-2);
+                  pushAgg(!isFalse,-2);
                 } else if (_agg.size()==2) {
                   // Push into root context
                   for (Val v : args) {
@@ -2322,7 +2312,7 @@ execute_ret:
                     //FIXME: Deal with unsuccessful setVal
                     assert(success);
                   }
-                  pushAgg(IntVal(1), -2);
+                  pushAgg(1, -2);
 
                   // Why do we need a definition? If this is in ROOT, then all arguments should be true
                   /* Definition* d = Definition::a(this,boolean_domain(),false,PrimitiveMap::FORALL,BytecodeProc::ROOT, */
@@ -2356,7 +2346,7 @@ execute_ret:
                 for (int i=0; i<_agg.back().size(); i++) {
                   const Val& v = Val::follow_alias(_agg.back()[i]);
                   if (v.isInt()) {
-                    if(v()!=0) {
+                    if(v!=0) {
                       // Disjunction is constant true
                       isTrue = true;
                       break;
@@ -2378,13 +2368,13 @@ execute_ret:
                 }
                 if (isTrue || (pos.empty() && neg.empty())) {
                   // Disjunction is constant true or false
-                  pushAgg(IntVal(isTrue),-2);
+                  pushAgg(isTrue,-2);
                 } else if (pos.size() == 1 && neg.empty()) {
                   if (_agg.size()==2) {
                     auto success = pos[0].toVar()->setVal(this, 1);
                     //FIXME: Deal with unsuccessful setVal
                     assert(success);
-                    pushAgg(IntVal(1), -2);
+                    pushAgg(1, -2);
                   } else {
                     pushAgg(pos[0],-2);
                   }
@@ -2398,7 +2388,7 @@ execute_ret:
                     auto c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)});
                     assert(c.first);
                     root()->addDefinition(this, c.first);
-                    pushAgg(IntVal(1), -2);
+                    pushAgg(1, -2);
                   } else {
                     result = Variable::a(this,boolean_domain(),false, newIdent());
                     auto def_c = Constraint::a(this, PrimitiveMap::CLAUSE_REIF, BytecodeProc::ROOT, {Val(vpos), Val(vneg), Val(result)});

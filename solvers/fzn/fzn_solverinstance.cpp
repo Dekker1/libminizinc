@@ -219,9 +219,9 @@ namespace MiniZinc {
     v = Val::follow_alias(v);
     if (v.isInt()) {
       if (ty.isbool()) {
-        return v() == 0 ? constants().lit_false : constants().lit_true;
+        return v == 0 ? constants().lit_false : constants().lit_true;
       }
-      return IntLit::a(v());
+      return IntLit::a(v.toIntVal());
     } else if (v.isVar()) {
       auto it = vdmap.find(v.timestamp());
       assert(it != vdmap.end());
@@ -277,14 +277,14 @@ namespace MiniZinc {
         }
         auto al = new ArrayLit(Location().introduce(), evec);
         al->type(par ? Type::parint(1) : Type::varint(1));
-        assert(v[1].size() == 2 && v[1][0]() == 1 && v[1][1]() == vec.size());
+        assert(v[1].size() == 2 && v[1][0] == 1 && v[1][1] == vec.size());
         return al;
       } else {
         // this is a set
         std::vector<IntSetVal::Range> ranges;
         Vec* vec = v.toVec();
         for (int i=0; i<vec->size(); i+=2) {
-          ranges.push_back(IntSetVal::Range((*vec)[i](),(*vec)[i+1]()));
+          ranges.push_back(IntSetVal::Range((*vec)[i].toIntVal(),(*vec)[i+1].toIntVal()));
         }
         auto sl = new SetLit(Location().introduce(), IntSetVal::a(ranges));
         return sl;
@@ -297,7 +297,7 @@ namespace MiniZinc {
     const BytecodeProc& proc = bs[c->pred()];
     const std::string& name = proc.name;
     if (name == "solve_this") {
-      IntVal solve_mode = c->arg(0)();
+      IntVal solve_mode = c->arg(0).toIntVal();
       Val obj = c->arg(1);
       SolveI* si;
       if (solve_mode==0) {
@@ -310,8 +310,8 @@ namespace MiniZinc {
       }
       if (c->size()==5) {
         Val search_a = c->arg(2);
-        IntVal var_sel = c->arg(3)();
-        IntVal val_sel = c->arg(4)();
+        IntVal var_sel = c->arg(3).toIntVal();
+        IntVal val_sel = c->arg(4).toIntVal();
         if (search_a.isVec() && search_a.size()>0 && var_sel>0 && val_sel>0) {
           Expression* search_vars = val_to_expr(Type::varint(1), search_a);
           ASTString var_sel_s(var_sel==1 ? "input_order" : "first_fail");
@@ -344,7 +344,7 @@ namespace MiniZinc {
     Vec* dom = var->domain();
     assert(dom->size() >= 2 && dom->size() % 2 == 0);
 
-    if (dom->size() == 2 && (*dom)[0]() == 0 && (*dom)[1]() == 1) {
+    if (dom->size() == 2 && (*dom)[0] == 0 && (*dom)[1] == 1) {
       vdmap.emplace(std::piecewise_construct, std::forward_as_tuple(var->timestamp()), std::forward_as_tuple(nullptr, nullptr, false, false));
       uninitialised_vars.insert(var->timestamp());
       return;
@@ -352,7 +352,7 @@ namespace MiniZinc {
 
     std::vector<IntSetVal::Range> ranges;
     for (int i = 0; i < dom->size(); i += 2) {
-      ranges.emplace_back((*dom)[i](), (*dom)[i+1]());
+      ranges.emplace_back((*dom)[i].toIntVal(), (*dom)[i+1].toIntVal());
     }
     SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
     auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
@@ -365,7 +365,7 @@ namespace MiniZinc {
     Id ident(Location().introduce(), var->timestamp(), nullptr);
     auto de = getSolns2Out()->findOutputVar(ident.str());
     assert(de.first->e()); // A solution must have been assigned
-    return Val(eval_int(env.envi(), de.first->e()));
+    return Val::fromIntVal(eval_int(env.envi(), de.first->e()));
   };
 
   void FZNSolverInstance::pushState() {

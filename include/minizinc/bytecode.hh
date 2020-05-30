@@ -22,12 +22,274 @@
 #include <minizinc/ast.hh>
 
 namespace MiniZinc {
+  class Val;
+}
+namespace std {
+  MiniZinc::Val abs(const MiniZinc::Val& x);
+}
+
+namespace MiniZinc {
 
   class BytecodeProc;
   class Interpreter;
   class SolverInstanceBase;
 
   enum PropStatus { PS_OK, PS_FAILED, PS_ENTAILED };
+
+
+  class Vec;
+  class WeakVal;
+
+  class Variable;
+  class Constraint;
+
+  class RefCountedObject {
+  public:
+    enum RCOType { VEC, VAR };
+  protected:
+    unsigned int _ref_count;
+    unsigned int _weak_ref_count : 31;
+    unsigned int _rco_type : 1;
+    int _timestamp;
+    RefCountedObject(const RCOType& t, int timestamp) : _ref_count(0), _weak_ref_count(0), _rco_type(t==VEC ? 1 : 0), _timestamp(timestamp) {}
+  public:
+    RCOType rcoType(void) const { return _rco_type==1 ? VEC : VAR; }
+    const int timestamp() const { return _timestamp; }
+
+    void addRef(Interpreter* interpreter) { _ref_count++; }
+    static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
+    bool exists() const { return _ref_count > 0; }
+    bool alive() const { return _ref_count+_weak_ref_count>0; }
+    bool unique() const { return _ref_count==1; }
+
+    void addWRef(Interpreter* interpreter) {
+//      assert(_ref_count > 0); // TODO: Assertion is not true when a new definition is created in CSE. The definition is added to CSE before it is returned to the interpreter
+      _weak_ref_count++;
+    }
+    static void rmWRef(Interpreter* interpreter, RefCountedObject* rco);
+  };
+  
+
+  /// Value tagged union
+  class Val {
+    friend class WeakVal;
+    friend Val operator +(const Val& x, const Val& y);
+    friend Val operator -(const Val& x, const Val& y);
+    friend Val operator *(const Val& x, const Val& y);
+    friend Val operator /(const Val& x, const Val& y);
+    friend Val operator %(const Val& x, const Val& y);
+    friend Val std::abs(const Val& x);
+    friend bool operator ==(const Val& x, const Val& y);
+    friend bool operator !=(const Val& x, const Val& y);
+  protected:
+    static const long long int maxUnboxedVal = (static_cast<long long int>(1) << (sizeof(void*)*8 - 3)) - static_cast<long long int>(1);
+    /// The value
+    // Bit 0: 0=int, 1=RefCountedObject
+    // Bit 1: 0=int, 1=Infinity
+    // Bit 2: 0=negative, 1=positive
+    void* _v;
+
+    /// TODO: implement correct overflow handling for the new type (which is smaller than IntVal)
+    static long long int safePlus(long long int x, long long int y) {
+      if (x < 0) {
+        if (y < -maxUnboxedVal - x)
+          throw ArithmeticError("integer overflow");
+      } else {
+        if (y > maxUnboxedVal - x)
+          throw ArithmeticError("integer overflow");
+      }
+      return x+y;
+    }
+    static long long int safeMinus(long long int x, long long int y) {
+      if (x < 0) {
+        if (y > x - -maxUnboxedVal)
+          throw ArithmeticError("integer overflow");
+      } else {
+        if (y < x - maxUnboxedVal)
+          throw ArithmeticError("integer overflow");
+      }
+      return x-y;
+    }
+    static long long int safeMult(long long int x, long long int y) {
+      if (y==0)
+        return 0;
+      long long unsigned int x_abs = (x < 0 ? 0-x : x);
+      long long unsigned int y_abs = (y < 0 ? 0-y : y);
+      if (x_abs > maxUnboxedVal / y_abs)
+        throw ArithmeticError("integer overflow");
+      return x*y;
+    }
+    static long long int safeDiv(long long int x, long long int y) {
+      if (y==0)
+        throw ArithmeticError("integer division by zero");
+      if (x==0)
+        return 0;
+      if (x==-maxUnboxedVal && y==-1)
+        throw ArithmeticError("integer overflow");
+      return x/y;
+    }
+    static long long int safeMod(long long int x, long long int y) {
+      if (y==0)
+        throw ArithmeticError("integer division by zero");
+      if (y==-1)
+        return 0;
+      return x%y;
+    }
+    void safeSetVal(long long int i) {
+      ptrdiff_t ubi_p;
+      ubi_p = (static_cast<ptrdiff_t>(i < 0 ? -i : i) << 3);
+      if (i < 0) {
+        ubi_p = ubi_p | static_cast<ptrdiff_t>(4);
+      }
+      _v = reinterpret_cast<void*>(ubi_p);
+    }
+
+  public:
+
+    static Val follow_alias(const Val& v, Interpreter* interpreter = nullptr);
+
+    bool isRCO(void) const {
+      return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == static_cast<ptrdiff_t>(1);
+    }
+    RefCountedObject* toRCO(void) const {
+      assert(isRCO());
+      return reinterpret_cast<RefCountedObject*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(1));
+    }
+    bool exists() const { return !isRCO() || toRCO()->exists(); }
+    bool unique() const { return !isRCO() || toRCO()->unique(); }
+    bool isVec(void) const {
+      return isRCO() && toRCO()->rcoType()==RefCountedObject::VEC;
+    }
+    bool isInt(void) const {
+      return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == 0;
+    }
+    bool isVar(void) const {
+      return isRCO() && toRCO()->rcoType()==RefCountedObject::VAR;
+    }
+    bool containsVar(void) const {
+      if (isInt()) return false;
+      if (isVar()) return true;
+      for (int i=0; i<size(); ++i) {
+        if ((*this)[i].containsVar())
+          return true;
+      }
+      return false;
+    }
+    bool contains(const Val& v) const {
+      if (*this == v) {
+        return true;
+      }
+      if (this->isVec()) {
+        for (int i = 0; i < this->size(); ++i) {
+          if ((*this)[i].contains(v)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    /// Access value as Variable
+    Variable* toVar(void) const;
+    
+    long long int toInt(void) const {
+      assert(isInt());
+      unsigned long long int i = reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(7);
+      bool inf = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(2)) != 0);
+      assert(!inf);
+      bool pos = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(4)) == 0);
+      if (pos) {
+        return static_cast<long long int>(i >> 3);
+      } else {
+        return -(static_cast<long long int>(i>>3));
+      }
+    }
+    IntVal toIntVal(void) const {
+      assert(isInt());
+      unsigned long long int i = reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(7);
+      bool inf = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(2)) != 0);
+      bool pos = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(4)) == 0);
+      if (inf) {
+        return pos ? IntVal::infinity() : -IntVal::infinity();
+      }
+      if (pos) {
+        return static_cast<long long int>(i >> 3);
+      } else {
+        return -(static_cast<long long int>(i>>3));
+      }
+    }
+
+    int timestamp() const {
+      assert(isRCO());
+      return toRCO()->timestamp();
+    }
+
+    void destroy(Interpreter* interpreter) {
+      if (isRCO()) {
+        RefCountedObject::rmRef(interpreter, toRCO());
+      }
+    };
+    void construct(Interpreter* interpreter) {
+      if (isRCO()) {
+        toRCO()->addRef(interpreter);
+      }
+    }
+    void addWeakRef(Interpreter* interpreter) {
+      if (isRCO()) {
+        toRCO()->addWRef(interpreter);
+      }
+    };
+    void removeWeakRef(Interpreter* interpreter) {
+      if (isRCO()) {
+        RefCountedObject::rmWRef(interpreter, toRCO());
+      }
+    };
+
+    /// Access value as vector, return element \a i
+    const Val& operator [](int i) const;
+    /// Access value as vector, return size
+    size_t size(void) const;
+    /// Access value as vector
+    Vec* toVec(void) const;
+  public:
+    Val(const long long int i=0);
+    explicit Val(const RefCountedObject* d);
+    static Val fromIntVal(const IntVal& iv);
+    static Val infinity(void);
+    ~Val(void);
+    Val(const Val& v);
+    Val(Val&& v);
+    Val& operator =(const Val& v);
+    Val& operator =(Val&& v);
+    void assign(Interpreter* interpreter, const Val& v);
+    void assign(Interpreter* interpreter, Val&& v);
+    std::string toString(bool trim=false) const;
+    Val lb() const;
+    Val ub() const;
+    bool isFixed() const;
+    void finalizeLin(Interpreter* interpreter);
+    
+    // Integer interface
+    bool isFinite(void) const;
+    bool isPlusInfinity(void) const;
+    bool isMinusInfinity(void) const;
+    Val& operator +=(const Val& x);
+    Val& operator -=(const Val& x);
+    Val& operator *=(const Val& x);
+    Val& operator /=(const Val& x);
+    Val operator -() const;
+    Val& operator ++();
+    Val operator ++(int);
+    Val& operator --();
+    Val operator --(int);
+    Val pow(const Val& exponent);
+    /// Infinity-safe addition
+    Val plus(int x) const;
+    /// Infinity-safe subtraction
+    Val minus(int x) const;
+
+  };
+
   class BytecodeStream {
   protected:
     /// The bytecode stream
@@ -109,7 +371,7 @@ namespace MiniZinc {
 
     /// Get instruction at \a pc and increment \a pc
     Instr instr(int& pc) const { assert(pc < _bs.size()); return static_cast<Instr>(_bs[pc++]); }
-    IntVal intval(int& pc) const { assert(pc < _bs.size()); const IntVal* iv = reinterpret_cast<const IntVal*>(&_bs[pc]); pc += sizeof(IntVal); return *iv; }
+    Val intval(int& pc) const { assert(pc < _bs.size()); const Val* iv = reinterpret_cast<const Val*>(&_bs[pc]); pc += sizeof(Val); return *iv; }
     Expression* expr(int& pc) { assert(pc < _bs.size()); Expression** e = reinterpret_cast<Expression**>(&_bs[pc]); pc += sizeof(Expression*); return *e; }
     int reg(int& pc) const { assert(pc < _bs.size()); const int* iv = reinterpret_cast<const int*>(&_bs[pc]); pc += sizeof(int); return *iv;}
     char chr(int& pc) const { assert(pc < _bs.size()); return _bs[pc++]; }
@@ -146,8 +408,9 @@ namespace MiniZinc {
       }
     }
     void addIntVal(const IntVal& iv) {
-      const char* cp = reinterpret_cast<const char*>(&iv);
-      for (int i=0; i<sizeof(IntVal); i++) {
+      Val v = Val::fromIntVal(iv);
+      const char* cp = reinterpret_cast<const char*>(&v);
+      for (int i=0; i<sizeof(Val); i++) {
         _bs.push_back(cp[i]);
       }
     }
@@ -171,161 +434,7 @@ namespace MiniZinc {
     int maxRegister(void) const { return _max_reg; }
   };
 
-  class Vec;
-  class WeakVal;
 
-  class Variable;
-  class Constraint;
-
-  class RefCountedObject {
-  public:
-    enum RCOType { VEC, VAR };
-  protected:
-    unsigned int _ref_count;
-    unsigned int _weak_ref_count : 31;
-    unsigned int _rco_type : 1;
-    int _timestamp;
-    RefCountedObject(const RCOType& t, int timestamp) : _ref_count(0), _weak_ref_count(0), _rco_type(t==VEC ? 1 : 0), _timestamp(timestamp) {}
-  public:
-    RCOType rcoType(void) const { return _rco_type==1 ? VEC : VAR; }
-    const int timestamp() const { return _timestamp; }
-
-    void addRef(Interpreter* interpreter) { _ref_count++; }
-    static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
-    bool exists() const { return _ref_count > 0; }
-    bool alive() const { return _ref_count+_weak_ref_count>0; }
-    bool unique() const { return _ref_count==1; }
-
-    void addWRef(Interpreter* interpreter) {
-//      assert(_ref_count > 0); // TODO: Assertion is not true when a new definition is created in CSE. The definition is added to CSE before it is returned to the interpreter
-      _weak_ref_count++;
-    }
-    static void rmWRef(Interpreter* interpreter, RefCountedObject* rco);
-  };
-  
-
-  /// Value tagged union
-  class Val {
-    friend class WeakVal;
-  protected:
-    /// The value
-    // Bit 0: 0=int, 1=RefCountedObject
-    // Bit 1: 0=int, 1=Infinity
-    void* _v;
-  public:
-    static Val follow_alias(const Val& v, Interpreter* interpreter = nullptr);
-
-    bool isRCO(void) const {
-      return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == static_cast<ptrdiff_t>(1);
-    }
-    RefCountedObject* toRCO(void) const {
-      assert(isRCO());
-      return reinterpret_cast<RefCountedObject*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(1));
-    }
-    bool exists() const { return !isRCO() || toRCO()->exists(); }
-    bool unique() const { return !isRCO() || toRCO()->unique(); }
-    bool isVec(void) const {
-      return isRCO() && toRCO()->rcoType()==RefCountedObject::VEC;
-    }
-    bool isInt(void) const {
-      return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(1)) == 0;
-    }
-    bool isVar(void) const {
-      return isRCO() && toRCO()->rcoType()==RefCountedObject::VAR;
-    }
-    bool containsVar(void) const {
-      if (isInt()) return false;
-      if (isVar()) return true;
-      for (int i=0; i<size(); ++i) {
-        if ((*this)[i].containsVar())
-          return true;
-      }
-      return false;
-    }
-    bool operator==(const Val& rhs) const;
-    bool operator!=(const Val& rhs) const {
-      return !this->operator==(rhs);
-    }
-    bool contains(const Val& v) const {
-      if (*this == v) {
-        return true;
-      }
-      if (this->isVec()) {
-        for (int i = 0; i < this->size(); ++i) {
-          if ((*this)[i].contains(v)) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    /// Access value as Variable
-    Variable* toVar(void) const;
-    /// Access value as IntVal
-    IntVal operator() (void) const {
-      assert(isInt());
-      unsigned long long int i = reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(7);
-      bool inf = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(2)) != 0);
-      bool pos = ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(4)) == 0);
-      if (inf) {
-        return pos ? IntVal::infinity() : -IntVal::infinity();
-      }
-      if (pos) {
-        return i >> 3;
-      } else {
-        return -(static_cast<long long int>(i>>3));
-      }
-    }
-    int timestamp() const {
-      assert(isRCO());
-      return toRCO()->timestamp();
-    }
-
-    void destroy(Interpreter* interpreter) {
-      if (isRCO()) {
-        RefCountedObject::rmRef(interpreter, toRCO());
-      }
-    };
-    void construct(Interpreter* interpreter) {
-      if (isRCO()) {
-        toRCO()->addRef(interpreter);
-      }
-    }
-    void addWeakRef(Interpreter* interpreter) {
-      if (isRCO()) {
-        toRCO()->addWRef(interpreter);
-      }
-    };
-    void removeWeakRef(Interpreter* interpreter) {
-      if (isRCO()) {
-        RefCountedObject::rmWRef(interpreter, toRCO());
-      }
-    };
-
-    /// Access value as vector, return element \a i
-    const Val& operator [](int i) const;
-    /// Access value as vector, return size
-    size_t size(void) const;
-    /// Access value as vector
-    Vec* toVec(void) const;
-  public:
-    Val(const IntVal& i=IntVal(0));
-    explicit Val(const RefCountedObject* d);
-    ~Val(void);
-    Val(const Val& v);
-    Val(Val&& v);
-    Val& operator =(const Val& v);
-    Val& operator =(Val&& v);
-    void assign(Interpreter* interpreter, const Val& v);
-    void assign(Interpreter* interpreter, Val&& v);
-    std::string toString(bool trim=false) const;
-    IntVal lb() const;
-    IntVal ub() const;
-    bool isFixed() const;
-    void finalizeLin(Interpreter* interpreter);
-  };
-  
   class Vec : public RefCountedObject {
   protected:
     int _size;
@@ -403,62 +512,14 @@ namespace MiniZinc {
     const Val* end(void) const { return _data + _size; }
   };
 
-  /// Iterator over a Vec interpreted as a range set
-  class VecSetRanges {
-    /// The vector
-    const Vec* rs;
-    /// The current range
-    int n;
-  public:
-    /// Constructor
-    VecSetRanges(const Vec* r) : rs(r), n(0) {}
-    /// Check if iterator is still valid
-    bool operator()(void) const { return n+1<rs->size(); }
-    /// Move to next range
-    void operator++(void) { n+=2; }
-    /// Return minimum of current range
-    IntVal min(void) const { return (*rs)[n](); }
-    /// Return maximum of current range
-    IntVal max(void) const { return (*rs)[n+1](); }
-    /// Return width of current range
-    IntVal width(void) const { return (*rs)[n+1]()-(*rs)[n]()+1; }
-  };
-
-  /// Iterator over a Vec interpreted as a range set
-  class StdVecSetRanges {
-    /// The vector
-    const std::vector<Val>* rs;
-    /// The current range
-    int n;
-  public:
-    /// Constructor
-    StdVecSetRanges(const std::vector<Val>* r) : rs(r), n(0) {}
-    /// Check if iterator is still valid
-    bool operator()(void) const { return n+1<rs->size(); }
-    /// Move to next range
-    void operator++(void) { n+=2; }
-    /// Return minimum of current range
-    IntVal min(void) const { return (*rs)[n](); }
-    /// Return maximum of current range
-    IntVal max(void) const { return (*rs)[n+1](); }
-    /// Return width of current range
-    IntVal width(void) const { return (*rs)[n+1]()-(*rs)[n]()+1; }
-  };
-
   inline
-  Val::Val(const IntVal& i) {
+  Val::Val(const long long int i) {
     static const unsigned int pointerBits = sizeof(void*)*8;
     static const long long int maxUnboxedVal = (static_cast<long long int>(1) << (pointerBits - 3)) - static_cast<long long int>(1);
-    assert(!i.isFinite() || i >= -maxUnboxedVal && i <= maxUnboxedVal);
+    assert(i >= -maxUnboxedVal && i <= maxUnboxedVal);
     ptrdiff_t ubi_p;
-    long long int j = i.toIntUnsafe();
-    if (i.isFinite()) {
-      ubi_p = (static_cast<ptrdiff_t>(j < 0 ? -j : j) << 3);
-    } else {
-      ubi_p = (static_cast<ptrdiff_t>(1) << 3);
-      ubi_p = ubi_p | static_cast<ptrdiff_t>(2);
-    }
-    if (j < 0) {
+    ubi_p = (static_cast<ptrdiff_t>(i < 0 ? -i : i) << 3);
+    if (i < 0) {
       ubi_p = ubi_p | static_cast<ptrdiff_t>(4);
     }
     _v = reinterpret_cast<void*>(ubi_p);
@@ -517,7 +578,257 @@ namespace MiniZinc {
     return toVec()->size();
   }
 
-  
+  inline
+  bool operator==(const Val& lhs, const Val& rhs) {
+    if ((reinterpret_cast<ptrdiff_t>(lhs._v) & static_cast<ptrdiff_t>(3)) != (reinterpret_cast<ptrdiff_t>(rhs._v) & static_cast<ptrdiff_t>(3))) {
+      return false;
+    } else if (lhs.isVec() && rhs.isVec()) {
+      return (*lhs.toVec()) == (*rhs.toVec());
+    } else {
+      return reinterpret_cast<ptrdiff_t>(lhs._v) == reinterpret_cast<ptrdiff_t>(rhs._v);
+    }
+  }
+
+  inline
+  bool operator <=(const Val& x, const Val& y) {
+    return y.isPlusInfinity() || x.isMinusInfinity() || (x.isFinite() && y.isFinite() && x.toInt() <= y.toInt());
+  }
+  inline
+  bool operator <(const Val& x, const Val& y) {
+    return
+      (y.isPlusInfinity() && !x.isPlusInfinity()) ||
+      (x.isMinusInfinity() && !y.isMinusInfinity()) ||
+      (x.isFinite() && y.isFinite() && x.toInt() < y.toInt());
+  }
+  inline
+  bool operator >=(const Val& x, const Val& y) {
+    return y <= x;
+  }
+  inline
+  bool operator >(const Val& x, const Val& y) {
+    return y < x;
+  }
+  inline
+  bool operator !=(const Val& x, const Val& y) {
+    return !(x==y);
+  }
+
+  inline
+  Val Val::operator -() const {
+    Val r = *this;
+    r._v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(r._v) ^ static_cast<ptrdiff_t>(4));
+    return r;
+  }
+  inline
+  Val Val::infinity(void) {
+    Val v;
+    v._v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(2));
+    return v;
+  }
+  inline
+  Val Val::fromIntVal(const IntVal& iv) {
+    if (iv.isPlusInfinity()) return Val::infinity();
+    if (iv.isMinusInfinity()) return -Val::infinity();
+    return iv.toIntUnsafe();
+  }
+  inline
+  bool Val::isFinite(void) const {
+    assert(isInt());
+    return ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(2)) == 0);
+  }
+  inline
+  bool Val::isPlusInfinity(void) const {
+    assert(isInt());
+    return ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(6)) == static_cast<ptrdiff_t>(2));
+  }
+  inline
+  bool Val::isMinusInfinity(void) const {
+    assert(isInt());
+    return ((reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(6)) == static_cast<ptrdiff_t>(6));
+  }
+
+  inline
+  Val& Val::operator +=(const Val& x) {
+    if (! (isFinite() && x.isFinite()))
+      throw ArithmeticError("arithmetic operation on infinite value");
+    safeSetVal(safePlus(toInt(), x.toInt()));
+    return *this;
+  }
+  inline
+  Val& Val::operator -=(const Val& x) {
+    if (! (isFinite() && x.isFinite()))
+      throw ArithmeticError("arithmetic operation on infinite value");
+    safeSetVal(safeMinus(toInt(), x.toInt()));
+    return *this;
+  }
+  inline
+  Val& Val::operator *=(const Val& x) {
+    if (! (isFinite() && x.isFinite()))
+      throw ArithmeticError("arithmetic operation on infinite value");
+    safeSetVal(safeMult(toInt(), x.toInt()));
+    return *this;
+  }
+  inline
+  Val& Val::operator /=(const Val& x) {
+    if (! (isFinite() && x.isFinite()))
+      throw ArithmeticError("arithmetic operation on infinite value");
+    safeSetVal(safeDiv(toInt(), x.toInt()));
+    return *this;
+  }
+  inline
+  Val& Val::operator ++() {
+    if (!isFinite())
+      throw ArithmeticError("arithmetic operation on infinite value");
+    safeSetVal(safePlus(toInt(),1));
+    return *this;
+  }
+  inline
+  Val Val::operator ++(int) {
+    if (!isFinite())
+      throw ArithmeticError("arithmetic operation on infinite value");
+    Val ret = *this;
+    safeSetVal(safePlus(toInt(),1));
+    return ret;
+  }
+  inline
+  Val& Val::operator --() {
+    if (!isFinite())
+      throw ArithmeticError("arithmetic operation on infinite value");
+    safeSetVal(safeMinus(toInt(),1));
+    return *this;
+  }
+  inline
+  Val Val::operator --(int) {
+    if (!isFinite())
+      throw ArithmeticError("arithmetic operation on infinite value");
+    Val ret = *this;
+    safeSetVal(safeMinus(toInt(),1));
+    return ret;
+  }
+  inline
+  Val Val::pow(const Val& exponent) {
+    if (!exponent.isFinite() || !isFinite())
+      throw ArithmeticError("arithmetic operation on infinite value");
+    if (exponent==0)
+      return 1;
+    if (exponent==1)
+      return *this;
+    Val result = 1;
+    for (int i=0; i<exponent.toInt(); i++) {
+      result *= *this;
+    }
+    return result;
+  }
+  inline
+  Val Val::plus(int x) const {
+    if (isFinite())
+      return safePlus(toInt(),x);
+    else
+      return *this;
+  }
+  inline
+  Val Val::minus(int x) const {
+    if (isFinite())
+      return safeMinus(toInt(),x);
+    else
+      return *this;
+  }
+  /// Return whether an interval ending with \a x overlaps with an interval starting at \a y
+  inline
+  bool overlaps(const Val& x, const Val& y) {
+    return x.plus(1) >= y;
+  }
+  inline
+  Val nextHigher(const Val& x) { return x.plus(1); }
+  inline
+  Val nextLower(const Val& x) { return x.minus(1); }
+  inline
+  Val operator +(const Val& x, const Val& y) {
+    if (! (x.isFinite() && y.isFinite()))
+      throw ArithmeticError("arithmetic operation on infinite value");
+    return Val::safePlus(x.toInt(),y.toInt());
+  }
+  inline
+  Val operator -(const Val& x, const Val& y) {
+    if (! (x.isFinite() && y.isFinite()))
+      throw ArithmeticError("arithmetic operation on infinite value");
+    return Val::safeMinus(x.toInt(),y.toInt());
+  }
+  inline
+  Val operator *(const Val& x, const Val& y) {
+    if (!x.isFinite()) {
+      if (y.isFinite()) {
+        if (y==1) return x;
+        if (y==-1) return -x;
+      }
+    } else if (!y.isFinite()) {
+      if (x==1) return y;
+      if (x==-1) return -y;
+    } else {
+      return Val::safeMult(x.toInt(),y.toInt());
+    }
+    throw ArithmeticError("arithmetic operation on infinite value");
+  }
+  inline
+  Val operator /(const Val& x, const Val& y) {
+    if (y.isFinite()) {
+      if (y==1) return x;
+      if (y==-1) return -x;
+    }
+    if (! (x.isFinite() && y.isFinite()))
+      throw ArithmeticError("arithmetic operation on infinite value");
+    return Val::safeDiv(x.toInt(),y.toInt());
+  }
+  inline
+  Val operator %(const Val& x, const Val& y) {
+    if (! (x.isFinite() && y.isFinite()))
+      throw ArithmeticError("arithmetic operation on infinite value");
+    return Val::safeMod(x.toInt(),y.toInt());
+  }
+
+
+  /// Iterator over a Vec interpreted as a range set
+  class VecSetRanges {
+    /// The vector
+    const Vec* rs;
+    /// The current range
+    int n;
+  public:
+    /// Constructor
+    VecSetRanges(const Vec* r) : rs(r), n(0) {}
+    /// Check if iterator is still valid
+    bool operator()(void) const { return n+1<rs->size(); }
+    /// Move to next range
+    void operator++(void) { n+=2; }
+    /// Return minimum of current range
+    Val min(void) const { return (*rs)[n]; }
+    /// Return maximum of current range
+    Val max(void) const { return (*rs)[n+1]; }
+    /// Return width of current range
+    Val width(void) const { return (*rs)[n+1]-(*rs)[n]+1; }
+  };
+
+  /// Iterator over a Vec interpreted as a range set
+  class StdVecSetRanges {
+    /// The vector
+    const std::vector<Val>* rs;
+    /// The current range
+    int n;
+  public:
+    /// Constructor
+    StdVecSetRanges(const std::vector<Val>* r) : rs(r), n(0) {}
+    /// Check if iterator is still valid
+    bool operator()(void) const { return n+1<rs->size(); }
+    /// Move to next range
+    void operator++(void) { n+=2; }
+    /// Return minimum of current range
+    Val min(void) const { return (*rs)[n]; }
+    /// Return maximum of current range
+    Val max(void) const { return (*rs)[n+1]; }
+    /// Return width of current range
+    Val width(void) const { return (*rs)[n+1]-(*rs)[n]+1; }
+  };
+
   class RegisterFile {
   protected:
     std::vector<Val> _r;
@@ -585,7 +896,7 @@ namespace MiniZinc {
     Val _args[1];
     Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines);
   public:
-    static std::pair<Constraint*, bool> a(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val defines=IntVal(1), Val ann=IntVal(0));
+    static std::pair<Constraint*, bool> a(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val defines=1, Val ann=0);
     static void free(Constraint* c) {
       ::free(c);
     }
@@ -648,26 +959,26 @@ namespace MiniZinc {
   public:
     bool aliased(void) const { return _aliased; }
     Vec* domain(void) const { assert(!aliased()); return _domain.toVec(); }
-    IntVal lb() const {
+    Val lb() const {
       assert(!aliased());
       assert(_domain[0].isInt());
-      return _domain[0]();
+      return _domain[0];
     }
-    IntVal ub() const {
+    Val ub() const {
       assert(!aliased());
       assert(_domain[_domain.size()-1].isInt());
-      return _domain[_domain.size()-1]();
+      return _domain[_domain.size()-1];
     }
     bool isBounded() const {
       return lb().isFinite() && ub().isFinite();
     }
 
     /// Set new minimum value included in the domain
-    bool setMin(Interpreter* interpreter, IntVal i, bool binding=true);
+    bool setMin(Interpreter* interpreter, Val i, bool binding=true);
     /// Set new maximum value included in the domain
-    bool setMax(Interpreter* interpreter, IntVal i, bool binding=true);
+    bool setMax(Interpreter* interpreter, Val i, bool binding=true);
     /// Restrict domain to a single value
-    bool setVal(Interpreter* interpreter, IntVal i, bool binding=true);
+    bool setVal(Interpreter* interpreter, Val i, bool binding=true);
     /// Intersect current domain with given domain
     bool intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding=true);
     bool intersectDom(Interpreter* interpreter, Val dom, bool binding=true);
@@ -683,7 +994,7 @@ namespace MiniZinc {
     const std::vector<Constraint*>& definitions(void) const { return _definitions; }
     void addDefinition(Interpreter* interpreter, Constraint* c);
     
-    static Variable* a(Interpreter* interpreter, Val domain, bool binding, int ident, Val ann=IntVal(0)) {
+    static Variable* a(Interpreter* interpreter, Val domain, bool binding, int ident, Val ann=0) {
       Variable* v = static_cast<Variable*>(::malloc(sizeof(Variable)));
       return new (v) Variable(interpreter,domain,binding,ident,ann);
     }
@@ -718,8 +1029,8 @@ namespace MiniZinc {
     void unsubscribe(Constraint* c);
   };
 
-  void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, IntVal& d);
-  std::tuple<std::vector<Val>, std::vector<Val>, IntVal> simplify_linexp(Val v);
+  void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, Val& d);
+  std::tuple<std::vector<Val>, std::vector<Val>, Val> simplify_linexp(Val v);
 
   class WeakVal {
   protected:
@@ -1076,17 +1387,17 @@ namespace MiniZinc {
     Vec* true_dom;
   public:
     Trail trail;
-    std::unordered_map<int, IntVal> solutions;
+    std::unordered_map<int, Val> solutions;
 
     Interpreter(std::vector<BytecodeProc>& procs,
                 const BytecodeFrame& f) : _procs(procs), _identCount(0), cse(procs.size())
     {
       _stack.push_back(f);
-      infinite_dom = Vec::a(this, newIdent(), {Val(-IntVal::infinity()), Val(IntVal::infinity())});
+      infinite_dom = Vec::a(this, newIdent(), {-Val::infinity(), Val::infinity()});
       infinite_dom->addRef(this);
-      boolean_dom = Vec::a(this, newIdent(), {Val(IntVal(0)), Val(IntVal(1))});
+      boolean_dom = Vec::a(this, newIdent(), {0, 1});
       boolean_dom->addRef(this);
-      true_dom = Vec::a(this, newIdent(), {Val(IntVal(1)), Val(IntVal(1))});
+      true_dom = Vec::a(this, newIdent(), {1, 1});
       true_dom->addRef(this);
       _root_var = Variable::createRoot(this, Val(true_dom), newIdent());
       _root_var->addRef(this);
@@ -1178,7 +1489,6 @@ namespace MiniZinc {
     assert(isVec());
     return static_cast<Vec*>(toRCO());
   }
-
   inline
   AggregationCtx::AggregationCtx(Interpreter* interpreter, int s) :
     def_ident_start(interpreter->currentIdent()),

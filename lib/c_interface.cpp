@@ -59,7 +59,7 @@ void minizinc_add_call(MZNInstance _inst, const char* call, ...) {
 
 void minizinc_set_solution(MZNInstance _inst, int def, int sol) {
   auto inst = reinterpret_cast<Instance*>(_inst);
-  auto it = inst->slv.interpreter->solutions.emplace(def, IntVal(sol));
+  auto it = inst->slv.interpreter->solutions.emplace(def, sol);
 }
 
 void minizinc_output_dict(MZNInstance _inst, bool b) {

@@ -689,8 +689,8 @@ Val MznSolver::eval_val(EnvI& env, Expression* e) {
     IntSetVal* sl = eval_intset(env, e); 
     std::vector<Val> vranges(sl->size()*2);
     for (size_t i = 0; i < sl->size(); ++i) {
-      vranges[i*2] = Val(sl->min(i));
-      vranges[i*2+1] = Val(sl->max(i));
+      vranges[i*2] = Val::fromIntVal(sl->min(i));
+      vranges[i*2+1] = Val::fromIntVal(sl->max(i));
     }
     return Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
   }
@@ -702,7 +702,7 @@ Val MznSolver::eval_val(EnvI& env, Expression* e) {
     throw InternalError("Unsupported Type");
   }
   IntVal iv(eval_int(env, e));
-  return Val(iv);
+  return Val::fromIntVal(iv);
 }
 
 void MznSolver::flatten(const std::string& filename, const std::string& modelName)
@@ -890,7 +890,7 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         for (int i = 0; i < vec.size(); ++i) {
           Val v = Val::follow_alias(vec[i]);
           if (v.isVar()) {
-            interpreter->solutions.emplace(v.timestamp(), si->getSolutionValue(v.toVar())());
+            interpreter->solutions.emplace(v.timestamp(), si->getSolutionValue(v.toVar()));
           }
         }
       } else {
@@ -911,7 +911,7 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
               ss << sv.toString();
               first = false;
               // Set output for sol() builtin
-              interpreter->solutions.emplace(timestamp, sv());
+              interpreter->solutions.emplace(timestamp, sv);
             }
           }
         }

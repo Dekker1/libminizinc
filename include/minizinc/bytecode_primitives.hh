@@ -143,8 +143,8 @@ namespace MiniZinc {
     public:
       IntSum(void) : PrimitiveMap::Primitive("int_sum", PrimitiveMap::INT_SUM, 2) {}
       virtual PropStatus subscribe(Interpreter& interpreter, Constraint* c) const {
-        IntVal lb(0);
-        IntVal ub(0);
+        Val lb = 0;
+        Val ub = 0;
 
         for (int i = 0; i < c->arg(0)[0].size(); ++i) {
           lb += Val::follow_alias(c->arg(0)[0][i],&interpreter).lb();
@@ -196,10 +196,10 @@ namespace MiniZinc {
           std::swap(a, b);
         }
 
-        IntVal lb, ub;
+        Val lb, ub;
         if ((a.isVar() && !a.toVar()->isBounded()) || (b.isVar() && !b.toVar()->isBounded())) {
           return PS_OK;
-        } else if (a.isInt() && a() == 1) {
+        } else if (a.isInt() && a == 1) {
           res.toVar()->alias(&i, b);
           return PS_ENTAILED;
         }
@@ -251,28 +251,28 @@ namespace MiniZinc {
         if (c->arg(1)[0].size() == 1) {
           Val v = Val::follow_alias(c->arg(1)[0][0], &i);
           if (v.isVar()) {
-            if (c->arg(2)() % c->arg(0)[0][0]()==0) {
-              return v.toVar()->setVal(&i, c->arg(2)() / c->arg(0)[0][0]()) ? PS_ENTAILED : PS_FAILED;
+            if (c->arg(2) % c->arg(0)[0][0]==0) {
+              return v.toVar()->setVal(&i, c->arg(2) / c->arg(0)[0][0]) ? PS_ENTAILED : PS_FAILED;
             } else {
               return PS_FAILED;
             }
           } else {
             // aliased to val
-            return c->arg(0)[0][0]()*v() == c->arg(2)() ? PS_ENTAILED : PS_FAILED;
+            return c->arg(0)[0][0]*v == c->arg(2) ? PS_ENTAILED : PS_FAILED;
           }
         }
         if (c->arg(1)[0].size() == 2) {
           Val lhs = Val::follow_alias(c->arg(1)[0][0], &i);
           Val rhs = Val::follow_alias(c->arg(1)[0][1], &i);
-          IntVal lhs_c = c->arg(0)[0][0]();
-          IntVal rhs_c = c->arg(0)[0][1]();
+          Val lhs_c = c->arg(0)[0][0];
+          Val rhs_c = c->arg(0)[0][1];
           if (!lhs.isVar()) {
             std::swap(lhs, rhs);
             std::swap(lhs_c, rhs_c);
           }
           if (lhs.isVar()) {
             if (rhs.isVar()) {
-              if (c->arg(2)() == 0 && (lhs_c+rhs_c) == 0) {
+              if (c->arg(2) == 0 && (lhs_c+rhs_c) == 0) {
                 if (lhs.toVar()->timestamp() < rhs.toVar()->timestamp()) {
                   std::swap(lhs, rhs);
                 }
@@ -284,14 +284,14 @@ namespace MiniZinc {
                 return PS_ENTAILED;
               }
             } else {
-              if (c->arg(2)() % lhs_c==0) {
-                return lhs.toVar()->setVal(&i, (c->arg(2)()-rhs_c*rhs()) / lhs_c) ? PS_ENTAILED : PS_FAILED;
+              if (c->arg(2) % lhs_c==0) {
+                return lhs.toVar()->setVal(&i, (c->arg(2)-rhs_c*rhs) / lhs_c) ? PS_ENTAILED : PS_FAILED;
               } else {
                 return PS_FAILED;
               }
             }
           } else {
-            return lhs()*lhs_c+rhs()*rhs_c==c->arg(2)() ? PS_ENTAILED : PS_FAILED;
+            return lhs*lhs_c+rhs*rhs_c==c->arg(2) ? PS_ENTAILED : PS_FAILED;
           }
         }
         // More propagation?
@@ -341,24 +341,24 @@ namespace MiniZinc {
         }
         if (c->arg(1)[0].size() == 1) {
           Val v = Val::follow_alias(c->arg(1)[0][0], &i);
-          Val mult = Val::follow_alias(c->arg(0)[0][0](), &i);
+          Val mult = Val::follow_alias(c->arg(0)[0][0], &i);
           if (v.isVar()) {
-            if (c->arg(2)() % mult() == 0) {
-              IntVal res = c->arg(2)() / mult();
+            if (c->arg(2) % mult == 0) {
+              Val res = c->arg(2) / mult;
               Vec* dom = v.toVar()->domain();
               bool indom = true;
               for (int j = 0; j < dom->size(); j+=2) {
-                if ((*dom)[j]() <= res && res <= (*dom)[j+1]()) {
+                if ((*dom)[j] <= res && res <= (*dom)[j+1]) {
                   return PS_OK;
                 }
               }
-              return r.toVar()->setVal(&i, IntVal(false)) ? PS_ENTAILED : PS_FAILED;
+              return r.toVar()->setVal(&i, false) ? PS_ENTAILED : PS_FAILED;
             } else {
               return PS_FAILED;
             }
           } else {
             // aliased to val
-            return r.toVar()->setVal(&i, mult()*v() == c->arg(2)()) ? PS_ENTAILED : PS_FAILED;
+            return r.toVar()->setVal(&i, mult*v == c->arg(2)) ? PS_ENTAILED : PS_FAILED;
           }
         }
         // More propagation?
@@ -395,15 +395,15 @@ namespace MiniZinc {
         if (c->arg(1)[0].size() == 1) {
           Val v = Val::follow_alias(c->arg(1)[0][0], &i);
           if (v.isVar()) {
-            IntVal newBound = c->arg(2)() / c->arg(0)[0][0]();
-            if (c->arg(0)[0][0]() > 0) {
+            Val newBound = c->arg(2) / c->arg(0)[0][0];
+            if (c->arg(0)[0][0] > 0) {
               return v.toVar()->setMax(&i, newBound) ? PS_ENTAILED : PS_FAILED;
             } else {
               return v.toVar()->setMin(&i, newBound) ? PS_ENTAILED : PS_FAILED;
             }
           } else {
             // aliased to val
-            return c->arg(0)[0][0]()*v() <= c->arg(2)() ? PS_ENTAILED : PS_FAILED;
+            return c->arg(0)[0][0]*v <= c->arg(2) ? PS_ENTAILED : PS_FAILED;
           }
         }
         // More propagation?
@@ -450,17 +450,17 @@ namespace MiniZinc {
           return PS_OK;
         }
         if (c->arg(1)[0].size() == 1) {
-          Val mult = c->arg(0)[0][0]();
+          Val mult = c->arg(0)[0][0];
           Val v = Val::follow_alias(c->arg(1)[0][0], &i);
           if (v.isVar()) {
-            if (mult()*v.lb() <= c->arg(2)() && mult()*v.ub() <= c->arg(2)()) {
-              return r.toVar()->setVal(&i, IntVal(true)) ? PS_ENTAILED : PS_FAILED;
-            } else if (mult()*v.lb() > c->arg(2)() && mult()*v.ub() > c->arg(2)()) {
-              return r.toVar()->setVal(&i, IntVal(false)) ? PS_ENTAILED : PS_FAILED;
+            if (mult*v.lb() <= c->arg(2) && mult*v.ub() <= c->arg(2)) {
+              return r.toVar()->setVal(&i, true) ? PS_ENTAILED : PS_FAILED;
+            } else if (mult*v.lb() > c->arg(2) && mult*v.ub() > c->arg(2)) {
+              return r.toVar()->setVal(&i, false) ? PS_ENTAILED : PS_FAILED;
             }
           } else {
             // aliased to val
-            return r.toVar()->setVal(&i, mult()*v() <= c->arg(2)()) ? PS_ENTAILED : PS_FAILED;
+            return r.toVar()->setVal(&i, mult*v <= c->arg(2)) ? PS_ENTAILED : PS_FAILED;
           }
         }
         // More propagation?
@@ -510,9 +510,9 @@ namespace MiniZinc {
           return PS_OK;
         }
         if (rhs.isInt()) {
-          return lhs() == rhs() ? PS_ENTAILED : PS_FAILED;
+          return lhs == rhs ? PS_ENTAILED : PS_FAILED;
         }
-        return rhs.toVar()->setVal(&i, 1 - lhs()) ? PS_ENTAILED : PS_FAILED;
+        return rhs.toVar()->setVal(&i, 1 - lhs) ? PS_ENTAILED : PS_FAILED;
       }
     };
     // Reserve procedure code for op_not operation (to create CSE entries)
@@ -697,8 +697,8 @@ namespace MiniZinc {
         assert(args.size() == 2);
         assert(args[0].isInt() && args[1].isInt());
 
-        std::uniform_int_distribution<> dis(args[0]().toInt(), args[1]().toInt());
-        Val rnd(IntVal(dis(generator)));
+        std::uniform_int_distribution<> dis(args[0].toInt(), args[1].toInt());
+        Val rnd = dis(generator);
         i.pushAgg(rnd, -1);
       };
       void setSeed(int seed) {
@@ -732,7 +732,7 @@ namespace MiniZinc {
         Val al = args[0][0];
         std::vector<int> ai(al.size());
         for (int j=0; j < al.size(); j++) {
-          ai[j] = al[j]().toInt();
+          ai[j] = al[j].toInt();
         }
         std::stable_sort(ai.begin(), ai.end());
 
@@ -754,15 +754,15 @@ namespace MiniZinc {
 
         Val al = args[0][0];
         Val order_e = args[1][0];
-        std::vector<IntVal> order(order_e.size());
+        std::vector<Val> order(order_e.size());
         std::vector<int> a(order_e.size());
         for (int j=0; j < order.size(); j++) {
           a[j] = j;
-          order[j] = order_e[j]();
+          order[j] = order_e[j];
         }
         struct Ord {
-          std::vector<IntVal>& order;
-          explicit Ord(std::vector<IntVal>& order0) : order(order0) {}
+          std::vector<Val>& order;
+          explicit Ord(std::vector<Val>& order0) : order(order0) {}
           bool operator()(int i, int j) {
             return order[i] < order[j];
           }
@@ -818,7 +818,7 @@ namespace MiniZinc {
             c.toVar()->alias(&i, b);
             return PS_ENTAILED;
           } else if(b.isVar()) {
-            return b.toVar()->setVal(&i, c()) ? PS_ENTAILED : PS_FAILED;
+            return b.toVar()->setVal(&i, c) ? PS_ENTAILED : PS_FAILED;
           } else {
             return b == c ? PS_ENTAILED : PS_FAILED;
           }
@@ -827,13 +827,13 @@ namespace MiniZinc {
             c.toVar()->alias(&i, a);
             return PS_ENTAILED;
           } else if(a.isVar()) {
-            return a.toVar()->setVal(&i, c()) ? PS_ENTAILED : PS_FAILED;
+            return a.toVar()->setVal(&i, c) ? PS_ENTAILED : PS_FAILED;
           } else {
             return a == c ? PS_ENTAILED : PS_FAILED;
           }
         }
 
-        IntVal lb, ub;
+        Val lb, ub;
         lb = std::max(a.lb(), b.lb());
         ub = std::max(a.ub(), b.ub());
         // FIXME: c is not guaranteed to be a variable
@@ -852,10 +852,10 @@ namespace MiniZinc {
         assert(args.size()==1);
         assert(args[0].isInt());
 
-        if (args[0]() > 0) {
-          i.pushAgg(Val(IntVal::infinity()), -1);
+        if (args[0] > 0) {
+          i.pushAgg(Val::infinity(), -1);
         } else {
-          i.pushAgg(Val(-IntVal::infinity()), -1);
+          i.pushAgg(-Val::infinity(), -1);
         }
       };
     };
@@ -886,11 +886,11 @@ namespace MiniZinc {
       assert(args[0].isVec() && args[1].isVec() && args[2].isVec() );
       assert(args[0][1].size() / 2 == args[1][0].size());
 
-      std::vector<IntVal> idxs(args[1][0].size());
+      std::vector<Val> idxs(args[1][0].size());
       std::vector<Val> slice;
       // Initialise indexes
       for (int j = 0; j < idxs.size(); ++j) {
-        idxs[j] = args[0][1][j*2]();
+        idxs[j] = args[0][1][j*2];
       }
 
       // Walk through array and make slice selection
@@ -899,7 +899,7 @@ namespace MiniZinc {
       while (level >= 0) {
         bool in_slice = true;
         for (int k = 0; k < idxs.size(); ++k) {
-          in_slice = in_slice && args[1][0][k][0]() <= idxs[k] && idxs[k] <= args[1][0][k][1]();
+          in_slice = in_slice && args[1][0][k][0] <= idxs[k] && idxs[k] <= args[1][0][k][1];
         }
 
         assert(it < args[0][0].size());
@@ -909,12 +909,12 @@ namespace MiniZinc {
         it++;
 
         while (level >= 0) {
-          if (idxs[level] < args[0][1][level*2+1]()) {
+          if (idxs[level] < args[0][1][level*2+1]) {
             idxs[level]++;
             level = idxs.size() - 1;
             break;
           } else {
-            idxs[level] = args[0][1][level*2]();
+            idxs[level] = args[0][1][level*2];
             level--;
           }
         }
