@@ -60,13 +60,15 @@ function var bool: op_equals(array[$T] of var bool: x,array[$T] of var bool: y) 
   These builtins implement arithmetic operations.
 */
 
+predicate int_minus(var int:x, var int:y, var int:z);
+
 /** @group builtins.arithmetic Return \a -x */
 function int: op_minus(int: x) ::promise_total = -x;
 /** @group builtins.arithmetic Return \a x - \a y */
 function var int: op_minus(var int: x) ::promise_total =
   let {
     var int: y;
-    constraint int_min(0,x,y);
+    constraint int_minus(0,x,y);
   } in y;
 
 /** @group builtins.arithmetic Return \a x - \a y */
@@ -78,14 +80,14 @@ function var int: op_minus(var int: x, int: y) ::promise_total =
   else
     let {
       var int: z;
-      constraint int_min(x,y,z);
+      constraint int_minus(x,y,z);
     } in z
   endif;
 /** @group builtins.arithmetic Return \a x - \a y */
 function var int: op_minus(var int: x,  var int: y) ::promise_total =
   let {
     var int: z;
-    constraint int_min(x, y, z);
+    constraint int_minus(x, y, z);
   } in z;
 /** @group builtins.arithmetic Return \a x + \a y */
 function int: op_plus(int: x, int: y) = x + y;
