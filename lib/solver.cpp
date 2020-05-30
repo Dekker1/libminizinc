@@ -959,13 +959,27 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   if (flag_statistics) {
     os << "%%%mzn-stat: flatTime=" << flatten_time << endl;
   }
+
+  if (getFltStatus() != SolverInstance::UNKNOWN) {
+    if (ifMzn2Fzn()) {
+      GCLock lock;
+      std::ofstream os(file.substr(0, file.size()-4) + std::string(".fzn"));
+      Printer p(os, 0, true);
+      auto c = new Call(Location().introduce(), constants().ids.bool_eq, {constants().lit_true, constants().lit_false});
+      auto ci = new ConstraintI(Location().introduce(), c);
+      p.print(ci);
+      p.print(SolveI::sat(Location().introduce()));
+    }
+    return {getFltStatus(), printSolution(getFltStatus())};
+  }
+
   if (!si) {          // only then
     // GCLock lock;                  // better locally, to enable cleanup after ProcessFlt()
     addSolverInterface();
   }
+  addDefinitions();
   if (ifMzn2Fzn()) {
     assert(dynamic_cast<FZNSolverInstance*>(si));
-    addDefinitions();
     // Print flatzinc to file
     static_cast<FZNSolverInstance*>(si)->printModelToFile(file.substr(0, file.size()-4) + std::string(".fzn"));
 
@@ -973,12 +987,8 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
       si->printStatistics();
     }
     return {SolverInstance::UNKNOWN, ""};
-  } else if (SolverInstance::UNKNOWN == getFltStatus()) {
-    addDefinitions();
-    return solve();
-  } else {
-    return {getFltStatus(), printSolution(getFltStatus())};
-  }                                   //  Add evalOutput() here?   TODO
+  }
+  return solve();
 }
 
 void MznSolver::addDefinitions() {
