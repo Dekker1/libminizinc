@@ -1447,7 +1447,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           Val i = frame->bs->intval(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
           frame->reg.assign(this, r1, i);
-          DBG_INTERPRETER("IMMI " << i << " R" << r1 << "(" << frame->reg[r1].toString() << ")" << "\n");
+          DBG_INTERPRETER("IMMI " << i.toString() << " R" << r1 << "(" << frame->reg[r1].toString() << ")" << "\n");
         }
           break;
         case BytecodeStream::CLEAR:
@@ -1518,7 +1518,8 @@ void Val::finalizeLin(Interpreter* interpreter) {
           int r1 = frame->bs->reg(frame->pc);
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("EQI R" << r1  << "(" << frame->reg[r1] << ")" << " R" << r2  << "(" << frame->reg[r2] << ")");
+          DBG_INTERPRETER("EQI R" << r1  << "(" << frame->reg[r1].toString() << ")" << " R" << r2  << "(" << frame->reg[r2].toString() << ")");
+          assert(frame->reg[r1] == frame->reg[r2] || frame->reg[r1].toInt() != frame->reg[r2].toInt());
           frame->reg.assign(this, r3, frame->reg[r1] == frame->reg[r2]);
           DBG_INTERPRETER(" R" << r3 <<  "(" << frame->reg[r3].toString() << ")" <<  "\n");
         }
@@ -1607,7 +1608,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
           DBG_INTERPRETER("ISEMPTY R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           assert(frame->reg[r1].isInt() || frame->reg[r1].isVec());
           frame->reg.assign(this, r2, (frame->reg[r1].isInt() || frame->reg[r1].size()==0));
-          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2]() << ")" << "\n");
+          DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2].toString() << ")" << "\n");
         }
           break;
         case BytecodeStream::LENGTH:
@@ -1638,7 +1639,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
         {
           Val n = frame->bs->intval(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("GET_VEC_NDIM " << n << "R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
+          DBG_INTERPRETER("GET_VEC_NDIM " << n.toString() << "R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           std::vector<Val> idx(n.toInt());
           for (int i=0; i<n; i++) {
             int rr = frame->bs->reg(frame->pc);
@@ -2250,7 +2251,7 @@ execute_ret:
           Val i = frame->bs->intval(frame->pc);
           DBG_INTERPRETER(" R" << r0 << "(" << frame->reg[r0].toString(DBG_TRIM_OUTPUT) << ")");
           DBG_INTERPRETER(" R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-          DBG_INTERPRETER(" " << i);
+          DBG_INTERPRETER(" " << i.toString());
           int r2 = frame->bs->reg(frame->pc);
           int r3 = frame->bs->reg(frame->pc);
           int r4 = frame->bs->reg(frame->pc);
