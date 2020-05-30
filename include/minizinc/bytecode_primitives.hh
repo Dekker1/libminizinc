@@ -126,7 +126,7 @@ namespace MiniZinc {
 
     class IntMinus: public PrimitiveMap::Primitive {
     public:
-      IntMinus(void) : PrimitiveMap::Primitive("int_min",PrimitiveMap::INT_MINUS,3) {}
+      IntMinus(void) : PrimitiveMap::Primitive("int_minus",PrimitiveMap::INT_MINUS,3) {}
       virtual PropStatus subscribe(Interpreter& interpreter, Constraint* c) const {
         Val lb = Val::follow_alias(c->arg(0),&interpreter).lb() - Val::follow_alias(c->arg(1),&interpreter).ub();
         Val ub = Val::follow_alias(c->arg(0),&interpreter).ub() - Val::follow_alias(c->arg(1),&interpreter).lb();
