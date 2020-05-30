@@ -570,7 +570,7 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
       int c = GET_REG(cg);
       int x = GET_REG(cg);
       int k = GET_REG(cg);
-      int z = (op==BOT_LE ? -1 : 0);
+      int z = (op==BOT_LE ? +1 : 0);
       PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(r_lhs), CG::r(r_rhs), CG::i(z), CG::r(c), CG::r(x), CG::r(k));
       const char* ident = (op==BOT_LE || op==BOT_LQ) ? "pre_int_lin_le" : "pre_int_lin_eq";
       return CG_Cond::call({ident}, ctx, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
