@@ -501,6 +501,23 @@ namespace MiniZinc {
       }
       return count;
     }
+    const size_t hash() const {
+      auto combine = [](size_t& incumbent, size_t h) { incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2); };
+      std::hash<int> h;
+      size_t hash = h(size());
+      for (int i = 0; i < size(); ++i) {
+        Val v = _data[i];
+        if (v.isInt()) {
+          combine(hash, h(v.toInt()));
+        } else if (v.isVar()) {
+          combine(hash, h(v.timestamp()));
+        } else {
+          assert(v.isVec());
+          combine(hash, v.toVec()->hash());
+        }
+      }
+      return hash;
+    }
 
     void finalizeLin(Interpreter* interpreter) {
       for (int i = 0; i < _size; ++i) {
@@ -1039,23 +1056,51 @@ namespace MiniZinc {
     // Value of the Val
     void* _v;
   public:
-    explicit WeakVal(const Val& val) {
-      if(val.isRCO()) {
+    explicit WeakVal(Interpreter& interpreter, const Val& val) {
+      if (val.isInt()) {
+        assert((reinterpret_cast<ptrdiff_t>(val._v) & static_cast<ptrdiff_t>(3)) == 0);
+        _v = val._v;
+      } else if(val.isVar()) {
         auto timestamp = val.timestamp();
         // TODO: assert timestamp <= unboxed int
         assert(timestamp >= 0);
-        _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(timestamp) << 1 | static_cast<ptrdiff_t>(1));
+        _v = reinterpret_cast<void*>(static_cast<ptrdiff_t>(timestamp) << 2 | static_cast<ptrdiff_t>(1));
       } else {
-        assert((reinterpret_cast<ptrdiff_t>(val._v) & static_cast<ptrdiff_t>(1)) == 0);
-        _v = val._v;
+        assert(val.isVec());
+        _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(val._v) | static_cast<ptrdiff_t>(3));
+        toVec()->addWRef(&interpreter);
       }
     }
 
-    size_t hash() const {std::hash<void*> h; return h(_v);}
-    inline bool operator==(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v); }
-    inline bool operator!=(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) != reinterpret_cast<ptrdiff_t>(rhs._v); }
-    inline bool operator<(const WeakVal& rhs) const { return reinterpret_cast<ptrdiff_t>(_v) < reinterpret_cast<ptrdiff_t>(rhs._v); }
+    void destroy(Interpreter& interpreter) {
+      if (isVec()) {
+        RefCountedObject::rmWRef(&interpreter, toVec());
+      }
+    }
 
+    bool isVec(void) const {
+      return (reinterpret_cast<ptrdiff_t>(_v) & static_cast<ptrdiff_t>(3)) == static_cast<ptrdiff_t>(3);
+    }
+    Vec* toVec() const {
+      assert(isVec());
+      return reinterpret_cast<Vec*>(reinterpret_cast<ptrdiff_t>(_v) & ~static_cast<ptrdiff_t>(3));
+    }
+    size_t hash() const {
+      if (isVec()) {
+        return toVec()->hash();
+      }
+      std::hash<void*> h;
+      return h(_v);
+    }
+    inline bool operator==(const WeakVal& rhs) const {
+      if (isVec()) {
+        return rhs.isVec() && toVec()->alive() && rhs.toVec()->alive() && (*toVec() == *rhs.toVec());
+      }
+      return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v);
+    }
+    inline bool operator!=(const WeakVal& rhs) const {
+      return !(*this == rhs);
+    }
   };
 
   class AggregationCtx {
@@ -1139,9 +1184,14 @@ namespace MiniZinc {
       WeakVal* _vals;
     public:
       Key() : _size(0), _vals(nullptr) {}
-      explicit Key(const std::vector<Val>& vec);
+      explicit Key(Interpreter& interpreter, const std::vector<Val>& vec);
       // INVARIANT: Key is not used after destroy is called
-      void destroy() const { free(_vals); }
+      void destroy(Interpreter& interpreter) const {
+        for (int i = 0; i < _size; ++i) {
+          _vals[i].destroy(interpreter);
+        }
+        free(_vals);
+      }
 
       const size_t& size() const { return _size; }
       const WeakVal& operator [](int i) const { assert(i < _size); return _vals[i]; }
@@ -1155,18 +1205,6 @@ namespace MiniZinc {
           }
         }
         return true;
-      }
-      const bool operator<(const Key& rhs) const {
-        if (size() != rhs.size()) {
-          return size() < rhs.size();
-        } else {
-          for (int i = 0; i < size(); ++i) {
-            if (operator[](i) != rhs[i]) {
-              return operator[](i) < rhs[i];
-            }
-          }
-          return false;
-        }
       }
       const size_t hash() const {
         auto combine = [](size_t& incumbent, size_t h) { incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2); };
@@ -1183,11 +1221,7 @@ namespace MiniZinc {
     struct Equals { bool operator()(const Key& lhs, const Key& rhs) const {
       return lhs == rhs;
     }};
-    struct Less { bool operator()(const Key& lhs, const Key& rhs) const {
-      return lhs < rhs;
-    }};
     typedef std::unordered_map<Key, std::pair<BytecodeProc::Mode, Val>, Hash, Equals> impl;
-//    typedef std::map<Key, std::pair<BytecodeProc::Mode, Val>, Less> impl;
     typedef impl::iterator iterator;
     std::pair<Val, bool> lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode);
     void insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val);
@@ -1198,7 +1232,7 @@ namespace MiniZinc {
     void destroy(Interpreter* interpreter) {
       for (auto &table : _table) {
         for(auto &item : table) {
-          item.first.destroy();
+          item.first.destroy(*interpreter);
           item.second.second.removeWeakRef(interpreter);
         }
       }
@@ -1210,7 +1244,7 @@ namespace MiniZinc {
         auto it = table.begin();
         while (it != table.end()) {
           if (!it->second.second.exists()) {
-            it->first.destroy();
+            it->first.destroy(*interpreter);
             it->second.second.removeWeakRef(interpreter);
             it = table.erase(it);
           } else {
@@ -1222,7 +1256,7 @@ namespace MiniZinc {
     }
     void pop(Interpreter* interpreter) {
       for (auto& item : _table.back()) {
-        item.first.destroy();
+        item.first.destroy(*interpreter);
         item.second.second.removeWeakRef(interpreter);
       }
       _table.pop_back();

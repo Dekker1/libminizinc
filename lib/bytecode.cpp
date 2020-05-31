@@ -837,32 +837,13 @@ void Val::finalizeLin(Interpreter* interpreter) {
   }
 }
 
-  CSETable::Key::Key(const std::vector<Val> &vec) {
+  CSETable::Key::Key(Interpreter& interpreter, const std::vector<Val> &vec) {
     _size = vec.size();
-    // TODO: Should CSEKeys compare arrays with the same content again?
-    for (const auto& val : vec) {
-      if (val.isVec() && val.size()==2 && val[0].isVec() && val[1].isVec() && val[0].size() <= 5) {
-        _size += val[0].size() + val[1].size() + 1;
-      }
-    }
     if (_size > 0) {
      _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
       size_t i = 0;
       for (const auto& val : vec) {
-        if (val.isVec() && val.size()==2 && val[0].isVec() && val[1].isVec() && val[0].size() <= 5) {
-          _vals[i++] = WeakVal(Val(val[0].size()));
-          for (int j = 0; j < val[0].size(); ++j) {
-            assert(!val[0][j].isVec());
-            _vals[i++] = WeakVal(val[0][j]);
-          }
-          _vals[i++] = WeakVal(Val(val[1].size()));
-          for (int j = 0; j < val[1].size(); ++j) {
-            assert(!val[1][j].isVec());
-            _vals[i++] = WeakVal(val[1][j]);
-          }
-        } else {
-          _vals[i++] = WeakVal(val);
-        }
+        _vals[i++] = WeakVal(interpreter, val);
       }
       assert(i == _size);
     }
@@ -892,7 +873,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
             assert(v==0 || v==1);
             return 1 - v;
           } else {
-            Key nkey({v});
+            Key nkey(*interpreter, {v});
             Val new_val;
             bool found;
             auto cmode = BytecodeProc::FUN;
@@ -907,7 +888,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
               interpreter->cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
               RefCountedObject::rmRef(interpreter, new_var);
             } else {
-              nkey.destroy();
+              nkey.destroy(*interpreter);
             }
             return new_val;
           }
@@ -943,7 +924,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
       CSETable::iterator& it = insertion.first;
       // We are replacing another entry within the CSE table.
       assert(it->first == key && it->second.first != mode);
-      key.destroy();
+      key.destroy(*interpreter);
       Val oldVal = Val::follow_alias(it->second.second);
       BytecodeProc::Mode& oldMode = it->second.first;
       if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
@@ -960,7 +941,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
               v->alias(interpreter, val);
             }
           } else {
-            Key nkey({val});
+            Key nkey(*interpreter, {val});
             Val new_val;
             bool found;
             auto cmode = BytecodeProc::FUN;
@@ -975,7 +956,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
               interpreter->cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
               RefCountedObject::rmRef(interpreter, new_var);
             } else {
-              nkey.destroy();
+              nkey.destroy(*interpreter);
             }
             if (new_val != oldVal) {
               v->alias(interpreter, new_val);
@@ -1921,7 +1902,7 @@ execute_ret:
                 Val ret = _agg[_agg.size()-1].back();
                 cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
               } else {
-                std::get<2>(entry).destroy();
+                std::get<2>(entry).destroy(*this);
               }
             }
           }
@@ -1952,11 +1933,11 @@ execute_ret:
           DBG_INTERPRETER("\n");
           CSETable::Key cse_key;
           if (cse_suited) {
-            cse_key = CSETable::Key(args);
+            cse_key = CSETable::Key(*this, args);
             // Lookup item in CSE
             auto lookup = cse_lookup(code, cse_key, mode);
             if (lookup.second) {
-              cse_key.destroy();
+              cse_key.destroy(*this);
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(lookup.first.isInt());
                 if (lookup.first.toInt() != 1) {
@@ -2044,12 +2025,12 @@ execute_ret:
           }
           CSETable::Key cse_key;
           if (cse_suited) {
-            cse_key = CSETable::Key(args);
+            cse_key = CSETable::Key(*this, args);
             bool found;
             Val ret;
             std::tie(ret, found) = cse_lookup(code, cse_key, mode);
             if (found) {
-              cse_key.destroy();
+              cse_key.destroy(*this);
               // RET with CSE found value
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(ret.isInt());
