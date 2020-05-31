@@ -1094,7 +1094,7 @@ namespace MiniZinc {
     }
     inline bool operator==(const WeakVal& rhs) const {
       if (isVec()) {
-        return rhs.isVec() && toVec()->alive() && rhs.toVec()->alive() && (*toVec() == *rhs.toVec());
+        return rhs.isVec() && toVec()->exists() && rhs.toVec()->exists() && (*toVec() == *rhs.toVec());
       }
       return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v);
     }
