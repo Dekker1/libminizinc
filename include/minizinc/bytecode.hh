@@ -504,7 +504,7 @@ namespace MiniZinc {
     const size_t hash() const {
       auto combine = [](size_t& incumbent, size_t h) { incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2); };
       std::hash<int> h;
-      size_t hash = h(size());
+      size_t hash = 0;
       for (int i = 0; i < size(); ++i) {
         Val v = _data[i];
         if (v.isInt()) {
@@ -1181,6 +1181,7 @@ namespace MiniZinc {
     class Key {
     private:
       size_t _size;
+      size_t _hash;
       WeakVal* _vals;
     public:
       Key() : _size(0), _vals(nullptr) {}
@@ -1193,24 +1194,25 @@ namespace MiniZinc {
         free(_vals);
       }
 
+      const size_t hash() const { return _hash; }
       const size_t& size() const { return _size; }
-      const WeakVal& operator [](int i) const { assert(i < _size); return _vals[i]; }
       const bool operator==(const Key& rhs) const {
-        if (size() != rhs.size()) {
+        if (_size != rhs._size) {
           return false;
         }
-        for (int i = 0; i < size(); ++i) {
-          if (operator[](i) != rhs[i]) {
+        for (int i = 0; i < _size; ++i) {
+          if (_vals[i] != rhs._vals[i]) {
             return false;
           }
         }
         return true;
       }
-      const size_t hash() const {
+    protected:
+      static size_t compute_hash(const Key& k) {
         auto combine = [](size_t& incumbent, size_t h) { incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2); };
         size_t hash = 0;
-        for (int i = 0; i < size(); ++i) {
-          combine(hash, operator[](i).hash());
+        for (int i = 0; i < k._size; ++i) {
+          combine(hash, k._vals[i].hash());
         }
         return hash;
       }

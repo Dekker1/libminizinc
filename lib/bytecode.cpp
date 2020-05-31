@@ -839,14 +839,12 @@ void Val::finalizeLin(Interpreter* interpreter) {
 
   CSETable::Key::Key(Interpreter& interpreter, const std::vector<Val> &vec) {
     _size = vec.size();
-    if (_size > 0) {
-     _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
-      size_t i = 0;
-      for (const auto& val : vec) {
-        _vals[i++] = WeakVal(interpreter, val);
-      }
-      assert(i == _size);
+    _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
+
+    for (int i=0; i < _size; ++i) {
+      _vals[i] = WeakVal(interpreter, vec[i]);
     }
+    _hash = compute_hash(*this);
   }
 
   std::pair<Val, bool> CSETable::lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode) {
