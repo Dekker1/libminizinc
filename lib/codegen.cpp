@@ -27,6 +27,9 @@ namespace MiniZinc {
 // a register, and is needed for e.g. a call.
 
 #define ENABLE_PLUS 1
+// MZNC_COLLECT_LEAVES should generate fewer aggregation contexts for models with par-resolved
+// partiality (i.e. lots of array accesses)
+#define MZNC_COLLECT_LEAVES
 
 using Mode = CG::Mode;
 
@@ -1226,6 +1229,11 @@ int bind_cst(int x, CodeGen& cg, CG_Builder& frag) {
 }
 
 
+// WARNING ON THE USE OF CG_Conds: register caching assumes that CG_Conds dont escape an
+// aggregation context, and will be available on all paths. If the cond is forced conditionally
+// (e.g. shortcutting), cg.push_env() should be called before the force() call, and cg.pop_env()
+// called where control flow rejoins.
+
 // Given CG_Cond cond, collect the disjuncts having positive or negative values.
 // Returns false if the conjunction is a contradiction.
 bool collect_prod(std::vector<int>& pos, std::vector<int>& neg, std::vector<CG_Cond::C_And*>& delayed, CG_Cond::T cond, CodeGen& cg, CG_Builder& frag) {
@@ -1339,6 +1347,62 @@ bool collect_disj(std::vector<int>& pos, std::vector<int>& neg, std::vector<CG_C
 }
 
 std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag);
+
+
+void collect_and_leaves(std::vector<CG_Cond::T>& par_leaves, std::vector<CG_Cond::T>& var_leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
+  assert(child.get());
+  CG_Cond::_T* p(child.get());
+  bool sign(child.sign());
+  auto push = [&](CG_Cond::T r, bool is_par){
+    if (is_par) {
+      par_leaves.push_back(r);
+    } else {
+      var_leaves.push_back(r);
+    }
+  };
+
+  if(p->reg[sign].has_reg()) {
+    push(child, p->reg[sign].is_par);
+    return;
+  }
+  if(p->reg[1 - sign].has_reg()) {
+    push(child, p->reg[1-sign].is_par);
+  } else if(p->kind() == CG_Cond::CC_And && !sign) {
+    std::vector<CG_Cond::T>& children(static_cast<CG_Cond::C_And*>(p)->children);
+    for(CG_Cond::T c : children) {
+      collect_and_leaves(par_leaves, var_leaves, c, cg, frag);
+    }
+  } else {
+    push(child, /* Check if this is par. */ false);
+  }
+}
+void collect_or_leaves(std::vector<CG_Cond::T>& par_leaves, std::vector<CG_Cond::T>& var_leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
+  assert(child.get());
+  CG_Cond::_T* p(child.get());
+  bool sign(child.sign());
+  auto push = [&](CG_Cond::T r, bool is_par){
+    if (is_par) {
+      par_leaves.push_back(r);
+    } else {
+      var_leaves.push_back(r);
+    }
+  };
+
+  if(p->reg[1-sign].has_reg()) {
+    push(~child, p->reg[1-sign].is_par);
+    return;
+  }
+  if(p->reg[sign].has_reg()) {
+    push(~child, p->reg[sign].is_par);
+  } else if(p->kind() == CG_Cond::CC_And && !sign) {
+    std::vector<CG_Cond::T>& children(static_cast<CG_Cond::C_And*>(p)->children);
+    for(CG_Cond::T c : children) {
+      collect_or_leaves(par_leaves, var_leaves, c, cg, frag);
+    }
+  } else {
+    push(~child, /* Check if this is par. */ false);
+  }
+}
 
 void force_and_leaves(std::vector<int>& var_leaves, std::vector<int>& par_leaves, CG_Cond::T child, CodeGen& cg, CG_Builder& frag) {
   assert(child.get());
@@ -1494,6 +1558,7 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     }
     return {bind_cst(1, cg, frag), true};
   } else if(p->kind() == CG_Cond::CC_And && !cond.sign()) {
+#ifndef MZNC_COLLECT_LEAVES
     std::vector<int> var_leaves;
     std::vector<int> par_leaves;
     int r = GET_REG(cg);
@@ -1519,8 +1584,64 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     return {r, var_leaves.empty()};
+#else
+    std::vector<CG_Cond::T> par_leaves;
+    std::vector<CG_Cond::T> var_leaves;
+    collect_and_leaves(par_leaves, var_leaves, cond, cg, frag);
+
+    // If we had a conjunction, there should be at least two leaves.
+    assert(var_leaves.size() + par_leaves.size() > 1);
+
+    // If there is at least one par child, we're going to do shortcutting
+    // -- so we need a jump, and to push a fresh env.
+    int r = GET_REG(cg);
+    int lblE = 0xdeadbeef;
+    if(par_leaves.size() > 0) {
+      lblE = GET_LABEL(cg);
+      cg.env_push();
+
+      PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(0), CG::r(r));
+      for(int ii = 0; ii < par_leaves.size()-1; ii++) {
+        CG_Cond::T c(par_leaves[ii]);
+        int r_c = CG::force(c, BytecodeProc::FUN, cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_c), CG::l(lblE));
+      }
+      CG_Cond::T c(par_leaves.back());
+      int r_c = CG::force(c, BytecodeProc::FUN, cg, frag);
+      if(var_leaves.size() > 0) {
+        PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_c), CG::l(lblE));
+      } else {
+        PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_c), CG::r(r));
+      }
+    }
+    // Excludes the 0 case, because it's just been handled.
+    if(var_leaves.size() == 1) {
+      // Exactly one var. Don't open a context;
+      // we return either the result register
+      // or the forced cond.
+      int r_c = CG::force(var_leaves[0], BytecodeProc::FUN, cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_c), CG::r(r));
+    } else if(var_leaves.size() > 1) {
+      // In this case, we need to open a context.
+      OPEN_OTHER(cg, frag);
+      OPEN_AND(cg, frag);
+      for(CG_Cond::T c : var_leaves) {
+        int r_c = CG::force(c, BytecodeProc::FUN, cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+      }
+      CLOSE_AGG(cg, frag);
+      CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+    }
+    if(par_leaves.size() > 0) { // We did some shortcutting.
+      PUSH_LABEL(frag, lblE);
+      cg.env_pop();
+    }
+    return {r, var_leaves.empty()};
+#endif
   } else {
     assert(p->kind() == CG_Cond::CC_And && cond.sign());
+#ifndef MZNC_COLLECT_LEAVES
     std::vector<int> var_leaves;
     std::vector<int> par_leaves;
     int r = GET_REG(cg);
@@ -1546,6 +1667,61 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     return {r, var_leaves.empty()};
+#else
+    std::vector<CG_Cond::T> par_leaves;
+    std::vector<CG_Cond::T> var_leaves;
+    collect_or_leaves(par_leaves, var_leaves, ~cond, cg, frag);
+
+    // If we had a conjunction, there should be at least two leaves.
+    assert(var_leaves.size() + par_leaves.size() > 1);
+
+    // If there is at least one par child, we're going to do shortcutting
+    // -- so we need a jump, and to push a fresh env.
+    int r = GET_REG(cg);
+    int lblE = 0xdeadbeef;
+    if(par_leaves.size() > 0) {
+      lblE = GET_LABEL(cg);
+      cg.env_push();
+      PUSH_INSTR(frag,BytecodeStream::IMMI, CG::i(1), CG::r(r));
+
+      for(int ii = 0; ii < par_leaves.size()-1; ii++) {
+        CG_Cond::T c(par_leaves[ii]);
+        int r_c = CG::force(c, BytecodeProc::FUN, cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_c), CG::l(lblE));
+      }
+      CG_Cond::T c(par_leaves.back());
+      int r_c = CG::force(c, BytecodeProc::FUN, cg, frag);
+      if(var_leaves.size() > 0) {
+        PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_c), CG::l(lblE));
+      } else {
+        PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_c), CG::r(r));
+      }
+    }
+    // Excludes the 0 case, because it's just been handled.
+    if(var_leaves.size() == 1) {
+      // Exactly one var. Don't open a context;
+      // we return either the result register
+      // or the forced cond.
+      int r_c = CG::force(var_leaves[0], BytecodeProc::FUN, cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_c), CG::r(r));
+    } else if(var_leaves.size() > 1) {
+      // In this case, we need to open a context.
+      OPEN_OTHER(cg, frag);
+      OPEN_OR(cg, frag);
+      for(CG_Cond::T c : var_leaves) {
+        int r_c = CG::force(c, BytecodeProc::FUN, cg, frag);
+        PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
+      }
+      CLOSE_AGG(cg, frag);
+      CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+    }
+    if(par_leaves.size() > 0) { // We did some shortcutting.
+      PUSH_LABEL(frag, lblE);
+      cg.env_pop();
+    }
+    return {r, var_leaves.empty()};
+#endif
   }
 }
 int CG::force(CG_Cond::T _cond, Mode ctx, CodeGen& cg, CG_Builder& frag) {
