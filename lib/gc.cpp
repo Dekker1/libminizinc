@@ -15,6 +15,7 @@
 #include <minizinc/model.hh>
 #include <minizinc/config.hh>
 #include <minizinc/timer.hh>
+#include <minizinc/support/dtrace.h>
 
 #include <vector>
 #include <cstring>
@@ -231,6 +232,7 @@ namespace MiniZinc {
     }
 
     void trigger(void) {
+      DTRACE0(GC_START);
 #ifdef MINIZINC_GC_STATS
       std::cerr << "GC\n\talloced " << (_alloced_mem/1024) << "\n\tfree " << (_free_mem/1024) << "\n\tdiff "
       << ((_alloced_mem-_free_mem)/1024)
@@ -257,6 +259,7 @@ namespace MiniZinc {
       << "\n\tthreshold " << (_gc_threshold/1024)
       << "\n";
 #endif
+      DTRACE0(GC_END);
     }
     void rungc(void) {
       if (_alloced_mem > _gc_threshold) {

@@ -1,6 +1,7 @@
 ### MiniZinc Library Target
 #   Combined definition of the MiniZinc core and all solvers compiled
 
+include(cmake/targets/libminizinc_dtrace.cmake)
 include(cmake/targets/libminizinc_parser.cmake)
 include(cmake/targets/libminizinc_fzn.cmake)
 include(cmake/targets/libminizinc_nl.cmake)
@@ -120,11 +121,15 @@ add_library(mzn
   include/minizinc/utils.hh
   include/minizinc/values.hh
 
+  ${DTRACE_SOURCES}
   $<TARGET_OBJECTS:minizinc_parser>
   $<TARGET_OBJECTS:minizinc_fzn>
   $<TARGET_OBJECTS:minizinc_nl>
 )
 target_link_libraries(mzn ${CMAKE_THREAD_LIBS_INIT})
+if(DTRACE)
+  target_compile_definitions(mzn PRIVATE USE_DYNAMIC_TRACE)
+endif()
 
 ### Add Solver Interfaces to the MiniZinc library when available
 include(cmake/targets/libminizinc_cplex.cmake)
@@ -138,6 +143,7 @@ include(cmake/targets/libminizinc_xpress.cmake)
 if(GECODE_FOUND AND USE_GECODE)
   target_link_libraries(mzn Gecode::Minimodel Gecode::Support)
 endif()
+
 
 
 ### Add all necessary files to the install target
