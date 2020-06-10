@@ -12,7 +12,6 @@ if (DTRACE)
   )
   set(DTRACE_HEADER ${PROJECT_BINARY_DIR}/include/minizinc/support/dtrace_probes.h)
 
-  # TODO: Test on linux with SystemTap to see if this works
   if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     ADD_CUSTOM_COMMAND(
       OUTPUT ${PROJECT_BINARY_DIR}/dtrace_probes.o
@@ -20,9 +19,9 @@ if (DTRACE)
       DEPENDS ${PROJECT_SOURCE_DIR}/include/minizinc/support/dtrace_probes.d
     )
     add_library(minizinc_dtrace_object OBJECT IMPORTED GLOBAL)
-    set_target_properties(minizinc_dtrace_object IMPORTED_OBJECTS ${PROJECT_BINARY_DIR}/dtrace_probes.o)
+    set_target_properties(minizinc_dtrace_object PROPERTIES IMPORTED_OBJECTS ${PROJECT_BINARY_DIR}/dtrace_probes.o)
 
-    set(DTRACE_OBJECT ${TARGET_OBJECTS:minizinc_dtace_object})
+    set(DTRACE_OBJECT $<TARGET_OBJECTS:minizinc_dtrace_object>)
   endif()
 endif()
 
