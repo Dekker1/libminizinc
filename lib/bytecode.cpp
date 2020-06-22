@@ -838,6 +838,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
 }
 
   CSETable::Key::Key(Interpreter& interpreter, const std::vector<Val> &vec) {
+    DTRACE1(CSE_KEYALLOC_START, (uintptr_t) &interpreter);
     _size = vec.size();
     _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
 
@@ -845,6 +846,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
       _vals[i] = WeakVal(interpreter, vec[i]);
     }
     _hash = compute_hash(*this);
+    DTRACE1(CSE_KEYALLOC_END, (uintptr_t) &interpreter);
   }
 
   std::pair<Val, bool> CSETable::lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode) {
