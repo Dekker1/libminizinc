@@ -109,7 +109,7 @@ namespace MiniZinc {
       case BytecodeProc::IMP_NEG:
         p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_NQ, RM_IMP, call);
         break;
-      case BytecodeProc::RAW:
+      default:
         assert(false);
         break;
       }

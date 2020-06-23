@@ -705,7 +705,7 @@ namespace MiniZinc {
     }
   }
 
-  const std::string BytecodeProc::mode_to_string[] = { "RAW", "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
+  const std::string BytecodeProc::mode_to_string[] = { "ROOT", "ROOT_NEG", "FUN", "FUN_NEG", "IMP", "IMP_NEG" };
   const std::string AggregationCtx::symbol_to_string[] = { "AND", "OR", "VEC", "OTHER" };
 
   const std::string Interpreter::status_to_string[] = {"Roger", "Aborted", "Inconsistent", "Error"};
@@ -850,7 +850,6 @@ void Val::finalizeLin(Interpreter* interpreter) {
   }
 
   std::pair<Val, bool> CSETable::lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode) {
-    assert(mode != BytecodeProc::RAW);
     iterator it;
     size_t i = _table.size();
     do {
@@ -897,7 +896,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
       };
       if (mode == val_m){
         return std::make_pair(val, true);
-      // Assumption: 'val' must be of boolean type, otherwise mode is always FUN (or RAW)
+      // Assumption: 'val' must be of boolean type, otherwise mode is always FUN
       } else if (val_m == BytecodeProc::ROOT || val_m == BytecodeProc::ROOT_NEG) {
         return {convert(val), true};
       } else if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
@@ -915,7 +914,6 @@ void Val::finalizeLin(Interpreter* interpreter) {
   }
 
   void CSETable::insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val) {
-    assert(mode != BytecodeProc::RAW);
     DBG_INTERPRETER("--- CSE add: hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString(DBG_TRIM_OUTPUT) << "\n");
     // If value is reference counted, flag that it's in CSE
     val.addWeakRef(interpreter);
@@ -1166,8 +1164,9 @@ void Val::finalizeLin(Interpreter* interpreter) {
         {
           auto m = static_cast<BytecodeProc::Mode>(chr(pc));
           int p = reg(pc);
+          bool cse = chr(pc);
           assert(!procs.empty());
-          oss << "CALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << " ";
+          oss << "CALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << (cse ? "" : " no_cse") << " ";
           oss << procs[p].nargs;
           for (int i=0; i<procs[p].nargs; i++) {
             oss << " R" << reg(pc);
@@ -1190,11 +1189,12 @@ void Val::finalizeLin(Interpreter* interpreter) {
         {
           auto m = static_cast<BytecodeProc::Mode>(chr(pc));
           int p = reg(pc);
-          
+          bool cse = chr(pc);
+
           if (procs.empty()) {
-            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << p << " % " << cur_pc << "\n";
+            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << p << (cse ? "" : " no_cse") << " % " << cur_pc << "\n";
           } else {
-            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << " % " << cur_pc << "\n";
+            oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << (cse ? "" : " no_cse") << " % " << cur_pc << "\n";
           }
         }
           break;
@@ -1915,16 +1915,16 @@ execute_ret:
         {
           char mode_c = frame->bs->chr(frame->pc);
           int code = frame->bs->reg(frame->pc);
+          bool cse = frame->bs->chr(frame->pc);
           assert(code >= 0);
           assert(code < _procs.size());
           assert(mode_c >= 0);
           assert(mode_c <= BytecodeProc::MAX_MODE);
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           int n = _procs[code].nargs;
-          DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")");
+          DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << (cse ? "" : " no_cse"));
           // TODO: See if args is created when not necessary
           std::vector<Val> args(n);
-          bool cse_suited = n < 5 && mode != BytecodeProc::RAW;
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
             args[i] = frame->reg[r];
@@ -1932,7 +1932,7 @@ execute_ret:
           }
           DBG_INTERPRETER("\n");
           CSETable::Key cse_key;
-          if (cse_suited) {
+          if (cse) {
             cse_key = CSETable::Key(*this, args);
             // Lookup item in CSE
             auto lookup = cse_lookup(code, cse_key, mode);
@@ -1954,8 +1954,8 @@ execute_ret:
           if (_procs[code].mode[mode].size() == 0 || _procs[code].delay) {
             DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
             // this is a FlatZinc builtin
-            if (mode==BytecodeProc::RAW) {
-              assert(code==PrimitiveMap::MK_INTVAR); // The only RAW primitive!
+            if (code == PrimitiveMap::MK_INTVAR) {
+              assert(mode == BytecodeProc::ROOT);
               Variable* v = Variable::a(this, args[0], true, newIdent());
               pushAgg(Val(v), -1);
             } else {
@@ -1971,7 +1971,7 @@ execute_ret:
               if (c.first){
                 pushConstraint(c.first);
               }
-              if (cse_suited) {
+              if (cse) {
                 Val ret(c.second);
                 cse_insert(code, cse_key, mode, ret);
               }
@@ -2011,20 +2011,20 @@ execute_ret:
         {
           char mode_c = frame->bs->chr(frame->pc);
           int code = frame->bs->reg(frame->pc);
+          bool cse = frame->bs->chr(frame->pc);
           assert(code >= 0);
           assert(code < _procs.size());
           assert(mode_c >= 0);
           assert(mode_c <= BytecodeProc::MAX_MODE);
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
-          DBG_INTERPRETER("TCALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
+          DBG_INTERPRETER("TCALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")"  << (cse ? "" : " no_cse") << "\n");
           // TODO: Avoid creating the args vector
           std::vector<Val> args(_procs[code].nargs);
-          bool cse_suited = _procs[code].nargs < 5 && mode != BytecodeProc::RAW;
           for (int i = 0; i < args.size(); ++i) {
             args[i] = frame->reg[i];
           }
           CSETable::Key cse_key;
-          if (cse_suited) {
+          if (cse) {
             cse_key = CSETable::Key(*this, args);
             bool found;
             Val ret;
@@ -2068,7 +2068,7 @@ execute_ret:
             if (c.first){
               pushConstraint(c.first);
             }
-            if (cse_suited) {
+            if (cse) {
               Val ret(c.second);
               cse_insert(code, cse_key, mode, ret);
             }

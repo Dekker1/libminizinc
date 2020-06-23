@@ -102,7 +102,6 @@ using namespace MiniZinc;
 "VEC"       { yylval->iValue = AggregationCtx::VCTX_VEC; return MZA_CTX; }
 "OTHER"     { yylval->iValue = AggregationCtx::VCTX_OTHER; return MZA_CTX; }
 
-"RAW"       { yylval->iValue = BytecodeProc::RAW; return MZA_MODE; }
 "ROOT"      { yylval->iValue = BytecodeProc::ROOT; return MZA_MODE; }
 "ROOT_NEG"  { yylval->iValue = BytecodeProc::ROOT_NEG; return MZA_MODE; }
 "FUN"       { yylval->iValue = BytecodeProc::FUN; return MZA_MODE; }

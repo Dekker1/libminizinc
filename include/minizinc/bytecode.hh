@@ -356,9 +356,9 @@ namespace MiniZinc {
       POST,  // R: post constraint in R
 
       RET, // return from call
-      CALL, // m, i, n, R1, ..., Rn: call code i in mode m with n arguments
+      CALL, // m, i, cse, R1, ..., Rn: call code i in mode m with n arguments. The 0/1 flag 'cse' is used to signal if a CSE lookup should be performed
       BUILTIN, // i, n, R1, ..., Rn : call builtin function i
-      TCALL, // m, i : call code i in mode m (arguments are assumed to be in correct registers already)
+      TCALL, // m, i, cse : call code i in mode m (arguments are assumed to be in correct registers already). The 0/1 flag 'cse' is used to signal if a CSE lookup should be performed
 
       ITER_VEC, // R, l: Iterate over vector in R, jump to l when finished.
       ITER_RANGE, // R1, R2, l: Iterate over values in [R1, R2]
@@ -1156,7 +1156,7 @@ namespace MiniZinc {
     /// Delayed execution
     bool delay;
     /// Modes
-    enum Mode { RAW, ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
+    enum Mode { ROOT, ROOT_NEG, FUN, FUN_NEG, IMP, IMP_NEG, MAX_MODE=IMP_NEG };
     static const std::string mode_to_string[MAX_MODE+1];
     static const bool is_neg(const Mode& mode) { return mode == ROOT_NEG || mode == FUN_NEG || mode == IMP_NEG; }
     static const Mode negate(const Mode& mode) {
@@ -1168,9 +1168,8 @@ namespace MiniZinc {
       case IMP_NEG: return IMP;
       case FUN_NEG: return FUN;
       default:
-        break;
+        assert(false);
       }
-      return RAW;
     }
     /// The code for different modes
     BytecodeStream mode[MAX_MODE+1];

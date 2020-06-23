@@ -297,17 +297,18 @@ instruction:
       ctx.patch_labels.emplace_back(ctx.proc_body.size(), $2);
       ctx.proc_body.addSmallInt(0);
     }
-  | MZA_CALL MZA_MODE MZA_ID registers
+  | MZA_CALL MZA_MODE MZA_ID MZA_INT registers
     {
       $$ = ctx.proc_body.size();
       ctx.proc_body.addInstr($1);
       ctx.proc_body.addCharVal($2);
-      ctx.patch_procs.emplace_back(ctx.proc_body.size(), std::make_pair($3, $4->size()));
+      ctx.patch_procs.emplace_back(ctx.proc_body.size(), std::make_pair($3, $5->size()));
       ctx.proc_body.addSmallInt(0);
-      for (auto arg : *$4) {
+      ctx.proc_body.addCharVal($4);
+      for (auto arg : *$5) {
         ctx.proc_body.addReg(arg);
       }
-      delete $4;
+      delete $5;
     }
   | MZA_BUILTIN MZA_ID registers
     {
@@ -320,13 +321,14 @@ instruction:
       }
       delete $3;
     }
-  | MZA_TCALL MZA_MODE MZA_ID
+  | MZA_TCALL MZA_MODE MZA_ID MZA_INT
     {
       $$ = ctx.proc_body.size();
       ctx.proc_body.addInstr($1);
       ctx.proc_body.addCharVal($2);
       ctx.patch_procs.emplace_back(ctx.proc_body.size(), std::make_pair($3, -1));
       ctx.proc_body.addSmallInt(0);
+      ctx.proc_body.addCharVal($4);
     }
   | MZA_OPEN_AGGREGATION MZA_CTX
     {

@@ -175,12 +175,13 @@ struct CG_Cond {
     static const Kind _kind = CC_Call;
     Kind kind(void) const { return _kind; }
 
-    C_Call(ASTString _ident, BytecodeProc::Mode _m, const std::vector<Type>& _ty, const std::vector<CG_Value>& _params)
-      : ident(_ident), m(std::move(_m)), ty(_ty), params(_params) {}
+    C_Call(ASTString _ident, BytecodeProc::Mode _m, bool _cse, const std::vector<Type>& _ty, const std::vector<CG_Value>& _params)
+      : ident(_ident), m(std::move(_m)), ty(_ty), cse(_cse), params(_params) {}
 
     ASTString ident;
     // Return Types + argument types
     BytecodeProc::Mode m;
+    bool cse;
     std::vector<Type> ty;
     std::vector<CG_Value> params;
   };
@@ -200,12 +201,12 @@ struct CG_Cond {
     return T::of_ptr(new C_Reg(r, is_par));
   }
 
-  static T call(ASTString ident, BytecodeProc::Mode m, const std::vector<Type>& ty, const std::vector<CG_Value>& params) {
-    return _call(ident, m, ty, params);
+  static T call(ASTString ident, BytecodeProc::Mode m, bool cse, const std::vector<Type>& ty, const std::vector<CG_Value>& params) {
+    return _call(ident, m, cse, ty, params);
   }
 
-  static T _call(ASTString ident, BytecodeProc::Mode m, const std::vector<Type>& ty, const std::vector<CG_Value>& params) {
-    return T::of_ptr(new C_Call(ident, m, ty, params));
+  static T _call(ASTString ident, BytecodeProc::Mode m, bool cse, const std::vector<Type>& ty, const std::vector<CG_Value>& params) {
+    return T::of_ptr(new C_Call(ident, m, cse, ty, params));
   }
 
   template<typename ...Args>
@@ -469,31 +470,24 @@ struct CG {
     bool is_root(void) const { return strength() == Root; }
 
     Mode join(Mode o) {
-      if(m == BytecodeProc::RAW) return o.m;
-      if(o.m == BytecodeProc::RAW) return m;
       if(is_neg() != o.is_neg())
         return BytecodeProc::FUN;
       return Mode(std::max(strength(), o.strength()), is_neg());
     }
     bool is_submode(Mode o) {
-      if(m == BytecodeProc::RAW) return true;
-      if(o.m == BytecodeProc::RAW) return false;
       return is_neg() == o.is_neg() && strength() <= o.strength();
     }
     
     // Half
     Mode operator+(void) const {
-      if(m == BytecodeProc::RAW) return m;
       return Mode(strength() == Root ? Imp : strength(), is_neg());
     }
     Mode operator-(void) const {
-      if(m == BytecodeProc::RAW) return m;
       return Mode(strength(), !is_neg());
     }
     
     // Switch the current mode to functional.
     Mode operator*(void) const {
-      if(m ==BytecodeProc::RAW) return m;
       return Mode(Fun, is_neg());
     }
 
@@ -908,7 +902,7 @@ struct CodeGen {
   // Procedures yet to be emitted.
   CG_FunMap fun_map;
 
-  SigMap<CG_ProcID>::t dispatch;
+  SigMap<std::pair<CG_ProcID, bool>>::t dispatch;
 
   std::unordered_map<FunctionI*, CG_ProcID> fun_bodies;
   std::vector< std::pair<FunctionI*, std::pair<BytecodeProc::Mode, BytecodeProc::Mode> > > pending_bodies;
@@ -918,8 +912,8 @@ const char* instr_name(BytecodeStream::Instr i);
 const char* agg_name(AggregationCtx::Symbol s);
 const char* mode_name(BytecodeProc::Mode m);
 
-std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m);
-std::pair<CG_ProcID, BytecodeProc::Mode> find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m);
+std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m);
+std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m);
 
 };
 
