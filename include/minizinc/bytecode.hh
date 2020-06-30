@@ -1447,13 +1447,13 @@ namespace MiniZinc {
     void pushAgg(const Val& v, int stackOffset);
     void pushConstraint(Constraint* d);
     std::pair<Val, bool> cse_lookup(int proc, const CSETable::Key& key, BytecodeProc::Mode& mode) {
-      DTRACE1(CSE_LOOKUP_START, (uintptr_t) this);
+      DTRACE2(CSE_LOOKUP_START, (uintptr_t) this, _procs[proc].nargs);
       auto result = cse[proc].lookup(this, key, mode);
       DTRACE2(CSE_LOOKUP_END, (uintptr_t) this, result.second);
       return result;
     }
     void cse_insert(int proc, CSETable::Key& key, BytecodeProc::Mode& mode, Val& val) {
-      DTRACE1(CSE_INSERT_START, (uintptr_t) this);
+      DTRACE2(CSE_INSERT_START, (uintptr_t) this, _procs[proc].nargs);
       cse[proc].insert(this, key, mode, val);
       DTRACE1(CSE_INSERT_END, (uintptr_t) this);
     }
