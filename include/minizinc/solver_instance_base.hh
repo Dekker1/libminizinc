@@ -20,7 +20,8 @@
 #include <minizinc/statistics.hh>
 #include <minizinc/solver_instance.hh>
 #include <minizinc/solns2out.hh>
-#include <minizinc/bytecode.hh>
+#include <minizinc/interpreter/bytecode.hh>
+#include <minizinc/interpreter/constraint.hh>
 
 namespace MiniZinc {
 

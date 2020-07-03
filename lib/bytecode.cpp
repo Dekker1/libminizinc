@@ -9,8 +9,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include <minizinc/bytecode.hh>
-#include <minizinc/bytecode_primitives.hh>
+#include <minizinc/interpreter.hh>
+#include <minizinc/interpreter/primitives.hh>
 
 #include <minizinc/model.hh>
 #include <minizinc/iter.hh>
@@ -129,7 +129,7 @@ namespace MiniZinc {
     if (ps == PS_ENTAILED || ps == PS_FAILED) {
       interpreter->unsubscribe(c);
       c->destroy(interpreter);
-      Constraint::free(c);
+      ::free(c);
       return {nullptr, ps == PS_ENTAILED};
     }
     return {c, true};
@@ -829,7 +829,7 @@ void Val::finalizeLin(Interpreter* interpreter) {
         // FIXME: c->destroy will remove a non-existing reference to this.
         this->toVar()->addRef(interpreter);
         c->destroy(interpreter);
-        Constraint::free(c);
+        ::free(c);
       }
     }
   } else {

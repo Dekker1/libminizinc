@@ -11,7 +11,7 @@
 
 #include <minizinc/c_interface.h>
 #include <minizinc/solver.hh>
-#include <minizinc/bytecode_primitives.hh>
+#include <minizinc/interpreter/primitives.hh>
 
 #include <iostream>
 #include <cstdarg>

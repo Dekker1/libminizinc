@@ -16,7 +16,7 @@
 #include <set>
 #include <iostream>
 
-#include <minizinc/bytecode.hh>
+#include <minizinc/interpreter/bytecode.hh>
 
 #ifdef _MSC_VER
 // Include header for _BitScanForward intrinsic.

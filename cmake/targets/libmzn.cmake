@@ -75,8 +75,16 @@ add_library(mzn
   include/minizinc/aststring.hh
   include/minizinc/astvec.hh
   include/minizinc/builtins.hh
-  include/minizinc/bytecode.hh
-  include/minizinc/bytecode_primitives.hh
+  include/minizinc/interpreter.hh
+  include/minizinc/interpreter/_val_decl.hh
+  include/minizinc/interpreter/bytecode.hh
+  include/minizinc/interpreter/constraint.hh
+  include/minizinc/interpreter/cse.hh
+  include/minizinc/interpreter/primitives.hh
+  include/minizinc/interpreter/rco.hh
+  include/minizinc/interpreter/values.hh
+  include/minizinc/interpreter/variable.hh
+  include/minizinc/interpreter/vector.hh
   include/minizinc/chain_compressor.hh
   include/minizinc/config.hh.in
   include/minizinc/copy.hh

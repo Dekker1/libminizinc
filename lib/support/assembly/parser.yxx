@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <list>
 
-#include <minizinc/bytecode.hh>
+#include <minizinc/interpreter.hh>
 
 //Anonymous struct for when yyparse is exported
 typedef struct MZAContext MZAContext;
@@ -446,7 +446,8 @@ registers:
 
 %%
 
-#include <minizinc/bytecode_primitives.hh>
+#include <minizinc/interpreter/primitives.hh>
+#include <minizinc/interpreter.hh>
 
 void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s) {
   std::ostringstream oss;

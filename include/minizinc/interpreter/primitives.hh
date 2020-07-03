@@ -2,6 +2,7 @@
 
 /*
  *  Main authors:
+ *     Jip J. Dekker <jip.dekker@monash.edu>
  *     Guido Tack <guido.tack@monash.edu>
  */
 
@@ -12,7 +13,7 @@
 #ifndef __MINIZINC_BYTECODE_PRIMITIVES_HH__
 #define __MINIZINC_BYTECODE_PRIMITIVES_HH__
 
-#include <minizinc/bytecode.hh>
+#include <minizinc/interpreter.hh>
 #include <random>
 
 namespace MiniZinc {

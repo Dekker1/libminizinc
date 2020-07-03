@@ -10,7 +10,7 @@
 #include <minizinc/output.hh>
 #include <minizinc/prettyprinter.hh>
 
-#include <minizinc/bytecode.hh>
+#include <minizinc/interpreter.hh>
 #include <minizinc/codegen.hh>
 #include <../lib/codegen/codegen_internal.hpp>
 #include <../lib/codegen/analysis.hpp>

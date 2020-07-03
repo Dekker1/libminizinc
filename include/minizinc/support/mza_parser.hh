@@ -15,7 +15,7 @@
 // Assembly Parser Requirements
 #include <list>
 
-#include <minizinc/bytecode.hh>
+#include <minizinc/interpreter.hh>
 
 // This is a workaround for a bug in flex that only shows up
 // with the Microsoft C++ compiler

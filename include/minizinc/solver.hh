@@ -21,7 +21,6 @@
 #include <minizinc/solver_config.hh>
 #include <minizinc/solver_instance_base.hh>
 #include <minizinc/exception.hh>
-#include <minizinc/bytecode.hh>
 
 namespace MiniZinc {
   

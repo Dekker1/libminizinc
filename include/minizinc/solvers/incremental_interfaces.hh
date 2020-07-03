@@ -12,7 +12,6 @@
 #pragma once
 
 #include <string>
-#include <minizinc/bytecode.hh>
 #include <minizinc/solver_instance.hh>
 
 #ifdef ERROR    // Microsoft.

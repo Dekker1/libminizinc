@@ -18,7 +18,7 @@
 #include <set>
 #include <iostream>
 
-#include <minizinc/bytecode.hh>
+#include <minizinc/interpreter.hh>
 #include <minizinc/flatten_internal.hh>
 #include <minizinc/codegen_support.hh>
 
