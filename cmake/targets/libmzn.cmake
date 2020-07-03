@@ -13,8 +13,6 @@ add_library(mzn
   lib/aststring.cpp
   lib/astvec.cpp
   lib/builtins.cpp
-  lib/bytecode.cpp
-  lib/bytecode_primitives.cpp
   lib/cdecode.c
   lib/cencode.c
   lib/chain_compressor.cpp
@@ -39,6 +37,14 @@ add_library(mzn
   lib/flattener.cpp
   lib/gc.cpp
   lib/htmlprinter.cpp
+  lib/interpreter.cpp
+  lib/interpreter/bytecode.cpp
+  lib/interpreter/constraint.cpp
+  lib/interpreter/cse.cpp
+  lib/interpreter/primitives.cpp
+  lib/interpreter/values.cpp
+  lib/interpreter/variable.cpp
+  lib/interpreter/vector.cpp
   lib/json_parser.cpp
   lib/lexer.lxx
   lib/miniz.c

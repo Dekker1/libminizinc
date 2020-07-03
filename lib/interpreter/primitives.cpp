@@ -2,6 +2,7 @@
 
 /*
  *  Main authors:
+ *     Jip J. Dekker <jip.dekker@monash.edu>
  *     Guido Tack <guido.tack@monash.edu>
  */
 
@@ -45,7 +46,7 @@ namespace MiniZinc {
       &int_plus, &int_minus, &int_sum, &int_times, &int_lin_eq, &int_lin_eq_reif, &int_lin_le, &int_lin_le_reif, &mk_intvar, &boolnot, &opnot, &clause, &clause_reif, &forall, &exists, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
     };
   }
-  
+
   PrimitiveMap::PrimitiveMap(void) : _p(PrimitiveMap::MAX_ID+1) {
     for (PrimitiveMap::Primitive* p : BytecodePrimitives::AllPrimitives) {
       _p[p->ident()] = p;
@@ -58,7 +59,7 @@ namespace MiniZinc {
       _n[entry.second->ident()] = entry.first;
     }
   }
-  
+
   PrimitiveMap& primitiveMap(void) {
     static PrimitiveMap _pm;
     return _pm;
