@@ -16,21 +16,10 @@
 
 namespace MiniZinc {
 
-  CSETable::Key::Key(Interpreter& interpreter, const std::vector<Val> &vec) {
-    DTRACE1(CSE_KEYALLOC_START, (uintptr_t) &interpreter);
-    _size = vec.size();
-    _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
-
-    for (int i=0; i < _size; ++i) {
-      _vals[i] = WeakVal(interpreter, vec[i]);
-    }
-    _hash = compute_hash(*this);
-    DTRACE1(CSE_KEYALLOC_END, (uintptr_t) &interpreter);
-  }
-
-  std::pair<Val, bool> CSETable::lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode) {
-    iterator it;
+  template<class Key>
+  std::pair<Val, bool> CSETable<Key>::find(Interpreter& interpreter, const Key& key, BytecodeProc::Mode& mode) {
     size_t i = _table.size();
+    auto it = _table[i].end();
     do {
       i--;
       it = _table[i].find(key);
@@ -51,22 +40,22 @@ namespace MiniZinc {
             assert(v==0 || v==1);
             return 1 - v;
           } else {
-            Key nkey(*interpreter, {v});
+            FixedKey<1> nkey(interpreter, {v});
             Val new_val;
             bool found;
             auto cmode = BytecodeProc::FUN;
-            std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::OP_NOT, nkey, cmode);
+            std::tie(new_val, found) = interpreter.cse_find(PrimitiveMap::OP_NOT, nkey, cmode);
             if (!found) {
-              Variable* new_var = Variable::a(interpreter, interpreter->boolean_domain(), true, interpreter->newIdent());
+              Variable* new_var = Variable::a(&interpreter, interpreter.boolean_domain(), true, interpreter.newIdent());
               new_val = Val(new_var);
-              auto c = Constraint::a(interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {v, new_val});
+              auto c = Constraint::a(&interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {v, new_val});
               assert(c.first);
-              new_var->addRef(interpreter);
-              new_var->addDefinition(interpreter, c.first);
-              interpreter->cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
-              RefCountedObject::rmRef(interpreter, new_var);
+              new_var->addRef(&interpreter);
+              new_var->addDefinition(&interpreter, c.first);
+              interpreter.cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
+              RefCountedObject::rmRef(&interpreter, new_var);
             } else {
-              nkey.destroy(*interpreter);
+              nkey.destroy(interpreter);
             }
             return new_val;
           }
@@ -92,22 +81,23 @@ namespace MiniZinc {
     return {Val(), false};
   }
 
-  void CSETable::insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val) {
+  template<class Key>
+  void CSETable<Key>::insert(Interpreter& interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val) {
     DBG_INTERPRETER("--- CSE add: hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString(DBG_TRIM_OUTPUT) << "\n");
     // If value is reference counted, flag that it's in CSE
-    val.addWeakRef(interpreter);
+    val.addWeakRef(&interpreter);
     auto insertion = _table.back().emplace(key, std::make_pair(mode, val));
     if (!insertion.second) {
-      CSETable::iterator& it = insertion.first;
+      auto& it = insertion.first;
       // We are replacing another entry within the CSE table.
       assert(it->first == key && it->second.first != mode);
-      key.destroy(*interpreter);
+      key.destroy(interpreter);
       Val oldVal = Val::follow_alias(it->second.second);
       BytecodeProc::Mode& oldMode = it->second.first;
       if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
         if (oldVal.isVar()) {
           Variable* v = oldVal.toVar();
-          v->alias(interpreter, BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode) ? 1 : 0);
+          v->alias(&interpreter, BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode) ? 1 : 0);
         }
       } else if (mode == BytecodeProc::FUN || mode == BytecodeProc::FUN_NEG) {
         if (oldVal.isVar()) {
@@ -115,33 +105,33 @@ namespace MiniZinc {
           if (BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode)) {
             // Value might have already been aliased earlier in the call stack
             if (val != oldVal) {
-              v->alias(interpreter, val);
+              v->alias(&interpreter, val);
             }
           } else {
-            Key nkey(*interpreter, {val});
+            FixedKey<1> nkey(interpreter, {val});
             Val new_val;
             bool found;
             auto cmode = BytecodeProc::FUN;
-            std::tie(new_val, found) = interpreter->cse_lookup(PrimitiveMap::OP_NOT, nkey, cmode);
+            std::tie(new_val, found) = interpreter.cse_find(PrimitiveMap::OP_NOT, nkey, cmode);
             if (!found) {
-              Variable* new_var = Variable::a(interpreter, interpreter->boolean_domain(), true, interpreter->newIdent());
+              Variable* new_var = Variable::a(&interpreter, interpreter.boolean_domain(), true, interpreter.newIdent());
               new_val = Val(new_var);
-              auto c = Constraint::a(interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {val, new_val});
+              auto c = Constraint::a(&interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {val, new_val});
               assert(c.first);
-              new_var->addRef(interpreter);
-              new_var->addDefinition(interpreter, c.first);
-              interpreter->cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
-              RefCountedObject::rmRef(interpreter, new_var);
+              new_var->addRef(&interpreter);
+              new_var->addDefinition(&interpreter, c.first);
+              interpreter.cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
+              RefCountedObject::rmRef(&interpreter, new_var);
             } else {
-              nkey.destroy(*interpreter);
+              nkey.destroy(interpreter);
             }
             if (new_val != oldVal) {
-              v->alias(interpreter, new_val);
+              v->alias(&interpreter, new_val);
             }
           }
         }
       }
-      it->second.second.removeWeakRef(interpreter);
+      it->second.second.removeWeakRef(&interpreter);
       it->second = std::make_pair(mode, val);
     }
   }

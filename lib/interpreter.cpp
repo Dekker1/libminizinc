@@ -636,7 +636,7 @@ namespace MiniZinc {
         {
           DBG_INTERPRETER("RET");
           if (!frame->cse_info.empty()) {
-            DBG_INTERPRETER(" %-- " << std::get<0>(frame->cse_info.back()) << " (" << _procs[std::get<0>(frame->cse_info.back())].name << ") " << BytecodeProc::mode_to_string[std::get<1>(frame->cse_info.back())]);
+            DBG_INTERPRETER(" %-- " << frame->cse_info.back().proc << " (" << _procs[frame->cse_info.back().proc].name << ") " << BytecodeProc::mode_to_string[frame->cse_info.back().mode]);
           }
           DBG_INTERPRETER("\n");
           assert(!_stack.empty());
@@ -654,15 +654,15 @@ execute_ret:
           assert(!frame->cse_info.empty());
 
           for (auto& entry : frame->cse_info) {
-            if (std::get<2>(entry).size() != 0) {
-              if (std::get<1>(entry) == BytecodeProc::ROOT || std::get<1>(entry) == BytecodeProc::ROOT_NEG) {
+            if (entry.key) {
+              if (entry.mode == BytecodeProc::ROOT || entry.mode == BytecodeProc::ROOT_NEG) {
                 Val v = Val(1);
-                cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), v);
-              } else if (std::get<3>(entry) == _agg.back().size()-1) {
+                cse_insert(entry.proc, *entry.key, entry.mode, v);
+              } else if (entry.stack_size == _agg.back().size()-1) {
                 Val ret = _agg[_agg.size()-1].back();
-                cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
+                cse_insert(entry.proc, *entry.key, entry.mode, ret);
               } else {
-                std::get<2>(entry).destroy(*this);
+                entry.key->destroy(*this);
               }
             }
           }
@@ -691,13 +691,13 @@ execute_ret:
             DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
           }
           DBG_INTERPRETER("\n");
-          CSETable::Key cse_key;
+          std::unique_ptr<CSEKey> cse_key;
           if (cse) {
-            cse_key = CSETable::Key(*this, args);
+            cse_key = this->cse_key(code, args);
             // Lookup item in CSE
-            auto lookup = cse_lookup(code, cse_key, mode);
+            auto lookup = cse_find(code, *cse_key, mode);
             if (lookup.second) {
-              cse_key.destroy(*this);
+              cse_key->destroy(*this);
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(lookup.first.isInt());
                 if (lookup.first.toInt() != 1) {
@@ -733,7 +733,7 @@ execute_ret:
               }
               if (cse) {
                 Val ret(c.second);
-                cse_insert(code, cse_key, mode, ret);
+                cse_insert(code, *cse_key, mode, ret);
               }
               /// TODO: delayed calls
   //            if (_procs[code].delay) {
@@ -783,14 +783,14 @@ execute_ret:
           for (int i = 0; i < args.size(); ++i) {
             args[i] = frame->reg[i];
           }
-          CSETable::Key cse_key;
+          std::unique_ptr<CSEKey> cse_key;
           if (cse) {
-            cse_key = CSETable::Key(*this, args);
+            cse_key = this->cse_key(code, args);
             bool found;
             Val ret;
-            std::tie(ret, found) = cse_lookup(code, cse_key, mode);
+            std::tie(ret, found) = cse_find(code, *cse_key, mode);
             if (found) {
-              cse_key.destroy(*this);
+              cse_key->destroy(*this);
               // RET with CSE found value
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(ret.isInt());
@@ -803,8 +803,8 @@ execute_ret:
                 pushAgg(ret, -1);
               }
               for (auto& entry : frame->cse_info) {
-                if (std::get<2>(entry).size() != 0) {
-                  cse_insert(std::get<0>(entry), std::get<2>(entry), std::get<1>(entry), ret);
+                if (entry.key) {
+                  cse_insert(entry.proc, *entry.key, entry.mode, ret);
                 }
               }
               _stack.back().destroy(this);
@@ -830,7 +830,7 @@ execute_ret:
             }
             if (cse) {
               Val ret(c.second);
-              cse_insert(code, cse_key, mode, ret);
+              cse_insert(code, *cse_key, mode, ret);
             }
             /// TODO: delayed calls
 //            if (_procs[code].delay) {
@@ -1219,8 +1219,30 @@ execute_ret:
       a.destroyStack(this);
 //      a.destroyDef(this); /// TODO: replace with what? Just delete all constraints?
     }
-    for (auto &table : cse) {
-      table.destroy(this);
+    assert(cse.size() == _procs.size());
+    for (int i = 0; i < _procs.size(); ++i) {
+      switch (_procs[i].nargs) {
+        case 1: {
+          auto table = static_cast<CSETable<FixedKey<1>>*>(cse[i]);
+          table->destroy(this);
+        }
+        case 2: {
+          auto table = static_cast<CSETable<FixedKey<2>>*>(cse[i]);
+          table->destroy(this);
+        }
+        case 3: {
+          auto table = static_cast<CSETable<FixedKey<3>>*>(cse[i]);
+          table->destroy(this);
+        }
+        case 4: {
+          auto table = static_cast<CSETable<FixedKey<4>>*>(cse[i]);
+          table->destroy(this);
+        }
+        default: {
+          auto table = static_cast<CSETable<VariadicKey>*>(cse[i]);
+          table->destroy(this);
+        }
+      }
     }
     RefCountedObject::rmRef(this, infinite_dom);
     RefCountedObject::rmRef(this, boolean_dom);
@@ -1319,8 +1341,29 @@ execute_ret:
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
     trail_size.emplace_back(var_list_trail.size(), obj_trail.size(), alias_trail.size(), domain_trail.size(), def_trail.size());
     timestamp_trail.push_back(interpreter->_identCount);
-    for (auto &table : interpreter->cse) {
-      table.push(interpreter, !last_operation_pop);
+    for (int i = 0; i < interpreter->_procs.size(); ++i) {
+      switch (interpreter->_procs[i].nargs) {
+        case 1: {
+          auto table = static_cast<CSETable<FixedKey<1>>*>(interpreter->cse[i]);
+          table->push(interpreter, !last_operation_pop);
+        }
+        case 2: {
+          auto table = static_cast<CSETable<FixedKey<2>>*>(interpreter->cse[i]);
+          table->push(interpreter, !last_operation_pop);
+        }
+        case 3: {
+          auto table = static_cast<CSETable<FixedKey<3>>*>(interpreter->cse[i]);
+          table->push(interpreter, !last_operation_pop);
+        }
+        case 4: {
+          auto table = static_cast<CSETable<FixedKey<4>>*>(interpreter->cse[i]);
+          table->push(interpreter, !last_operation_pop);
+        }
+        default: {
+          auto table = static_cast<CSETable<VariadicKey>*>(interpreter->cse[i]);
+          table->push(interpreter, !last_operation_pop);
+        }
+      }
     }
     last_operation_pop = false;
     return len();
@@ -1375,8 +1418,29 @@ execute_ret:
       domain_trail.pop_back();
     }
     // Remove all additions/changes to the CSE table
-    for (auto &table : interpreter->cse) {
-      table.pop(interpreter);
+    for (int i = 0; i < interpreter->_procs.size(); ++i) {
+      switch (interpreter->_procs[i].nargs) {
+        case 1: {
+          auto table = static_cast<CSETable<FixedKey<1>>*>(interpreter->cse[i]);
+          table->pop(interpreter);
+        }
+        case 2: {
+          auto table = static_cast<CSETable<FixedKey<2>>*>(interpreter->cse[i]);
+          table->pop(interpreter);
+        }
+        case 3: {
+          auto table = static_cast<CSETable<FixedKey<3>>*>(interpreter->cse[i]);
+          table->pop(interpreter);
+        }
+        case 4: {
+          auto table = static_cast<CSETable<FixedKey<4>>*>(interpreter->cse[i]);
+          table->pop(interpreter);
+        }
+        default: {
+          auto table = static_cast<CSETable<VariadicKey>*>(interpreter->cse[i]);
+          table->pop(interpreter);
+        }
+      }
     }
     /// TODO: Remove all newly created variables
 //    if (stack->prev() != back) {  // If last element on the stack changed

@@ -137,14 +137,24 @@ namespace MiniZinc {
     int _pred;
     char _mode;
     // CSE information for RET statement
-    // <proc, mode, cse_key, stack size>
-    typedef std::tuple<int,BytecodeProc::Mode, CSETable::Key, size_t> CSEInfo;
+    class CSEInfo {
+    public:
+      int proc;
+      BytecodeProc::Mode mode;
+      std::unique_ptr<CSEKey> key;
+      size_t stack_size;
+      CSEInfo(int _proc, BytecodeProc::Mode _mode, std::unique_ptr<CSEKey>& _key, size_t _stack_size)
+        : proc(_proc), mode(_mode), key(std::move(_key)), stack_size(_stack_size) {}
+    };
     std::vector<CSEInfo> cse_info;
 
     BytecodeFrame(const BytecodeStream& bs0, int pred, char mode) :
-    reg(bs0.maxRegister()), bs(&bs0),
-    pc(0),
-    _pred(pred), _mode(mode) {}
+      reg(bs0.maxRegister()), bs(&bs0), pc(0), _pred(pred), _mode(mode) {}
+    BytecodeFrame(const BytecodeFrame& frame) :
+      reg(frame.reg), bs(frame.bs), pc(frame.pc), _pred(frame._pred), _mode(frame._mode) {
+        assert(frame.cse_info.empty());
+      }
+
     void destroyRegisters(Interpreter* interpreter) {
       reg.destroy(interpreter);
     }
@@ -273,7 +283,7 @@ namespace MiniZinc {
     std::vector<LoopState> _loops;
     std::vector<BytecodeProc>& _procs;
     int _identCount;
-    std::vector<CSETable> cse;
+    std::vector<void*> cse; // Different instantiations of CSETable
     std::vector<Constraint*> delayed_calls;
     std::deque<Constraint*> _propQueue;
     RegisterFile globals;
@@ -310,15 +320,84 @@ namespace MiniZinc {
     bool runDelayed();
     void pushAgg(const Val& v, int stackOffset);
     void pushConstraint(Constraint* d);
-    std::pair<Val, bool> cse_lookup(int proc, const CSETable::Key& key, BytecodeProc::Mode& mode) {
-      DTRACE2(CSE_LOOKUP_START, (uintptr_t) this, _procs[proc].nargs);
-      auto result = cse[proc].lookup(this, key, mode);
+    std::unique_ptr<CSEKey> cse_key(int proc, const std::vector<Val>& vals) {
+      switch (_procs[proc].nargs) {
+        case 1: {
+          return std::unique_ptr<CSEKey>(new FixedKey<1>(*this, vals));
+        }
+        case 2: {
+          return std::unique_ptr<CSEKey>(new FixedKey<2>(*this, vals));
+        }
+        case 3: {
+          return std::unique_ptr<CSEKey>(new FixedKey<3>(*this, vals));
+        }
+        case 4: {
+          return std::unique_ptr<CSEKey>(new FixedKey<4>(*this, vals));
+        }
+      }
+      return std::unique_ptr<CSEKey>(new VariadicKey(*this, vals));
+    }
+    std::pair<Val, bool> cse_find(int proc, const CSEKey& key, BytecodeProc::Mode& mode) {
+      std::pair<Val, bool> result;
+      switch (_procs[proc].nargs) {
+        case 1: {
+          auto fkey = static_cast<const FixedKey<1>&>(key);
+          auto table = static_cast<CSETable<FixedKey<1>>*>(cse[proc]);
+          result = table->find(*this, fkey, mode);
+        }
+        case 2: {
+          auto fkey = static_cast<const FixedKey<2>&>(key);
+          auto table = static_cast<CSETable<FixedKey<2>>*>(cse[proc]);
+          result = table->find(*this, fkey, mode);
+        }
+        case 3: {
+          auto fkey = static_cast<const FixedKey<3>&>(key);
+          auto table = static_cast<CSETable<FixedKey<3>>*>(cse[proc]);
+          result = table->find(*this, fkey, mode);
+        }
+        case 4: {
+          auto fkey = static_cast<const FixedKey<4>&>(key);
+          auto table = static_cast<CSETable<FixedKey<4>>*>(cse[proc]);
+          result = table->find(*this, fkey, mode);
+        }
+        default: {
+          auto vkey = static_cast<const VariadicKey&>(key);
+          auto table = static_cast<CSETable<VariadicKey>*>(cse[proc]);
+          result = table->find(*this, vkey, mode);
+        }
+      }
       DTRACE2(CSE_LOOKUP_END, (uintptr_t) this, result.second);
       return result;
     }
-    void cse_insert(int proc, CSETable::Key& key, BytecodeProc::Mode& mode, Val& val) {
+    void cse_insert(int proc, CSEKey& key, BytecodeProc::Mode& mode, Val& val) {
       DTRACE2(CSE_INSERT_START, (uintptr_t) this, _procs[proc].nargs);
-      cse[proc].insert(this, key, mode, val);
+      switch (_procs[proc].nargs) {
+        case 1: {
+          auto fkey = static_cast<FixedKey<1>&>(key);
+          auto table = static_cast<CSETable<FixedKey<1>>*>(cse[proc]);
+          table->insert(*this, fkey, mode, val);
+        }
+        case 2: {
+          auto fkey = static_cast<FixedKey<2>&>(key);
+          auto table = static_cast<CSETable<FixedKey<2>>*>(cse[proc]);
+          table->insert(*this, fkey, mode, val);
+        }
+        case 3: {
+          auto fkey = static_cast<FixedKey<3>&>(key);
+          auto table = static_cast<CSETable<FixedKey<3>>*>(cse[proc]);
+          table->insert(*this, fkey, mode, val);
+        }
+        case 4: {
+          auto fkey = static_cast<FixedKey<4>&>(key);
+          auto table = static_cast<CSETable<FixedKey<4>>*>(cse[proc]);
+          table->insert(*this, fkey, mode, val);
+        }
+        default: {
+          auto vkey = static_cast<VariadicKey&>(key);
+          auto table = static_cast<CSETable<VariadicKey>*>(cse[proc]);
+          table->insert(*this, vkey, mode, val);
+        }
+      }
       DTRACE1(CSE_INSERT_END, (uintptr_t) this);
     }
     void set_global(int i, const Val& val) { globals.assign(this, i, val); }
@@ -393,5 +472,6 @@ namespace MiniZinc {
     symbol(static_cast<Symbol>(s)), n_symbols(1) {
     assert(s >= 0 && s <= VCTX_OTHER);
   }
-
 }
+
+#include <minizinc/interpreter/cse.hpp>

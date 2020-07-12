@@ -11,6 +11,7 @@
 
 #include <minizinc/c_interface.h>
 #include <minizinc/solver.hh>
+#include <minizinc/interpreter.hh>
 #include <minizinc/interpreter/primitives.hh>
 
 #include <iostream>

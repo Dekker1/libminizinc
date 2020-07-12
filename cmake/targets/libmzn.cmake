@@ -40,7 +40,6 @@ add_library(mzn
   lib/interpreter.cpp
   lib/interpreter/bytecode.cpp
   lib/interpreter/constraint.cpp
-  lib/interpreter/cse.cpp
   lib/interpreter/primitives.cpp
   lib/interpreter/values.cpp
   lib/interpreter/variable.cpp

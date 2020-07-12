@@ -11,6 +11,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <minizinc/interpreter/constraint.hh>
+#include <minizinc/interpreter.hh>
 #include <minizinc/interpreter/primitives.hh>
 
 namespace MiniZinc {

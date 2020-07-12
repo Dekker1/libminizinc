@@ -13,11 +13,13 @@
 #ifndef __MINIZINC_BYTECODE_PRIMITIVES_HH__
 #define __MINIZINC_BYTECODE_PRIMITIVES_HH__
 
-#include <minizinc/interpreter.hh>
+#include <minizinc/interpreter/bytecode.hh>
+#include <minizinc/interpreter/constraint.hh>
+#include <minizinc/interpreter/values.hh>
 #include <random>
 
 namespace MiniZinc {
-  
+
   class PrimitiveMap {
   public:
     enum Id {
@@ -694,14 +696,7 @@ namespace MiniZinc {
         std::random_device rnd;
         generator = std::mt19937(0);
       }
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
-        assert(args.size() == 2);
-        assert(args[0].isInt() && args[1].isInt());
-
-        std::uniform_int_distribution<> dis(args[0].toInt(), args[1].toInt());
-        Val rnd = dis(generator);
-        i.pushAgg(rnd, -1);
-      };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
       void setSeed(int seed) {
         generator = std::mt19937(seed);
       }
@@ -712,71 +707,19 @@ namespace MiniZinc {
     class Sol : public PrimitiveMap::Primitive {
     public:
       Sol() : PrimitiveMap::Primitive("sol",PrimitiveMap::SOL, 1) {}
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
-        assert(args.size() == 1);
-        assert(args[0].isVar());
-
-        auto it = i.solutions.find(args[0].timestamp());
-        assert(it != i.solutions.end());
-        Val sol(it->second);
-
-        i.pushAgg(sol, -1);
-      };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
     };
 
     class Sort : public PrimitiveMap::Primitive {
     public:
       Sort() : PrimitiveMap::Primitive("internal_sort",PrimitiveMap::SORT, 1) {}
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
-        assert(args.size()==1);
-
-        Val al = args[0][0];
-        std::vector<int> ai(al.size());
-        for (int j=0; j < al.size(); j++) {
-          ai[j] = al[j].toInt();
-        }
-        std::stable_sort(ai.begin(), ai.end());
-
-        std::vector<Val> sorted(al.size());
-        for (int j=0; j < al.size(); j++) {
-          sorted[j] = Val(ai[j]);
-        }
-        Vec* al_sorted = Vec::allocate_array(&i, i.newIdent(), sorted);
-
-        i.pushAgg(Val(al_sorted), -1);
-      };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
     };
 
     class SortBy : public PrimitiveMap::Primitive {
     public:
       SortBy() : PrimitiveMap::Primitive("sort_by",PrimitiveMap::SORT_BY, 2) {}
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
-        assert(args.size()==2);
-
-        Val al = args[0][0];
-        Val order_e = args[1][0];
-        std::vector<Val> order(order_e.size());
-        std::vector<int> a(order_e.size());
-        for (int j=0; j < order.size(); j++) {
-          a[j] = j;
-          order[j] = order_e[j];
-        }
-        struct Ord {
-          std::vector<Val>& order;
-          explicit Ord(std::vector<Val>& order0) : order(order0) {}
-          bool operator()(int i, int j) {
-            return order[i] < order[j];
-          }
-        } _ord(order);
-        std::stable_sort(a.begin(), a.end(), _ord);
-        std::vector<Val> sorted(a.size());
-        for (int j = sorted.size(); j--;) {
-          sorted[j] = al[a[j]];
-        }
-        Vec* al_sorted = Vec::allocate_array(&i, i.newIdent(), sorted);
-
-        i.pushAgg(Val(al_sorted), -1);
-      };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
     };
 
     class IntMax : public PrimitiveMap::Primitive {
@@ -849,94 +792,26 @@ namespace MiniZinc {
     class Infinity : public PrimitiveMap::Primitive {
     public:
       Infinity() : PrimitiveMap::Primitive("infinity",PrimitiveMap::INFINITY_, 1) {}
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
-        assert(args.size()==1);
-        assert(args[0].isInt());
-
-        if (args[0] > 0) {
-          i.pushAgg(Val::infinity(), -1);
-        } else {
-          i.pushAgg(-Val::infinity(), -1);
-        }
-      };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
     };
 
     class InfiniteDomain : public PrimitiveMap::Primitive {
     public:
       InfiniteDomain() : PrimitiveMap::Primitive("infinite_domain",PrimitiveMap::INFINITE_DOMAIN, 0) {}
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
-        assert(args.size()==0);
-        i.pushAgg(i.infinite_domain(), -1);
-      };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
     };
 
     class BooleanDomain : public PrimitiveMap::Primitive {
     public:
       BooleanDomain() : PrimitiveMap::Primitive("boolean_domain",PrimitiveMap::BOOLEAN_DOMAIN, 0) {}
-      virtual void execute(Interpreter& i, const std::vector<Val>& args) {
-        assert(args.size()==0);
-        i.pushAgg(i.boolean_domain(), -1);
-      };
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
     };
 
-  class SliceXd : public PrimitiveMap::Primitive {
-  public:
-    SliceXd() : PrimitiveMap::Primitive("slice_Xd",PrimitiveMap::SLICE_XD, 3) {}
-    virtual void execute(Interpreter& i, const std::vector<Val>& args) {
-      assert(args.size()==3);
-      assert(args[0].isVec() && args[1].isVec() && args[2].isVec() );
-      assert(args[0][1].size() / 2 == args[1][0].size());
-
-      std::vector<Val> idxs(args[1][0].size());
-      std::vector<Val> slice;
-      // Initialise indexes
-      for (int j = 0; j < idxs.size(); ++j) {
-        idxs[j] = args[0][1][j*2];
-      }
-
-      // Walk through array and make slice selection
-      int level = idxs.size() - 1;
-      int it = 0;
-      while (level >= 0) {
-        bool in_slice = true;
-        for (int k = 0; k < idxs.size(); ++k) {
-          in_slice = in_slice && args[1][0][k][0] <= idxs[k] && idxs[k] <= args[1][0][k][1];
-        }
-
-        assert(it < args[0][0].size());
-        if (in_slice) {
-          slice.push_back(args[0][0][it]);
-        }
-        it++;
-
-        while (level >= 0) {
-          if (idxs[level] < args[0][1][level*2+1]) {
-            idxs[level]++;
-            level = idxs.size() - 1;
-            break;
-          } else {
-            idxs[level] = args[0][1][level*2];
-            level--;
-          }
-        }
-      }
-
-      // Format new index sets
-      std::vector<Val> dom;
-      dom.reserve(args[2][0].size() * 2);
-      for (int j = 0; j < args[2][0].size(); ++j) {
-        assert(args[2][0][j].size() == 2);
-        dom.push_back(args[2][0][j][0]);
-        dom.push_back(args[2][0][j][1]);
-      }
-
-      Vec* values = Vec::a(&i, i.newIdent(), slice);
-      Vec* idx = Vec::a(&i, i.newIdent(), dom);
-      Vec* nv = Vec::a(&i, i.newIdent(), {Val(values), Val(idx)});
-
-      i.pushAgg(Val(nv), -1);
+    class SliceXd : public PrimitiveMap::Primitive {
+    public:
+      SliceXd() : PrimitiveMap::Primitive("slice_Xd",PrimitiveMap::SLICE_XD, 3) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
     };
-  };
 }
 }
 

@@ -15,6 +15,7 @@
 #include <minizinc/interpreter/values.hh>
 #include <minizinc/interpreter/bytecode.hh>
 
+#include <array>
 #include <unordered_map>
 
 namespace MiniZinc {
@@ -26,6 +27,7 @@ namespace MiniZinc {
     // Value of the Val
     void* _v;
   public:
+    WeakVal() : _v(nullptr) {}
     explicit WeakVal(Interpreter& interpreter, const Val& val) {
       if (val.isInt()) {
         assert((reinterpret_cast<ptrdiff_t>(val._v) & static_cast<ptrdiff_t>(3)) == 0);
@@ -73,48 +75,110 @@ namespace MiniZinc {
     }
   };
 
-  /// CSE table: Saved results of historical executions
-  class CSETable {
+  class CSEKey {
+  protected:
+    size_t _hash;
   public:
-    class Key {
-    private:
-      size_t _size;
-      size_t _hash;
-      WeakVal* _vals;
-    public:
-      Key() : _size(0), _vals(nullptr) {}
-      explicit Key(Interpreter& interpreter, const std::vector<Val>& vec);
-      // INVARIANT: Key is not used after destroy is called
-      void destroy(Interpreter& interpreter) const {
-        for (int i = 0; i < _size; ++i) {
-          _vals[i].destroy(interpreter);
-        }
-        free(_vals);
-      }
+    CSEKey() : _hash(0) {}
+    virtual ~CSEKey() {}
+    // INVARIANT: Key is not used after destroy is called
+    virtual void destroy(Interpreter& interpreter) = 0;
+    const size_t hash() const { return _hash; }
 
-      const size_t hash() const { return _hash; }
-      const size_t& size() const { return _size; }
-      const bool operator==(const Key& rhs) const {
-        if (_size != rhs._size) {
+    // Any implementation of CSEKey should implement a == operator for unordered_map;
+    // virtual const bool operator==(const CSEKey& rhs) const = 0;
+  };
+
+  class VariadicKey : public CSEKey {
+  private:
+    size_t _size;
+    WeakVal* _vals;
+  public:
+    VariadicKey() : _size(0), _vals(nullptr) {}
+    VariadicKey(Interpreter& interpreter, const std::vector<Val>& vals) {
+      _size = vals.size();
+      _vals = (WeakVal*) malloc(_size*sizeof(WeakVal));
+
+      for (int i=0; i < _size; ++i) {
+        _vals[i] = WeakVal(interpreter, vals[i]);
+      }
+      _hash = compute_hash(*this);
+    }
+    virtual ~VariadicKey() {}
+
+    void destroy(Interpreter& interpreter) override {
+      for (int i = 0; i < _size; ++i) {
+        _vals[i].destroy(interpreter);
+      }
+      free(_vals);
+    }
+
+    const bool operator==(const VariadicKey& rhs) const {
+      if (_size != rhs._size) {
+        return false;
+      }
+      for (int i = 0; i < _size; ++i) {
+        if (_vals[i] != rhs._vals[i]) {
           return false;
         }
-        for (int i = 0; i < _size; ++i) {
-          if (_vals[i] != rhs._vals[i]) {
-            return false;
-          }
-        }
-        return true;
       }
-    protected:
-      static size_t compute_hash(const Key& k) {
-        auto combine = [](size_t& incumbent, size_t h) { incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2); };
-        size_t hash = 0;
-        for (int i = 0; i < k._size; ++i) {
-          combine(hash, k._vals[i].hash());
-        }
-        return hash;
+      return true;
+    }
+  protected:
+    static size_t compute_hash(const VariadicKey& k) {
+      auto combine = [](size_t& incumbent, size_t h) { incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2); };
+      size_t hash = 0;
+      for (int i = 0; i < k._size; ++i) {
+        combine(hash, k._vals[i].hash());
       }
-    };
+      return hash;
+    }
+  };
+
+  template<int nargs>
+  class FixedKey : public CSEKey {
+  private:
+    std::array<WeakVal, nargs> _vals;
+  public:
+    FixedKey() {}
+    FixedKey(Interpreter& interpreter, const std::vector<Val>& vals) {
+      assert(vals.size() == nargs);
+      for (int i=0; i < nargs; ++i) {
+        _vals[i] = WeakVal(interpreter, vals[i]);
+      }
+      _hash = compute_hash(*this);
+    }
+    virtual ~FixedKey() {}
+
+    void destroy(Interpreter& interpreter) override {
+      for (int i = 0; i < nargs; ++i) {
+        _vals[i].destroy(interpreter);
+      }
+    }
+    const bool operator==(const FixedKey<nargs>& rhs) const {
+      for (int i = 0; i < nargs; ++i) {
+        if (_vals[i] != rhs._vals[i]) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+  protected:
+    static size_t compute_hash(const FixedKey<nargs>& k) {
+      auto combine = [](size_t& incumbent, size_t h) { incumbent ^= h + 0x9e3779b9 + (incumbent << 6) + (incumbent >> 2); };
+      size_t hash = 0;
+      for (int i = 0; i < nargs; ++i) {
+        combine(hash, k._vals[i].hash());
+      }
+      return hash;
+    }
+  };
+
+  /// CSE table: Saved results of historical executions
+  template <class Key>
+  class CSETable {
+  protected:
     struct Hash { size_t operator()(const Key& key) const {
       return key.hash();
     }};
@@ -122,17 +186,19 @@ namespace MiniZinc {
       return lhs == rhs;
     }};
     typedef std::unordered_map<Key, std::pair<BytecodeProc::Mode, Val>, Hash, Equals> impl;
-    typedef impl::iterator iterator;
-    std::pair<Val, bool> lookup(Interpreter* interpreter, const Key& key, BytecodeProc::Mode& mode);
-    void insert(Interpreter* interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val);
-  protected:
     std::vector<impl> _table = std::vector<impl>(1);
+
   public:
     ~CSETable() { assert(_table.size() == 1 && _table[0].empty()); }
+
+    std::pair<Val, bool> find(Interpreter& interpreter, const Key& key, BytecodeProc::Mode& mode);
+    void insert(Interpreter& interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val);
+
+    //TODO: Is this const_cast actually legal??
     void destroy(Interpreter* interpreter) {
       for (auto &table : _table) {
         for(auto &item : table) {
-          item.first.destroy(*interpreter);
+          const_cast<Key&>(item.first).destroy(*interpreter);
           item.second.second.removeWeakRef(interpreter);
         }
       }
@@ -144,7 +210,7 @@ namespace MiniZinc {
         auto it = table.begin();
         while (it != table.end()) {
           if (!it->second.second.exists()) {
-            it->first.destroy(*interpreter);
+            const_cast<Key&>(it->first).destroy(*interpreter);
             it->second.second.removeWeakRef(interpreter);
             it = table.erase(it);
           } else {
@@ -156,7 +222,7 @@ namespace MiniZinc {
     }
     void pop(Interpreter* interpreter) {
       for (auto& item : _table.back()) {
-        item.first.destroy(*interpreter);
+        const_cast<Key&>(item.first).destroy(*interpreter);
         item.second.second.removeWeakRef(interpreter);
       }
       _table.pop_back();
