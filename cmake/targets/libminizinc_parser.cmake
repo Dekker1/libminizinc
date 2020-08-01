@@ -10,8 +10,10 @@ macro(MD5 filename md5sum)
   string(MD5 ${md5sum} "${STRIPPED_MD5_FILE}")
 endmacro(MD5)
 
-find_package(BISON)
-if(BISON_FOUND)
+find_package(BISON 3.4)
+find_package(FLEX 2.5)
+
+if(BISON_FOUND AND FLEX_FOUND)
   BISON_TARGET(MZNParser
     ${PROJECT_SOURCE_DIR}/lib/parser.yxx
     ${PROJECT_BINARY_DIR}/parser.tab.cpp
