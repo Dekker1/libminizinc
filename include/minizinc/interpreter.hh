@@ -150,10 +150,8 @@ namespace MiniZinc {
 
     BytecodeFrame(const BytecodeStream& bs0, int pred, char mode) :
       reg(bs0.maxRegister()), bs(&bs0), pc(0), _pred(pred), _mode(mode) {}
-    BytecodeFrame(const BytecodeFrame& frame) :
-      reg(frame.reg), bs(frame.bs), pc(frame.pc), _pred(frame._pred), _mode(frame._mode) {
-        assert(frame.cse_info.empty());
-      }
+    // A bytecode frame can only be copied (CSE info contains a unique_key object)
+    BytecodeFrame(BytecodeFrame&& frame) = default;
 
     void destroyRegisters(Interpreter* interpreter) {
       reg.destroy(interpreter);
@@ -302,9 +300,9 @@ namespace MiniZinc {
     std::unordered_map<int, Val> solutions;
 
     Interpreter(std::vector<BytecodeProc>& procs,
-                const BytecodeFrame& f) : _procs(procs), _identCount(0), cse(procs.size())
+                BytecodeFrame&& f) : _procs(procs), _identCount(0), cse(procs.size())
     {
-      _stack.push_back(f);
+      _stack.emplace_back(std::move(f));
       infinite_dom = Vec::a(this, newIdent(), {-Val::infinity(), Val::infinity()});
       infinite_dom->addRef(this);
       boolean_dom = Vec::a(this, newIdent(), {0, 1});
@@ -313,6 +311,30 @@ namespace MiniZinc {
       true_dom->addRef(this);
       _root_var = Variable::createRoot(this, Val(true_dom), newIdent());
       _root_var->addRef(this);
+      for (int i = 0; i < cse.size(); ++i) {
+        switch (_procs[i].nargs) {
+          case 1: {
+            cse[i] = new CSETable<FixedKey<1>>();
+            break;
+          }
+          case 2: {
+            cse[i] = new CSETable<FixedKey<2>>();
+            break;
+          }
+          case 3: {
+            cse[i] = new CSETable<FixedKey<3>>();
+            break;
+          }
+          case 4: {
+            cse[i] = new CSETable<FixedKey<4>>();
+            break;
+          }
+          default: {
+            cse[i] = new CSETable<VariadicKey>();
+            break;
+          }
+        }
+      }
     }
     ~Interpreter(void);
     Status status() { return _status; }
@@ -321,52 +343,71 @@ namespace MiniZinc {
     void pushAgg(const Val& v, int stackOffset);
     void pushConstraint(Constraint* d);
     std::unique_ptr<CSEKey> cse_key(int proc, const std::vector<Val>& vals) {
+      std::unique_ptr<CSEKey> key;
+
+      DTRACE1(CSE_KEYALLOC_START, (uintptr_t) this);
       switch (_procs[proc].nargs) {
         case 1: {
-          return std::unique_ptr<CSEKey>(new FixedKey<1>(*this, vals));
+          key = std::unique_ptr<CSEKey>(new FixedKey<1>(*this, vals));
+          break;
         }
         case 2: {
-          return std::unique_ptr<CSEKey>(new FixedKey<2>(*this, vals));
+          key = std::unique_ptr<CSEKey>(new FixedKey<2>(*this, vals));
+          break;
         }
         case 3: {
-          return std::unique_ptr<CSEKey>(new FixedKey<3>(*this, vals));
+          key = std::unique_ptr<CSEKey>(new FixedKey<3>(*this, vals));
+          break;
         }
         case 4: {
-          return std::unique_ptr<CSEKey>(new FixedKey<4>(*this, vals));
+          key = std::unique_ptr<CSEKey>(new FixedKey<4>(*this, vals));
+          break;
+        }
+        default: {
+          key = std::unique_ptr<CSEKey>(new VariadicKey(*this, vals));
+          break;
         }
       }
-      return std::unique_ptr<CSEKey>(new VariadicKey(*this, vals));
+      DTRACE1(CSE_KEYALLOC_END, (uintptr_t) this);
+
+      return key;
     }
     std::pair<Val, bool> cse_find(int proc, const CSEKey& key, BytecodeProc::Mode& mode) {
       std::pair<Val, bool> result;
+      DTRACE2(CSE_FIND_START, (uintptr_t) this, _procs[proc].nargs);
       switch (_procs[proc].nargs) {
         case 1: {
           auto fkey = static_cast<const FixedKey<1>&>(key);
           auto table = static_cast<CSETable<FixedKey<1>>*>(cse[proc]);
           result = table->find(*this, fkey, mode);
+          break;
         }
         case 2: {
           auto fkey = static_cast<const FixedKey<2>&>(key);
           auto table = static_cast<CSETable<FixedKey<2>>*>(cse[proc]);
           result = table->find(*this, fkey, mode);
+          break;
         }
         case 3: {
           auto fkey = static_cast<const FixedKey<3>&>(key);
           auto table = static_cast<CSETable<FixedKey<3>>*>(cse[proc]);
           result = table->find(*this, fkey, mode);
+          break;
         }
         case 4: {
           auto fkey = static_cast<const FixedKey<4>&>(key);
           auto table = static_cast<CSETable<FixedKey<4>>*>(cse[proc]);
           result = table->find(*this, fkey, mode);
+          break;
         }
         default: {
           auto vkey = static_cast<const VariadicKey&>(key);
           auto table = static_cast<CSETable<VariadicKey>*>(cse[proc]);
           result = table->find(*this, vkey, mode);
+          break;
         }
       }
-      DTRACE2(CSE_LOOKUP_END, (uintptr_t) this, result.second);
+      DTRACE2(CSE_FIND_END, (uintptr_t) this, result.second);
       return result;
     }
     void cse_insert(int proc, CSEKey& key, BytecodeProc::Mode& mode, Val& val) {
@@ -376,26 +417,31 @@ namespace MiniZinc {
           auto fkey = static_cast<FixedKey<1>&>(key);
           auto table = static_cast<CSETable<FixedKey<1>>*>(cse[proc]);
           table->insert(*this, fkey, mode, val);
+          break;
         }
         case 2: {
           auto fkey = static_cast<FixedKey<2>&>(key);
           auto table = static_cast<CSETable<FixedKey<2>>*>(cse[proc]);
           table->insert(*this, fkey, mode, val);
+          break;
         }
         case 3: {
           auto fkey = static_cast<FixedKey<3>&>(key);
           auto table = static_cast<CSETable<FixedKey<3>>*>(cse[proc]);
           table->insert(*this, fkey, mode, val);
+          break;
         }
         case 4: {
           auto fkey = static_cast<FixedKey<4>&>(key);
           auto table = static_cast<CSETable<FixedKey<4>>*>(cse[proc]);
           table->insert(*this, fkey, mode, val);
+          break;
         }
         default: {
           auto vkey = static_cast<VariadicKey&>(key);
           auto table = static_cast<CSETable<VariadicKey>*>(cse[proc]);
           table->insert(*this, vkey, mode, val);
+          break;
         }
       }
       DTRACE1(CSE_INSERT_END, (uintptr_t) this);
