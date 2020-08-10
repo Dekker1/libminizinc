@@ -20,16 +20,16 @@ namespace MiniZinc {
   Variable::Variable(Interpreter* interpreter, Val domain, int ident)
     : RefCountedObject(RefCountedObject::VAR,ident), _prev(this), _next(this), _domain(domain), _binding(true), _aliased(false) {
     assert(_domain.isVec());
-    _domain.construct(interpreter);
-    _ann.construct(interpreter);
+    _domain.addRef(interpreter);
+    _ann.addRef(interpreter);
     addRef(interpreter);
   }
 
   Variable::Variable(Interpreter* interpreter, Val domain, bool binding, int ident, Val ann)
     : RefCountedObject(RefCountedObject::VAR,ident), _prev(this), _next(this), _domain(domain), _ann(ann), _binding(binding), _aliased(false) {
     assert(_domain.isVec());
-    _domain.construct(interpreter);
-    _ann.construct(interpreter);
+    _domain.addRef(interpreter);
+    _ann.addRef(interpreter);
     if (binding)
       addRef(interpreter);
     // insert into root variable list
@@ -57,9 +57,9 @@ namespace MiniZinc {
     }
     if (j == _domain.size()) {
       Val ndom(Vec::a(interpreter, interpreter->newIdent(), {}));
-      ndom.construct(interpreter);
+      ndom.addRef(interpreter);
       domain(interpreter, ndom, binding);
-      ndom.destroy(interpreter);
+      ndom.rmRef(interpreter);
       return false;
     }
     std::vector<Val> dom;
@@ -70,9 +70,9 @@ namespace MiniZinc {
       dom.push_back(_domain[j]);
     }
     Val ndom(Vec::a(interpreter, interpreter->newIdent(),dom));
-    ndom.construct(interpreter);
+    ndom.addRef(interpreter);
     domain(interpreter, ndom, binding);
-    ndom.destroy(interpreter);
+    ndom.rmRef(interpreter);
     return true;
   }
 
@@ -89,9 +89,9 @@ namespace MiniZinc {
     }
     if (j < 0 ) {
       Val ndom(Vec::a(interpreter, interpreter->newIdent(), {}));
-      ndom.construct(interpreter);
+      ndom.addRef(interpreter);
       domain(interpreter, ndom, binding);
-      ndom.destroy(interpreter);
+      ndom.rmRef(interpreter);
       return false;
     }
     std::vector<Val> dom;
@@ -102,9 +102,9 @@ namespace MiniZinc {
       dom.emplace_back(i);
     }
     Val ndom(Vec::a(interpreter, interpreter->newIdent(),dom));
-    ndom.construct(interpreter);
+    ndom.addRef(interpreter);
     domain(interpreter, ndom, binding);
-    ndom.destroy(interpreter);
+    ndom.rmRef(interpreter);
     return true;
   }
 
@@ -120,18 +120,18 @@ namespace MiniZinc {
       }
     }
     Val ndom(Vec::a(interpreter, interpreter->newIdent(), {}));
-    ndom.construct(interpreter);
+    ndom.addRef(interpreter);
     domain(interpreter, ndom, binding);
-    ndom.destroy(interpreter);
+    ndom.rmRef(interpreter);
     return false;
   }
 
   bool Variable::intersectDom(Interpreter* interpreter, const std::vector<Val>& dom, bool binding) {
     if (!isBounded()) {
       Val ndom(Vec::a(interpreter, interpreter->newIdent(), dom));
-      ndom.construct(interpreter);
+      ndom.addRef(interpreter);
       domain(interpreter, ndom, binding);
-      ndom.destroy(interpreter);
+      ndom.rmRef(interpreter);
       return true;
     }
     assert(!aliased());
@@ -146,9 +146,9 @@ namespace MiniZinc {
       result.emplace_back(inter.max());
     }
     Val ndom(Vec::a(interpreter, interpreter->newIdent(), result));
-    ndom.construct(interpreter);
+    ndom.addRef(interpreter);
     domain(interpreter, ndom, binding);
-    ndom.destroy(interpreter);
+    ndom.rmRef(interpreter);
     return !result.empty();
   }
 
@@ -180,8 +180,8 @@ namespace MiniZinc {
       sev = SEV_VAL;
     } else {
       Val nd = newDomain;
-      nd.construct(interpreter);
-      _domain.destroy(interpreter);
+      nd.addRef(interpreter);
+      _domain.rmRef(interpreter);
       _domain = newDomain;
       sev = SEV_DOM;
     }
@@ -196,9 +196,9 @@ namespace MiniZinc {
   Variable::domain(Interpreter* interpreter, const std::vector<Val>& newDomain, bool binding0) {
     if (!isBounded()) {
       Val ndom(Vec::a(interpreter, interpreter->newIdent(), newDomain));
-      ndom.construct(interpreter);
+      ndom.addRef(interpreter);
       domain(interpreter, ndom, binding0);
-      ndom.destroy(interpreter);
+      ndom.rmRef(interpreter);
     } else {
       bool did_update = false;
       if (newDomain.size() != _domain.size()) {
@@ -213,17 +213,17 @@ namespace MiniZinc {
       }
       if (did_update) {
         Val ndv(Vec::a(interpreter, interpreter->newIdent(), newDomain));
-        ndv.construct(interpreter);
+        ndv.addRef(interpreter);
         domain(interpreter, ndv, binding0);
-        ndv.destroy(interpreter);
+        ndv.rmRef(interpreter);
       }
     }
   }
 
   void Variable::destroy(MiniZinc::Interpreter* interpreter)  {
-    _ref_count = (1u<<31u)-1u;
-    _domain.destroy(interpreter);
-    _ann.destroy(interpreter);
+    _model_ref_count = (1u << 31u) - 1u;
+    _domain.rmRef(interpreter);
+    _ann.rmRef(interpreter);
     interpreter->trail.trail_ptr(_prev, &(_prev->_next));
     _prev->_next = _next;
     interpreter->trail.trail_ptr(_next, &(_next->_prev));
@@ -236,19 +236,19 @@ namespace MiniZinc {
     for (auto c : _definitions) {
       c->destroy(interpreter);
     }
-    _ref_count = 0;
+    _model_ref_count = 0;
 
   }
 
   void Variable::reconstruct(Interpreter* interpreter) {
     /// TODO: what about subscriptions?
-    assert(_ref_count == 0);
-    _ann.construct(interpreter);
-    _domain.construct(interpreter);
+    assert(_model_ref_count == 0);
+    _ann.addRef(interpreter);
+    _domain.addRef(interpreter);
     for (auto c : _definitions) {
       c->reconstruct(interpreter);
     }
-    _ref_count = 0;
+    _model_ref_count = 0;
   }
 
   void Variable::addDefinition(Interpreter* interpreter, Constraint* c) {
@@ -302,9 +302,9 @@ namespace MiniZinc {
       for (int i = 0; i < c->size(); ++i) {
         Val arg = c->arg(i);
         if (arg.isVec()) {
-          _ref_count += arg.toVec()->count(Val(this));
+          _model_ref_count += arg.toVec()->count(Val(this));
         } else {
-          _ref_count += (arg == Val(this));
+          _model_ref_count += (arg == Val(this));
         }
       }
       interpreter->trail.trail_rm_def(this,c);
@@ -313,8 +313,8 @@ namespace MiniZinc {
     _definitions.clear();
 
     // Destroy old domain
-    _domain.destroy(interpreter);
-    _ann.destroy(interpreter);
+    _domain.rmRef(interpreter);
+    _ann.rmRef(interpreter);
     _ann = 0;
 
     // Transfer subscriptions to new value and schedule propagators
@@ -332,7 +332,7 @@ namespace MiniZinc {
     interpreter->trail.trail_alias(interpreter, this);
     _aliased = true;
     _domain = v;
-    v.construct(interpreter);
+    v.addRef(interpreter);
   }
 
   void Variable::unalias(Interpreter* interpreter, Val dom) {
@@ -400,7 +400,7 @@ namespace MiniZinc {
         if (d->timestamp() >=0) {
           os << d->timestamp() << "(";
         }
-        os << d << "." << d->_ref_count;
+        os << d << "." << d->_model_ref_count;
         if (d->timestamp() >=0) {
           os << ")";
         }

@@ -96,7 +96,7 @@ namespace MiniZinc {
     }
     static void free(Variable* var) {
       // INVARIANT: var->destroy() must be called before free(var);
-      assert(var->_ref_count == 0 && var->_weak_ref_count == 0);
+      assert(var->_model_ref_count == 0 && var->_memory_ref_count == 0);
       for (auto c : var->_definitions) {
         ::free(c);
       }

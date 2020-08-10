@@ -185,24 +185,24 @@ namespace MiniZinc {
       return toRCO()->timestamp();
     }
 
-    void destroy(Interpreter* interpreter) {
+    void rmRef(Interpreter* interpreter) {
       if (isRCO()) {
         RefCountedObject::rmRef(interpreter, toRCO());
       }
     };
-    void construct(Interpreter* interpreter) {
+    void addRef(Interpreter* interpreter) {
       if (isRCO()) {
         toRCO()->addRef(interpreter);
       }
     }
-    void addWeakRef(Interpreter* interpreter) {
+    void addMemRef(Interpreter* interpreter) {
       if (isRCO()) {
-        toRCO()->addWRef(interpreter);
+        toRCO()->addMemRef(interpreter);
       }
     };
-    void removeWeakRef(Interpreter* interpreter) {
+    void rmMemRef(Interpreter* interpreter) {
       if (isRCO()) {
-        RefCountedObject::rmWRef(interpreter, toRCO());
+        RefCountedObject::rmMemRef(interpreter, toRCO());
       }
     };
 

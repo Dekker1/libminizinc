@@ -46,8 +46,8 @@ namespace MiniZinc {
     void arg(Interpreter* interpreter, int i, Val nv) {
       assert(i < _size);
       assert(_pred != 8 || i!=1 || nv.isVec());
-      nv.construct(interpreter);
-      _args[i].destroy(interpreter);
+      nv.addRef(interpreter);
+      _args[i].rmRef(interpreter);
       _args[i] = nv;
     }
 

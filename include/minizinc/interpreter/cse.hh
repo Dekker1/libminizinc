@@ -40,13 +40,13 @@ namespace MiniZinc {
       } else {
         assert(val.isVec());
         _v = reinterpret_cast<void*>(reinterpret_cast<ptrdiff_t>(val._v) | static_cast<ptrdiff_t>(3));
-        toVec()->addWRef(&interpreter);
+        toVec()->addMemRef(&interpreter);
       }
     }
 
     void destroy(Interpreter& interpreter) {
       if (isVec()) {
-        RefCountedObject::rmWRef(&interpreter, toVec());
+        RefCountedObject::rmMemRef(&interpreter, toVec());
       }
     }
 
@@ -66,7 +66,7 @@ namespace MiniZinc {
     }
     inline bool operator==(const WeakVal& rhs) const {
       if (isVec()) {
-        return rhs.isVec() && toVec()->exists() && rhs.toVec()->exists() && (*toVec() == *rhs.toVec());
+        return rhs.isVec() && (*toVec() == *rhs.toVec());
       }
       return reinterpret_cast<ptrdiff_t>(_v) == reinterpret_cast<ptrdiff_t>(rhs._v);
     }
@@ -199,7 +199,7 @@ namespace MiniZinc {
       for (auto &table : _table) {
         for(auto &item : table) {
           const_cast<Key&>(item.first).destroy(*interpreter);
-          item.second.second.removeWeakRef(interpreter);
+          item.second.second.rmMemRef(interpreter);
         }
       }
       _table = std::vector<impl>(1);
@@ -211,7 +211,7 @@ namespace MiniZinc {
         while (it != table.end()) {
           if (!it->second.second.exists()) {
             const_cast<Key&>(it->first).destroy(*interpreter);
-            it->second.second.removeWeakRef(interpreter);
+            it->second.second.rmMemRef(interpreter);
             it = table.erase(it);
           } else {
             ++it;
@@ -223,7 +223,7 @@ namespace MiniZinc {
     void pop(Interpreter* interpreter) {
       for (auto& item : _table.back()) {
         const_cast<Key&>(item.first).destroy(*interpreter);
-        item.second.second.removeWeakRef(interpreter);
+        item.second.second.rmMemRef(interpreter);
       }
       _table.pop_back();
     }

@@ -204,8 +204,8 @@ namespace MiniZinc {
       }
       if (interpreter && !interpreter->trail.is_trailed(v.toVar())) {
         Val& mut_v = const_cast<Val&>(v);
-        nval.construct(interpreter);
-        mut_v.destroy(interpreter);
+        nval.addRef(interpreter);
+        mut_v.rmRef(interpreter);
         mut_v._v = nval._v;
       }
       return nval;
@@ -265,10 +265,33 @@ namespace MiniZinc {
           vars.push_back(*this);
 
           Vec* ncoeffs = Vec::allocate_array(interpreter, interpreter->newIdent(), coeffs);
+          ncoeffs->addRef(interpreter);
           Vec* nvars = Vec::allocate_array(interpreter, interpreter->newIdent(), vars);
-          bool b;
-          std::tie(nc, b) = Constraint::a(interpreter, PrimitiveMap::INT_LIN_EQ, BytecodeProc::ROOT, {Val(ncoeffs), Val(nvars), Val(-d)});
-          assert(nc || b);
+          nvars->addRef(interpreter);
+
+          std::vector<Val> args = {Val(ncoeffs), Val(nvars), Val(-d)};
+          std::unique_ptr<CSEKey> cse_key = interpreter->cse_key(PrimitiveMap::INT_LIN_EQ, args);
+          BytecodeProc::Mode mode = BytecodeProc::ROOT;
+          auto lookup = interpreter->cse_find(PrimitiveMap::INT_LIN_EQ, *cse_key, mode);
+          if (lookup.second) {
+            // CSE Match found (perform cleanup)
+            assert(lookup.first.isInt());
+            cse_key->destroy(*interpreter);
+
+            // This is the assumption that the linear expression doesn't exist
+            // in negated form in the CSE. If this would happen then the state
+            // should have been marked inconsistent.
+            assert(lookup.first.toInt() == 1);
+          } else {
+            bool b;
+            std::tie(nc, b) = Constraint::a(interpreter, PrimitiveMap::INT_LIN_EQ, mode, args);
+            assert(nc || b);
+            Val cse_val(1);
+            interpreter->cse_insert(PrimitiveMap::INT_LIN_EQ, *cse_key, mode, cse_val);
+          }
+
+          RefCountedObject::rmRef(interpreter, ncoeffs);
+          RefCountedObject::rmRef(interpreter, nvars);
         }
         // Need to check whether variable still has a definition
         // (may have been aliased during the construction of nc)

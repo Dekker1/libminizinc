@@ -1332,7 +1332,7 @@ execute_ret:
 //        }
 //        def->alias(this, ret);
 //      }
-//      RefCountedObject::rmWRef(this, def);
+//      RefCountedObject::rmMemRef(this, def);
 //    }
 //    return !delayed_calls.empty();
     return false;
@@ -1402,7 +1402,7 @@ execute_ret:
       Val dom;
       std::tie(var, dom) = alias_trail.back();
       var->unalias(interpreter, dom);
-      dom.removeWeakRef(interpreter);
+      dom.rmMemRef(interpreter);
       alias_trail.pop_back();
     }
     // Restore original domains
@@ -1411,10 +1411,10 @@ execute_ret:
       Vec* dom;
       std::tie(var, dom) = domain_trail.back();
       Val nd(dom);
-      nd.construct(interpreter);
-      var->_domain.destroy(interpreter);
+      nd.addRef(interpreter);
+      var->_domain.rmRef(interpreter);
       var->_domain = nd;
-      RefCountedObject::rmWRef(interpreter, dom);
+      RefCountedObject::rmMemRef(interpreter, dom);
       domain_trail.pop_back();
     }
     // Remove all additions/changes to the CSE table

@@ -63,14 +63,14 @@ namespace MiniZinc {
       if (v.isRCO()) {
         v.toRCO()->addRef(interpreter);
       }
-      destroy(interpreter);
+      rmRef(interpreter);
       _v = v._v;
     }
   }
   inline
   void Val::assign(Interpreter* interpreter, Val&& v) {
     if (_v != v._v) {
-      destroy(interpreter);
+      rmRef(interpreter);
       _v = v._v;
       v._v = nullptr;
     }

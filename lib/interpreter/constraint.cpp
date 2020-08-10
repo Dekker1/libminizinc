@@ -19,24 +19,24 @@ namespace MiniZinc {
   void
   Constraint::destroy(Interpreter* interpreter) {
     for (unsigned int i=0; i<_size; i++) {
-      _args[i].destroy(interpreter);
+      _args[i].rmRef(interpreter);
     }
   }
 
   void
   Constraint::reconstruct(Interpreter* interpreter) {
     for (unsigned int i=0; i<_size; i++) {
-      _args[i].construct(interpreter);
+      _args[i].addRef(interpreter);
     }
   }
 
   Constraint::Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines)
     : _pred(pred), _mode(mode), _size(args.size()), _scheduled(0)
   {
-    _ann.construct(interpreter);
+    _ann.addRef(interpreter);
     for (unsigned int i=0; i<args.size(); i++) {
       new (&_args[i]) Val(args[i]);
-      _args[i].construct(interpreter);
+      _args[i].addRef(interpreter);
       if (pred > PrimitiveMap::MAX_LIN) {
         _args[i].finalizeLin(interpreter);
       }

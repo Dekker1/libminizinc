@@ -85,7 +85,7 @@ namespace MiniZinc {
   void CSETable<Key>::insert(Interpreter& interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val) {
     DBG_INTERPRETER("--- CSE add: hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString(DBG_TRIM_OUTPUT) << "\n");
     // If value is reference counted, flag that it's in CSE
-    val.addWeakRef(&interpreter);
+    val.addMemRef(&interpreter);
     auto insertion = _table.back().emplace(key, std::make_pair(mode, val));
     if (!insertion.second) {
       auto& it = insertion.first;
@@ -131,7 +131,7 @@ namespace MiniZinc {
           }
         }
       }
-      it->second.second.removeWeakRef(&interpreter);
+      it->second.second.rmMemRef(&interpreter);
       it->second = std::make_pair(mode, val);
     }
   }

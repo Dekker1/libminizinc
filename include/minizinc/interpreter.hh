@@ -65,14 +65,14 @@ namespace MiniZinc {
     }
     void mov(Interpreter* interpreter, std::vector<Val>& args) {
       for (auto& v : args) {
-        v.construct(interpreter);
+        v.addRef(interpreter);
       }
       _r = std::move(args);
     }
     /// Destroy this register file
     void destroy(Interpreter* interpreter) {
       for (auto& v : _r) {
-        v.destroy(interpreter);
+        v.rmRef(interpreter);
       }
     }
     void clear(Interpreter* interpreter) {
@@ -108,10 +108,10 @@ namespace MiniZinc {
     void push(Interpreter* interpreter, const Val& v) {
       assert(stack.empty() || symbol != VCTX_OTHER);
       stack.push_back(v);
-      stack.back().construct(interpreter);
+      stack.back().addRef(interpreter);
     }
     void pop(Interpreter* interpreter) {
-      stack.back().destroy(interpreter);
+      stack.back().rmRef(interpreter);
       stack.pop_back();
     }
     const Val& back(void) const {
@@ -124,7 +124,7 @@ namespace MiniZinc {
     /// Destroy stack values
     void destroyStack(Interpreter* interpreter) {
       for (auto& v : stack) {
-        v.destroy(interpreter);
+        v.rmRef(interpreter);
       }
     }
   };
@@ -217,7 +217,7 @@ namespace MiniZinc {
       if (!is_trailed(v)) {
         return false;
       }
-      v->alias().addWeakRef(interpreter);
+      v->alias().addMemRef(interpreter);
       alias_trail.emplace_back(v, v->alias());
       return true;
     }
@@ -227,7 +227,7 @@ namespace MiniZinc {
         return false;
       }
       assert(dom);
-      dom->addWRef(interpreter);
+      dom->addMemRef(interpreter);
       domain_trail.emplace_back(v, dom);
       return true;
     }
@@ -431,21 +431,21 @@ namespace MiniZinc {
 
   inline
   void RefCountedObject::rmRef(Interpreter* interpreter, RefCountedObject* rco) {
-    assert(rco->_ref_count>0);
-    if(--rco->_ref_count==0) {
+    assert(rco->_model_ref_count > 0);
+    if(--rco->_model_ref_count == 0) {
       switch (rco->rcoType()) {
         case VAR:
           static_cast<Variable*>(rco)->destroy(interpreter);
           break;
         case VEC:
-          static_cast<Vec*>(rco)->destroy(interpreter);
+          static_cast<Vec*>(rco)->destroyModel(interpreter);
           break;
         default:
           assert(false);
       }
       if (interpreter->trail.is_trailed(rco)) {
         interpreter->trail.trail_removal(rco);
-      } else if (rco->_weak_ref_count==0) {
+      } else if (rco->_memory_ref_count == 0) {
         // INVARIANT: All children of a definition are already promoted, cut, or freed.
 //        assert(rco->rcoType() != VAR || !static_cast<Variable*>(rco)->constraints().empty());
         if (rco->rcoType()==VAR) {
@@ -458,10 +458,13 @@ namespace MiniZinc {
   }
 
   inline
-  void RefCountedObject::rmWRef(Interpreter* interpreter, RefCountedObject* rco) {
-    if(--rco->_weak_ref_count == 0 && !interpreter->trail.is_trailed(rco) && rco->_ref_count == 0) {
+  void RefCountedObject::rmMemRef(Interpreter* interpreter, RefCountedObject* rco) {
+    if(--rco->_memory_ref_count == 0u && !interpreter->trail.is_trailed(rco) && rco->_model_ref_count == 0u) {
       // INVARIANT: All children of a definition are already promoted, cut, or freed.
 //      assert(rco->rcoType() != DEF || !static_cast<Definition*>(rco)->defs());
+      if (rco->rcoType() == VEC) {
+        static_cast<Vec*>(rco)->destroyMemory(interpreter);
+      }
       free(rco);
     }
   }

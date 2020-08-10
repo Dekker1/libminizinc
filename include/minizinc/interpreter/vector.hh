@@ -14,6 +14,7 @@
 
 #include <minizinc/interpreter/rco.hh>
 #include <minizinc/interpreter/_val_decl.hh>
+#include <minizinc/interpreter/variable.hh>
 
 namespace MiniZinc {
 
@@ -24,7 +25,7 @@ namespace MiniZinc {
     Vec(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) : RefCountedObject(RefCountedObject::VEC,timestamp), _size(v.size()) {
       for (unsigned int i=0; i<v.size(); i++) {
         new (&_data[i]) Val(v[i]);
-        _data[i].construct(interpreter);
+        _data[i].addRef(interpreter);
       }
     }
     ~Vec(void) = delete;
@@ -38,14 +39,22 @@ namespace MiniZinc {
       return nv;
     }
     static Vec* allocate_array(Interpreter* interpreter, int timestamp, const std::vector<Val>& v);
-    void destroy(Interpreter* interpreter) {
+    void destroyModel(Interpreter* interpreter) {
       for (unsigned int i=0; i<_size; i++) {
-        _data[i].destroy(interpreter);
+        if (_memory_ref_count > 0u) {
+          _data[i].addMemRef(interpreter);
+        }
+        _data[i].rmRef(interpreter);
+      }
+    }
+    void destroyMemory(Interpreter* interpreter) {
+      for (unsigned int i=0; i<_size; i++) {
+        _data[i].rmMemRef(interpreter);
       }
     }
     void reconstruct(Interpreter* interpreter) {
       for (unsigned int i=0; i<_size; i++) {
-        _data[i].construct(interpreter);
+        _data[i].addRef(interpreter);
       }
     }
     inline bool operator==(const Vec& rhs) const {
@@ -55,6 +64,12 @@ namespace MiniZinc {
         return false;
       }
       for (int i = 0; i < _size; ++i) {
+        if ((*this)[i].isVar() && !(*this)[i].toVar()->exists()) {
+          return false;
+        }
+        if (rhs[i].isVar() && !rhs[i].toVar()->exists()) {
+          return false;
+        }
         if (!((*this)[i] == rhs[i])) {
           return false;
         }
