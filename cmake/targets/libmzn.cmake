@@ -85,6 +85,7 @@ add_library(mzn
   include/minizinc/interpreter/bytecode.hh
   include/minizinc/interpreter/constraint.hh
   include/minizinc/interpreter/cse.hh
+  include/minizinc/interpreter/cse.hpp
   include/minizinc/interpreter/primitives.hh
   include/minizinc/interpreter/rco.hh
   include/minizinc/interpreter/values.hh
