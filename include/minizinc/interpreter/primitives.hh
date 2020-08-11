@@ -203,8 +203,24 @@ namespace MiniZinc {
         if ((a.isVar() && !a.toVar()->isBounded()) || (b.isVar() && !b.toVar()->isBounded())) {
           return PS_OK;
         } else if (a.isInt() && a == 1) {
-          res.toVar()->alias(&i, b);
-          return PS_ENTAILED;
+          if (res.isVar()) {
+            if (b.isVar()) {
+              bool success = res.toVar()->intersectDom(&i, Val(b.toVar()->domain()));
+              if (!success) {
+                return PS_FAILED;
+              }
+              res.toVar()->alias(&i, b);
+              return PS_ENTAILED;
+            } else {
+              return res.toVar()->setVal(&i, b.toInt()) ? PS_ENTAILED : PS_FAILED;
+            }
+          } else {
+            if (b.isVar()) {
+              return b.toVar()->setVal(&i, res.toInt()) ? PS_ENTAILED : PS_FAILED;
+            } else {
+              return res.toInt()==b.toInt() ? PS_ENTAILED : PS_FAILED;
+            }
+          }
         }
 
         lb = a.lb();
@@ -213,11 +229,18 @@ namespace MiniZinc {
         lb *= b.lb();
         ub *= b.ub();
 
-        /// TODO: what if res is not a var?
         if (lb == ub) {
-          return res.toVar()->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+          if (res.isVar()) {
+            return res.toVar()->setVal(&i, lb) ? PS_ENTAILED : PS_FAILED;
+          } else {
+            return res.toInt()==lb ? PS_ENTAILED : PS_FAILED;
+          }
         } else {
-          return res.toVar()->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+          if (res.isVar()) {
+            return res.toVar()->intersectDom(&i, {lb, ub}) ? PS_OK : PS_FAILED;
+          } else {
+            return (res.toInt() >= lb && res.toInt() <= ub) ? PS_OK : PS_FAILED;
+          }
         }
         // TODO: Backwards Propagation
       }
