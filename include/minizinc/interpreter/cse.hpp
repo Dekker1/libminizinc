@@ -91,49 +91,51 @@ namespace MiniZinc {
     if (!insertion.second) {
       auto& it = insertion.first;
       // We are replacing another entry within the CSE table.
-      assert(it->first == key && it->second.first != mode);
+      assert(it->first == key);
       key.destroy(interpreter);
-      Val oldVal = Val::follow_alias(it->second.second);
-      BytecodeProc::Mode& oldMode = it->second.first;
-      if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-        if (oldVal.isVar()) {
-          Variable* v = oldVal.toVar();
-          v->alias(&interpreter, BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode) ? 1 : 0);
-        }
-      } else if (mode == BytecodeProc::FUN || mode == BytecodeProc::FUN_NEG) {
-        if (oldVal.isVar()) {
-          Variable* v = oldVal.toVar();
-          if (BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode)) {
-            // Value might have already been aliased earlier in the call stack
-            if (val != oldVal) {
-              v->alias(&interpreter, val);
-            }
-          } else {
-            FixedKey<1> nkey(interpreter, {val});
-            Val new_val;
-            bool found;
-            auto cmode = BytecodeProc::FUN;
-            std::tie(new_val, found) = interpreter.cse_find(PrimitiveMap::OP_NOT, nkey, cmode);
-            if (!found) {
-              Variable* new_var = Variable::a(&interpreter, interpreter.boolean_domain(), true, interpreter.newIdent());
-              new_val = Val(new_var);
-              auto c = Constraint::a(&interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {val, new_val});
-              assert(c.first);
-              new_var->addRef(&interpreter);
-              new_var->addDefinition(&interpreter, c.first);
-              interpreter.cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
-              RefCountedObject::rmRef(&interpreter, new_var);
+      if (it->second.first != mode) {
+        Val oldVal = Val::follow_alias(it->second.second);
+        BytecodeProc::Mode& oldMode = it->second.first;
+        if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+          if (oldVal.isVar()) {
+            Variable* v = oldVal.toVar();
+            v->alias(&interpreter, BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode) ? 1 : 0);
+          }
+        } else if (mode == BytecodeProc::FUN || mode == BytecodeProc::FUN_NEG) {
+          if (oldVal.isVar()) {
+            Variable* v = oldVal.toVar();
+            if (BytecodeProc::is_neg(oldMode) == BytecodeProc::is_neg(mode)) {
+              // Value might have already been aliased earlier in the call stack
+              if (val != oldVal) {
+                v->alias(&interpreter, val);
+              }
             } else {
-              nkey.destroy(interpreter);
-            }
-            if (new_val != oldVal) {
-              v->alias(&interpreter, new_val);
+              FixedKey<1> nkey(interpreter, {val});
+              Val new_val;
+              bool found;
+              auto cmode = BytecodeProc::FUN;
+              std::tie(new_val, found) = interpreter.cse_find(PrimitiveMap::OP_NOT, nkey, cmode);
+              if (!found) {
+                Variable* new_var = Variable::a(&interpreter, interpreter.boolean_domain(), true, interpreter.newIdent());
+                new_val = Val(new_var);
+                auto c = Constraint::a(&interpreter, PrimitiveMap::BOOLNOT, BytecodeProc::ROOT, {val, new_val});
+                assert(c.first);
+                new_var->addRef(&interpreter);
+                new_var->addDefinition(&interpreter, c.first);
+                interpreter.cse_insert(PrimitiveMap::OP_NOT, nkey, cmode, new_val);
+                RefCountedObject::rmRef(&interpreter, new_var);
+              } else {
+                nkey.destroy(interpreter);
+              }
+              if (new_val != oldVal) {
+                v->alias(&interpreter, new_val);
+              }
             }
           }
         }
+        it->second.second.rmMemRef(&interpreter);
+        it->second = std::make_pair(mode, val);
       }
-      it->second.second.rmMemRef(&interpreter);
-      it->second = std::make_pair(mode, val);
     }
   }
 
