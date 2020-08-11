@@ -12,11 +12,11 @@
 
 #include <minizinc/interpreter/cse.hh>
 #include <minizinc/interpreter/primitives.hh>
-#include <minizinc/interpreter.hh>
 
 namespace MiniZinc {
 
   template<class Key>
+  inline
   std::pair<Val, bool> CSETable<Key>::find(Interpreter& interpreter, const Key& key, BytecodeProc::Mode& mode) {
     size_t i = _table.size();
     auto it = _table[i].end();
@@ -82,6 +82,7 @@ namespace MiniZinc {
   }
 
   template<class Key>
+  inline
   void CSETable<Key>::insert(Interpreter& interpreter, Key& key, const BytecodeProc::Mode& mode, Val& val) {
     DBG_INTERPRETER("--- CSE add: hash(" << key.hash() << ") -> Mode: " << BytecodeProc::mode_to_string[mode] << " Value: " << val.toString(DBG_TRIM_OUTPUT) << "\n");
     // If value is reference counted, flag that it's in CSE
