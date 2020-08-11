@@ -16,8 +16,8 @@ minizinc$target:::cse-keyalloc-end
 minizinc$target:::cse-insert-start
 {
   @count["CSE Insertions"] = count();
-  self->start_cse_insert = timestamp;
   @lquant["Number of Arguments (insert)"] = lquantize(arg1, 1, 6, 1);
+  self->start_cse_insert = timestamp;
 }
 
 minizinc$target:::cse-insert-end
@@ -29,8 +29,8 @@ minizinc$target:::cse-insert-end
 minizinc$target:::cse-find-start
 {
   @count["CSE Lookups"] = count();
-  self->start_cse_lookup = timestamp;
   @lquant["Number of Arguments (lookup)"] = lquantize(arg1, 1, 6, 1);
+  self->start_cse_lookup = timestamp;
 }
 
 minizinc$target:::cse-find-end
