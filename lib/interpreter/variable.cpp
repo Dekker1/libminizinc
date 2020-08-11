@@ -317,6 +317,11 @@ namespace MiniZinc {
     _ann.rmRef(interpreter);
     _ann = 0;
 
+    // Reset reference count for binding status
+    // TODO: this may be incorrect if we are aliasing a variable with
+    // TODO: binding domain to one with non-binding domain
+    binding(interpreter, false);
+    
     // Transfer subscriptions to new value and schedule propagators
     for (auto& s : _subscriptions) {
       if (v.isVar()) {
