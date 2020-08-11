@@ -635,8 +635,9 @@ namespace MiniZinc {
         case BytecodeStream::RET:
         {
           DBG_INTERPRETER("RET");
-          if (!frame->cse_info.empty()) {
-            DBG_INTERPRETER(" %-- " << frame->cse_info.back().proc << " (" << _procs[frame->cse_info.back().proc].name << ") " << BytecodeProc::mode_to_string[frame->cse_info.back().mode]);
+          if (frame->cse_frame_depth < _cse_stack.size()) {
+            CSEFrame& info = _cse_stack.back();
+            DBG_INTERPRETER(" %-- " << info.proc << " (" << _procs[info.proc].name << ") " << BytecodeProc::mode_to_string[info.mode]);
           }
           DBG_INTERPRETER("\n");
           assert(!_stack.empty());
@@ -651,21 +652,22 @@ execute_ret:
             _agg[0].constraints.clear();
             return;
           }
-          assert(!frame->cse_info.empty());
 
-          for (auto& entry : frame->cse_info) {
-            if (entry.key) {
-              if (entry.mode == BytecodeProc::ROOT || entry.mode == BytecodeProc::ROOT_NEG) {
-                Val v = Val(1);
-                cse_insert(entry.proc, *entry.key, entry.mode, v);
-              } else if (entry.stack_size == _agg.back().size()-1) {
-                Val ret = _agg[_agg.size()-1].back();
-                cse_insert(entry.proc, *entry.key, entry.mode, ret);
-              } else {
-                entry.key->destroy(*this);
-              }
+          while(_cse_stack.size() > frame->cse_frame_depth) {
+            CSEFrame& entry = _cse_stack.back();
+            int nargs = _procs[entry.proc].nargs;
+            if (entry.mode == BytecodeProc::ROOT || entry.mode == BytecodeProc::ROOT_NEG) {
+              Val v = Val(1);
+              cse_insert(entry.proc, entry.getKey(), entry.mode, v);
+            } else if (entry.stack_size == _agg.back().size()-1) {
+              Val ret = _agg[_agg.size()-1].back();
+              cse_insert(entry.proc, entry.getKey(), entry.mode, ret);
+            } else {
+              entry.destroy(*this);
             }
+            _cse_stack.pop_back();
           }
+
           _stack.back().destroy(this);
           _stack.pop_back();
           frame = &_stack.back();
@@ -690,14 +692,18 @@ execute_ret:
             args[i] = frame->reg[r];
             DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
           }
+
           DBG_INTERPRETER("\n");
-          std::unique_ptr<CSEKey> cse_key;
+
+          // Lookup for Common Subexpression Elimination
+          size_t cse_depth = _cse_stack.size();
           if (cse) {
-            cse_key = this->cse_key(code, args);
+            _cse_stack.emplace_back(*this, code, mode, args, _agg.back().size());
             // Lookup item in CSE
-            auto lookup = cse_find(code, *cse_key, mode);
+            auto lookup = cse_find(code, _cse_stack.back().getKey(), mode);
             if (lookup.second) {
-              cse_key->destroy(*this);
+              _cse_stack.back().destroy(*this);
+              _cse_stack.pop_back();
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(lookup.first.isInt());
                 if (lookup.first.toInt() != 1) {
@@ -711,6 +717,7 @@ execute_ret:
               break;
             }
           }
+
           if (_procs[code].mode[mode].size() == 0 || _procs[code].delay) {
             DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
             // this is a FlatZinc builtin
@@ -733,7 +740,8 @@ execute_ret:
               }
               if (cse) {
                 Val ret(c.second);
-                cse_insert(code, *cse_key, mode, ret);
+                cse_insert(code, _cse_stack.back().getKey(), mode, ret);
+                _cse_stack.pop_back();
               }
               /// TODO: delayed calls
   //            if (_procs[code].delay) {
@@ -742,8 +750,8 @@ execute_ret:
             }
           } else {
             _stack.emplace_back(_procs[code].mode[mode], code, mode);
-            BytecodeFrame* newFrame = &_stack[_stack.size()-1];
-            newFrame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
+            BytecodeFrame* newFrame = &_stack.back();
+            newFrame->cse_frame_depth = cse_depth;
             newFrame->reg.mov(this, args);
             frame = newFrame;
           }
@@ -779,18 +787,20 @@ execute_ret:
           auto mode = static_cast<BytecodeProc::Mode>(mode_c);
           DBG_INTERPRETER("TCALL " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")"  << (cse ? "" : " no_cse") << "\n");
           // TODO: Avoid creating the args vector
-          std::vector<Val> args(_procs[code].nargs);
+          int nargs = _procs[code].nargs;
+          std::vector<Val> args(nargs);
           for (int i = 0; i < args.size(); ++i) {
             args[i] = frame->reg[i];
           }
-          std::unique_ptr<CSEKey> cse_key;
+
           if (cse) {
-            cse_key = this->cse_key(code, args);
+            _cse_stack.emplace_back(*this, code, mode, args, _agg.back().size());
             bool found;
             Val ret;
-            std::tie(ret, found) = cse_find(code, *cse_key, mode);
+            std::tie(ret, found) = cse_find(code, _cse_stack.back().getKey(), mode);
             if (found) {
-              cse_key->destroy(*this);
+              _cse_stack.back().destroy(*this);
+              _cse_stack.pop_back();
               // RET with CSE found value
               if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
                 assert(ret.isInt());
@@ -802,10 +812,12 @@ execute_ret:
               } else {
                 pushAgg(ret, -1);
               }
-              for (auto& entry : frame->cse_info) {
-                if (entry.key) {
-                  cse_insert(entry.proc, *entry.key, entry.mode, ret);
-                }
+              // TODO: Does this actually "return" correctly?? It seems the code would continue;
+              while (_cse_stack.size() > frame->cse_frame_depth) {
+                CSEFrame& entry = _cse_stack.back();
+                int nargs = _procs[entry.proc].nargs;
+                cse_insert(entry.proc, entry.getKey(), entry.mode, ret);
+                _cse_stack.pop_back();
               }
               _stack.back().destroy(this);
               _stack.pop_back();
@@ -830,7 +842,9 @@ execute_ret:
             }
             if (cse) {
               Val ret(c.second);
-              cse_insert(code, *cse_key, mode, ret);
+              // TODO: Does this actually "return" correctly?? It seems this would not set all necessary values in the _cse_stack
+              cse_insert(code, _cse_stack.back().getKey(), mode, ret);
+              _cse_stack.pop_back();
             }
             /// TODO: delayed calls
 //            if (_procs[code].delay) {
@@ -840,7 +854,6 @@ execute_ret:
           } else {
             // Replace frame with new procedure
             frame->bs = &_procs[code].mode[mode];
-            frame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
             frame->pc = 0;
           }
         }

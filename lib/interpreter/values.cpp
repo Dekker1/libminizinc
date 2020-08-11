@@ -270,13 +270,13 @@ namespace MiniZinc {
           nvars->addRef(interpreter);
 
           std::vector<Val> args = {Val(ncoeffs), Val(nvars), Val(-d)};
-          std::unique_ptr<CSEKey> cse_key = interpreter->cse_key(PrimitiveMap::INT_LIN_EQ, args);
+          FixedKey<3> cse_key(*interpreter, args);
           BytecodeProc::Mode mode = BytecodeProc::ROOT;
-          auto lookup = interpreter->cse_find(PrimitiveMap::INT_LIN_EQ, *cse_key, mode);
+          auto lookup = interpreter->cse_find(PrimitiveMap::INT_LIN_EQ, cse_key, mode);
           if (lookup.second) {
             // CSE Match found (perform cleanup)
             assert(lookup.first.isInt());
-            cse_key->destroy(*interpreter);
+            cse_key.destroy(*interpreter);
 
             // This is the assumption that the linear expression doesn't exist
             // in negated form in the CSE. If this would happen then the state
@@ -287,7 +287,7 @@ namespace MiniZinc {
             std::tie(nc, b) = Constraint::a(interpreter, PrimitiveMap::INT_LIN_EQ, mode, args);
             assert(nc || b);
             Val cse_val(1);
-            interpreter->cse_insert(PrimitiveMap::INT_LIN_EQ, *cse_key, mode, cse_val);
+            interpreter->cse_insert(PrimitiveMap::INT_LIN_EQ, cse_key, mode, cse_val);
           }
 
           RefCountedObject::rmRef(interpreter, ncoeffs);

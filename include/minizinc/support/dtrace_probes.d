@@ -9,10 +9,6 @@ provider minizinc {
    */
   probe gc__start();
 
-  probe cse__keyalloc__start(uintptr_t envi);
-
-  probe cse__keyalloc__end(uintptr_t envi);
-
   probe cse__find__start(uintptr_t envi, short nargs);
 
   probe cse__find__end(uintptr_t envi, int success);

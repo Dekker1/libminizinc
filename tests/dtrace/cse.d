@@ -2,17 +2,6 @@
 
 #pragma D option quiet
 
-minizinc$target:::cse-keyalloc-start
-{
-  @count["CSE Keys Created"] = count();
-  self->start_cse_key = timestamp;
-}
-
-minizinc$target:::cse-keyalloc-end
-{
-  @times["Total Key creation time (ns)"] = sum(timestamp - self->start_cse_key);
-}
-
 minizinc$target:::cse-insert-start
 {
   @count["CSE Insertions"] = count();

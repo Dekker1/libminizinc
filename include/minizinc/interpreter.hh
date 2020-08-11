@@ -129,6 +129,123 @@ namespace MiniZinc {
     }
   };
 
+  // Frame information for Common Subexpression Elimination
+  class CSEFrame{
+  public:
+    int proc;
+    BytecodeProc::Mode mode;
+    int nargs;
+    union KeyUnion {
+      VariadicKey vk;
+      FixedKey<1> f1;
+      FixedKey<2> f2;
+      FixedKey<3> f3;
+      FixedKey<4> f4;
+
+      KeyUnion() { new (&vk) VariadicKey(); }
+      ~KeyUnion() {}
+    } key ;
+    size_t stack_size;
+
+    CSEFrame(Interpreter& interpreter, int _proc, BytecodeProc::Mode _mode, const std::vector<Val>& args, size_t _stack_size) : proc(_proc), mode(_mode), stack_size(_stack_size), nargs(args.size()) {
+      switch (nargs) {
+        case 1: {
+          key.f1 = FixedKey<1>(interpreter, args);
+          break;
+        }
+        case 2: {
+          key.f2 = FixedKey<2>(interpreter, args);
+          break;
+        }
+        case 3: {
+          key.f3 = FixedKey<3>(interpreter, args);
+          break;
+        }
+        case 4: {
+          key.f4 = FixedKey<4>(interpreter, args);
+          break;
+        }
+        default: {
+          key.vk = VariadicKey(interpreter, args);
+          break;
+        }
+      }
+    }
+
+    CSEFrame(const CSEFrame& other) : proc(other.proc), mode(other.mode), stack_size(other.stack_size), nargs(other.nargs) {
+      switch (nargs) {
+        case 1: {
+          key.f1 = other.key.f1;
+          break;
+        }
+        case 2: {
+          key.f2 = other.key.f2;
+          break;
+        }
+        case 3: {
+          key.f3 = other.key.f3;
+          break;
+        }
+        case 4: {
+          key.f4 = other.key.f4;
+          break;
+        }
+        default: {
+          key.vk = other.key.vk;
+          break;
+        }
+      }
+    };
+
+    inline
+    void destroy(Interpreter& interpreter) {
+      switch (nargs) {
+        case 1: {
+          key.f1.destroy(interpreter);
+          break;
+        }
+        case 2: {
+          key.f2.destroy(interpreter);
+          break;
+        }
+        case 3: {
+          key.f3.destroy(interpreter);
+          break;
+        }
+        case 4: {
+          key.f4.destroy(interpreter);
+          break;
+        }
+        default: {
+          key.vk.destroy(interpreter);
+          break;
+        }
+      }
+    }
+
+    inline
+    CSEKey& getKey() {
+      switch (nargs) {
+        case 1: {
+          return key.f1;
+        }
+        case 2: {
+          return key.f2;
+        }
+        case 3: {
+          return key.f3;
+        }
+        case 4: {
+          return key.f4;
+        }
+        default: {
+          return key.vk;
+        }
+      }
+
+    }
+  };
+
   class BytecodeFrame {
   public:
     RegisterFile reg;
@@ -136,22 +253,10 @@ namespace MiniZinc {
     int pc;
     int _pred;
     char _mode;
-    // CSE information for RET statement
-    class CSEInfo {
-    public:
-      int proc;
-      BytecodeProc::Mode mode;
-      std::unique_ptr<CSEKey> key;
-      size_t stack_size;
-      CSEInfo(int _proc, BytecodeProc::Mode _mode, std::unique_ptr<CSEKey>& _key, size_t _stack_size)
-        : proc(_proc), mode(_mode), key(std::move(_key)), stack_size(_stack_size) {}
-    };
-    std::vector<CSEInfo> cse_info;
+    size_t cse_frame_depth = 0;
 
     BytecodeFrame(const BytecodeStream& bs0, int pred, char mode) :
       reg(bs0.maxRegister()), bs(&bs0), pc(0), _pred(pred), _mode(mode) {}
-    // A bytecode frame can only be copied (CSE info contains a unique_key object)
-    BytecodeFrame(BytecodeFrame&& frame) = default;
 
     void destroyRegisters(Interpreter* interpreter) {
       reg.destroy(interpreter);
@@ -277,6 +382,7 @@ namespace MiniZinc {
     static const std::string status_to_string[MAX_STATUS+1];
   protected:
     std::vector<BytecodeFrame> _stack;
+    std::vector<CSEFrame> _cse_stack;
     std::vector<AggregationCtx> _agg;
     std::vector<LoopState> _loops;
     std::vector<BytecodeProc>& _procs;
@@ -300,9 +406,12 @@ namespace MiniZinc {
     std::unordered_map<int, Val> solutions;
 
     Interpreter(std::vector<BytecodeProc>& procs,
-                BytecodeFrame&& f) : _procs(procs), _identCount(0), cse(procs.size())
+                const BytecodeFrame& f) : _procs(procs), _identCount(0), cse(procs.size())
     {
-      _stack.emplace_back(std::move(f));
+      _stack.reserve(32);
+      _cse_stack.reserve(32);
+      _stack.emplace_back(f);
+
       infinite_dom = Vec::a(this, newIdent(), {-Val::infinity(), Val::infinity()});
       infinite_dom->addRef(this);
       boolean_dom = Vec::a(this, newIdent(), {0, 1});
@@ -342,36 +451,6 @@ namespace MiniZinc {
     bool runDelayed();
     void pushAgg(const Val& v, int stackOffset);
     void pushConstraint(Constraint* d);
-    std::unique_ptr<CSEKey> cse_key(int proc, const std::vector<Val>& vals) {
-      std::unique_ptr<CSEKey> key;
-
-      DTRACE1(CSE_KEYALLOC_START, (uintptr_t) this);
-      switch (_procs[proc].nargs) {
-        case 1: {
-          key = std::unique_ptr<CSEKey>(new FixedKey<1>(*this, vals));
-          break;
-        }
-        case 2: {
-          key = std::unique_ptr<CSEKey>(new FixedKey<2>(*this, vals));
-          break;
-        }
-        case 3: {
-          key = std::unique_ptr<CSEKey>(new FixedKey<3>(*this, vals));
-          break;
-        }
-        case 4: {
-          key = std::unique_ptr<CSEKey>(new FixedKey<4>(*this, vals));
-          break;
-        }
-        default: {
-          key = std::unique_ptr<CSEKey>(new VariadicKey(*this, vals));
-          break;
-        }
-      }
-      DTRACE1(CSE_KEYALLOC_END, (uintptr_t) this);
-
-      return key;
-    }
     std::pair<Val, bool> cse_find(int proc, const CSEKey& key, BytecodeProc::Mode& mode);
     void cse_insert(int proc, CSEKey& key, BytecodeProc::Mode& mode, Val& val);
     void set_global(int i, const Val& val) { globals.assign(this, i, val); }

@@ -749,7 +749,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   }
   // The main procedure is the last one in the file
   BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT],bs.size()-1,BytecodeProc::ROOT);
-  interpreter = new Interpreter(bs, std::move(frame));
+  interpreter = new Interpreter(bs, frame);
   // Parse and add data
   if (!mzn_defs.empty()) {
     GCLock lock;
