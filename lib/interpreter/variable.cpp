@@ -261,28 +261,29 @@ namespace MiniZinc {
             RefCountedObject::rmRef(interpreter, this);
           }
         } else if (c->arg(i).isVec()) {
-          assert(c->arg(i).size()==2);
-          assert(c->arg(i)[0].isVec());
+          Val content = c->arg(i).toVec()->raw_data();
           bool hasVar = false;
-          for (int j=0; j<c->arg(i)[0].size(); j++) {
-            if (c->arg(i)[0][j].isVar() && c->arg(i)[0][j].timestamp()==_timestamp) {
+          for (int j=0; j < content.size(); j++) {
+            if (content[j].isVar() && content[j].timestamp() == _timestamp) {
               hasVar = true;
               break;
             }
           }
           if (hasVar) {
-            if (!c->arg(i).unique() || !c->arg(i)[0].unique()) {
+            if (!c->arg(i).unique() || !content.unique()) {
               // make vectors unique so that we can safely decrement reference counts
-              std::vector<Val> vals(c->arg(i)[0].size());
+              std::vector<Val> vals(content.size());
               for (int i=0; i<vals.size(); i++) {
-                vals[i] = c->arg(i)[0][i];
+                vals[i] = content[i];
               }
-              Vec* vv = Vec::a(interpreter, interpreter->newIdent(), vals);
-              Vec* v = Vec::a(interpreter, interpreter->newIdent(), {Val(vv), c->arg(i)[1]});
+              Val v = Val(Vec::a(interpreter, interpreter->newIdent(), vals));
+              if (c->arg(i).toVec()->hasIndexSet()) {
+                v = Val(Vec::a(interpreter, interpreter->newIdent(), {v, c->arg(i).toVec()->index_set()}));
+              }
               c->arg(interpreter, i, Val(v));
             }
-            for (int j=0; j<c->arg(i)[0].size(); j++) {
-              if (c->arg(i)[0][j].timestamp()==_timestamp) {
+            for (int j=0; j < content.size(); j++) {
+              if (content[j].timestamp() == _timestamp) {
                 RefCountedObject::rmRef(interpreter, this);
               }
             }

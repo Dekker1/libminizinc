@@ -261,11 +261,18 @@ namespace MiniZinc {
 
       return vs.int_var()->cast<VarDecl>()->id();
     } else {
-      // Expected [[actual array], [indexes]]
       assert(v.isVec());
-      if (v.size() == 2 && v[0].isVec() && v[1].isVec()) {
+      if (ty.is_set()) {
+        std::vector<IntSetVal::Range> ranges;
+        Vec* vec = v.toVec();
+        for (int i=0; i<vec->size(); i+=2) {
+          ranges.push_back(IntSetVal::Range((*vec)[i].toIntVal(),(*vec)[i+1].toIntVal()));
+        }
+        auto sl = new SetLit(Location().introduce(), IntSetVal::a(ranges));
+        return sl;
+      } else {
         // this is an array
-        Val vec = v[0];
+        Val vec = v.toVec()->raw_data();
         std::vector<Expression*> evec(vec.size());
         bool par = true;
         for (int i = 0; i < vec.size(); ++i) {
@@ -277,17 +284,7 @@ namespace MiniZinc {
         }
         auto al = new ArrayLit(Location().introduce(), evec);
         al->type(par ? Type::parint(1) : Type::varint(1));
-        assert(v[1].size() == 2 && v[1][0] == 1 && v[1][1] == vec.size());
         return al;
-      } else {
-        // this is a set
-        std::vector<IntSetVal::Range> ranges;
-        Vec* vec = v.toVec();
-        for (int i=0; i<vec->size(); i+=2) {
-          ranges.push_back(IntSetVal::Range((*vec)[i].toIntVal(),(*vec)[i+1].toIntVal()));
-        }
-        auto sl = new SetLit(Location().introduce(), IntSetVal::a(ranges));
-        return sl;
       }
     }
   }

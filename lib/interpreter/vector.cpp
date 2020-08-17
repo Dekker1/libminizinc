@@ -15,13 +15,6 @@
 
 namespace MiniZinc {
 
-  Vec* Vec::allocate_array(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) {
-    Vec* values = a(interpreter, interpreter->newIdent(), v);
-    Vec* idx = a(interpreter, interpreter->newIdent(), {1, v.size()});
-    Vec* nv = a(interpreter, timestamp, {Val(values), Val(idx)});
-    return nv;
-  }
-
   bool
   Vec::isPar() const {
     assert(alive());

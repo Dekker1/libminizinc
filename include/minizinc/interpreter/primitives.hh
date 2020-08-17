@@ -51,10 +51,12 @@ namespace MiniZinc {
       INFINITE_DOMAIN,
       BOOLEAN_DOMAIN,
       SLICE_XD,
+      ARRAY_XD,
+      INDEX_SET,
 
       PARTIAL_LINEAR=INT_TIMES,
       MAX_LIN=INT_LIN_LE_REIF,
-      MAX_ID=SLICE_XD,
+      MAX_ID=INDEX_SET,
     };
     class Primitive {
     protected:
@@ -149,9 +151,11 @@ namespace MiniZinc {
         Val lb = 0;
         Val ub = 0;
 
-        for (int i = 0; i < c->arg(0)[0].size(); ++i) {
-          lb += Val::follow_alias(c->arg(0)[0][i],&interpreter).lb();
-          ub += Val::follow_alias(c->arg(0)[0][i],&interpreter).ub();
+        Val arr = c->arg(0).toVec()->raw_data();
+
+        for (int i = 0; i < arr.size(); ++i) {
+          lb += Val::follow_alias(arr[i], &interpreter).lb();
+          ub += Val::follow_alias(arr[i], &interpreter).ub();
         }
 
         std::vector<Val> ndom = {lb, ub};
@@ -254,44 +258,48 @@ namespace MiniZinc {
 
         bool propImmediately = false;
         int vars = 0;
-        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
-          Val v = c->arg(1)[0][j];
+        Val arr = c->arg(1).toVec()->raw_data();
+        for (unsigned int j=0; j < arr.size(); j++) {
+          Val v = arr[j];
           assert(v.isVar());
           v.toVar()->subscribe(c, Variable::SES_VAL);
         }
-        if (c->arg(1)[0].size() <= 2 /* || propImmediately */) {
+        if (arr.size() <= 2 /* || propImmediately */) {
           return propagate(i,c);
         } else {
           return PS_OK;
         }
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+        Val arr = c->arg(1).toVec()->raw_data();
+        for (int j = 0; j < arr.size(); ++j) {
+          Val arg = Val::follow_alias(arr[j], &i);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
         }
       }
       virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
-        if (c->arg(1)[0].size() == 1) {
-          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+        Val var = c->arg(1).toVec()->raw_data();
+        Val weight = c->arg(0).toVec()->raw_data();
+        if (var.size() == 1) {
+          Val v = Val::follow_alias(var[0], &i);
           if (v.isVar()) {
-            if (c->arg(2) % c->arg(0)[0][0]==0) {
-              return v.toVar()->setVal(&i, c->arg(2) / c->arg(0)[0][0]) ? PS_ENTAILED : PS_FAILED;
+            if (c->arg(2) % weight[0] == 0) {
+              return v.toVar()->setVal(&i, c->arg(2) / weight[0]) ? PS_ENTAILED : PS_FAILED;
             } else {
               return PS_FAILED;
             }
           } else {
             // aliased to val
-            return c->arg(0)[0][0]*v == c->arg(2) ? PS_ENTAILED : PS_FAILED;
+            return weight[0]*v == c->arg(2) ? PS_ENTAILED : PS_FAILED;
           }
         }
-        if (c->arg(1)[0].size() == 2) {
-          Val lhs = Val::follow_alias(c->arg(1)[0][0], &i);
-          Val rhs = Val::follow_alias(c->arg(1)[0][1], &i);
-          Val lhs_c = c->arg(0)[0][0];
-          Val rhs_c = c->arg(0)[0][1];
+        if (var.size() == 2) {
+          Val lhs = Val::follow_alias(var[0], &i);
+          Val rhs = Val::follow_alias(var[1], &i);
+          Val lhs_c = weight[0];
+          Val rhs_c = weight[1];
           if (!lhs.isVar()) {
             std::swap(lhs, rhs);
             std::swap(lhs_c, rhs_c);
@@ -333,23 +341,25 @@ namespace MiniZinc {
 
         bool propImmediately = false;
         int vars = 0;
-        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
-          Val v = c->arg(1)[0][j];
+        Val arr = c->arg(1).toVec()->raw_data();
+        for (unsigned int j=0; j < arr.size(); j++) {
+          Val v = arr[j];
           assert(v.isVar());
           v.toVar()->subscribe(c, Variable::SES_VAL);
         }
         if (c->arg(3).isVar()) {
           c->arg(3).toVar()->subscribe(c, Variable::SES_VAL);
         }
-        if (c->arg(1)[0].size() <= 1 /* || propImmediately */) {
+        if (arr.size() <= 1 /* || propImmediately */) {
           return propagate(i,c);
         } else {
           return PS_OK;
         }
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+        Val arr = c->arg(1).toVec()->raw_data();
+        for (int j = 0; j < arr.size(); ++j) {
+          Val arg = Val::follow_alias(arr[j], &i);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
@@ -360,14 +370,16 @@ namespace MiniZinc {
         }
       }
       virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        Val var = c->arg(1).toVec()->raw_data();
+        Val weight = c->arg(0).toVec()->raw_data();
         Val r = Val::follow_alias(c->arg(3), &i);
         if (r.isInt()) {
           // TODO: Rewrite to int_lin_eq
           return PS_OK;
         }
-        if (c->arg(1)[0].size() == 1) {
-          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
-          Val mult = Val::follow_alias(c->arg(0)[0][0], &i);
+        if (var.size() == 1) {
+          Val v = Val::follow_alias(var[0], &i);
+          Val mult = Val::follow_alias(weight[0], &i);
           if (v.isVar()) {
             if (c->arg(2) % mult == 0) {
               Val res = c->arg(2) / mult;
@@ -398,38 +410,42 @@ namespace MiniZinc {
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
         // Check me: linear equation should be in its simplified form.
 
-        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
-          Val v = c->arg(1)[0][j];
+        Val arr = c->arg(1).toVec()->raw_data();
+        for (unsigned int j=0; j < arr.size(); j++) {
+          Val v = arr[j];
           assert(v.isVar()); // cannot be alias because of simplify_linexp
           v.toVar()->subscribe(c, Variable::SES_VAL);
         }
-        if (c->arg(1)[0].size() <= 2 /* || propImmediately */) {
+        if (arr.size() <= 2 /* || propImmediately */) {
           return propagate(i,c);
         } else {
           return PS_OK;
         }
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+        Val arr = c->arg(1).toVec()->raw_data();
+        for (int j = 0; j < arr.size(); ++j) {
+          Val arg = Val::follow_alias(arr[j], &i);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
         }
       }
       virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
-        if (c->arg(1)[0].size() == 1) {
-          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+        Val var = c->arg(1).toVec()->raw_data();
+        Val weight = c->arg(0).toVec()->raw_data();
+        if (var.size() == 1) {
+          Val v = Val::follow_alias(var[0], &i);
           if (v.isVar()) {
-            Val newBound = c->arg(2) / c->arg(0)[0][0];
-            if (c->arg(0)[0][0] > 0) {
+            Val newBound = c->arg(2) / weight[0];
+            if (weight[0] > 0) {
               return v.toVar()->setMax(&i, newBound) ? PS_ENTAILED : PS_FAILED;
             } else {
               return v.toVar()->setMin(&i, newBound) ? PS_ENTAILED : PS_FAILED;
             }
           } else {
             // aliased to val
-            return c->arg(0)[0][0]*v <= c->arg(2) ? PS_ENTAILED : PS_FAILED;
+            return weight[0]*v <= c->arg(2) ? PS_ENTAILED : PS_FAILED;
           }
         }
         // More propagation?
@@ -443,23 +459,25 @@ namespace MiniZinc {
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
         // Check me: linear equation should be in its simplified form.
 
-        for (unsigned int j=0; j < c->arg(1)[0].size(); j++) {
-          Val v = c->arg(1)[0][j];
+        Val arr = c->arg(1).toVec()->raw_data();
+        for (unsigned int j=0; j < arr.size(); j++) {
+          Val v = arr[j];
           assert(v.isVar()); // cannot be alias because of simplify_linexp
           v.toVar()->subscribe(c, Variable::SES_VAL);
         }
         if (c->arg(3).isVar()) {
           c->arg(3).toVar()->subscribe(c, Variable::SES_VAL);
         }
-        if (c->arg(1)[0].size() <= 1 /* || propImmediately */) {
+        if (arr.size() <= 1 /* || propImmediately */) {
           return propagate(i,c);
         } else {
           return PS_OK;
         }
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(1)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(1)[0][j], &i);
+        Val arr = c->arg(1).toVec()->raw_data();
+        for (int j = 0; j < arr.size(); ++j) {
+          Val arg = Val::follow_alias(arr[j], &i);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
@@ -470,14 +488,16 @@ namespace MiniZinc {
         }
       }
       virtual PropStatus propagate(Interpreter& i, Constraint* c) const {
+        Val var = c->arg(1).toVec()->raw_data();
+        Val weight = c->arg(0).toVec()->raw_data();
         Val r = Val::follow_alias(c->arg(3), &i);
         if (r.isInt()) {
           //TODO: Replace with int_lin_le
           return PS_OK;
         }
-        if (c->arg(1)[0].size() == 1) {
-          Val mult = c->arg(0)[0][0];
-          Val v = Val::follow_alias(c->arg(1)[0][0], &i);
+        if (var.size() == 1) {
+          Val mult = weight[0];
+          Val v = Val::follow_alias(var[0], &i);
           if (v.isVar()) {
             if (mult*v.lb() <= c->arg(2) && mult*v.ub() <= c->arg(2)) {
               return r.toVar()->setVal(&i, true) ? PS_ENTAILED : PS_FAILED;
@@ -552,16 +572,19 @@ namespace MiniZinc {
       Clause(void) : PrimitiveMap::Primitive("bool_clause",PrimitiveMap::CLAUSE,2) {}
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
         bool propImmediately = false;
-        for (unsigned int i=0; i<c->arg(0)[0].size(); i++) {
-          if (c->arg(0)[0][i].isVar()) {
-            c->arg(0)[0][i].toVar()->subscribe(c, Variable::SES_VAL);
+        Val pos = c->arg(0).toVec()->raw_data();
+        Val neg = c->arg(1).toVec()->raw_data();
+
+        for (unsigned int i = 0; i < pos.size(); i++) {
+          if (pos[i].isVar()) {
+            pos[i].toVar()->subscribe(c, Variable::SES_VAL);
           } else {
             propImmediately = true;
           }
         }
-        for (unsigned int i=0; i<c->arg(1)[0].size(); i++) {
-          if (c->arg(1)[0][i].isVar()) {
-            c->arg(1)[0][i].toVar()->subscribe(c, Variable::SES_VAL);
+        for (unsigned int i = 0; i < neg.size(); i++) {
+          if (neg[i].isVar()) {
+            neg[i].toVar()->subscribe(c, Variable::SES_VAL);
           } else {
             propImmediately = true;
           }
@@ -573,14 +596,17 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (unsigned int i=0; i<c->arg(0).size(); i++) {
-          Val arg = Val::follow_alias(c->arg(0)[0][i]);
+        Val pos = c->arg(0).toVec()->raw_data();
+        Val neg = c->arg(1).toVec()->raw_data();
+
+        for (unsigned int i = 0; i < pos.size(); i++) {
+          Val arg = Val::follow_alias(pos[i]);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
         }
-        for (unsigned int i=0; i<c->arg(1).size(); i++) {
-          Val arg = Val::follow_alias(c->arg(1)[0][i]);
+        for (unsigned int i = 0; i < neg.size(); i++) {
+          Val arg = Val::follow_alias(neg[i]);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
@@ -594,16 +620,19 @@ namespace MiniZinc {
       ClauseReif(void) : PrimitiveMap::Primitive("bool_clause_reif", PrimitiveMap::CLAUSE_REIF, 3) {}
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
         bool propImmediately = false;
-        for (unsigned int i=0; i<c->arg(0)[0].size(); i++) {
-          if (c->arg(0)[0][i].isVar()) {
-            c->arg(0)[0][i].toVar()->subscribe(c, Variable::SES_VAL);
+        Val pos = c->arg(0).toVec()->raw_data();
+        Val neg = c->arg(1).toVec()->raw_data();
+
+        for (unsigned int i = 0; i < pos.size(); i++) {
+          if (pos[i].isVar()) {
+            pos[i].toVar()->subscribe(c, Variable::SES_VAL);
           } else {
             propImmediately = true;
           }
         }
-        for (unsigned int i=0; i<c->arg(1)[0].size(); i++) {
-          if (c->arg(1)[0][i].isVar()) {
-            c->arg(1)[0][i].toVar()->subscribe(c, Variable::SES_VAL);
+        for (unsigned int i = 0; i < neg.size(); i++) {
+          if (neg[i].isVar()) {
+            neg[i].toVar()->subscribe(c, Variable::SES_VAL);
           } else {
             propImmediately = true;
           }
@@ -618,18 +647,22 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (unsigned int i=0; i<c->arg(0).size(); i++) {
-          Val arg = Val::follow_alias(c->arg(0)[0][i]);
+        Val pos = c->arg(0).toVec()->raw_data();
+        Val neg = c->arg(1).toVec()->raw_data();
+
+        for (unsigned int i = 0; i < pos.size(); i++) {
+          Val arg = Val::follow_alias(pos[i]);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
         }
-        for (unsigned int i=0; i<c->arg(1).size(); i++) {
-          Val arg = Val::follow_alias(c->arg(1)[0][i]);
+        for (unsigned int i = 0; i < neg.size(); i++) {
+          Val arg = Val::follow_alias(neg[i]);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
         }
+
         Val arg = Val::follow_alias(c->arg(2));
         if (arg.isVar()) {
           arg.toVar()->unsubscribe(c);
@@ -643,9 +676,11 @@ namespace MiniZinc {
       Forall(void) : PrimitiveMap::Primitive("array_bool_and",PrimitiveMap::FORALL,2) {}
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
         bool propImmediately = false;
-        for (unsigned int j=0; j<c->arg(0)[0].size(); j++) {
-          if (c->arg(0)[0][j].isVar()) {
-            c->arg(0)[0][j].toVar()->subscribe(c, Variable::SES_VAL);
+
+        Val arr = c->arg(0).toVec()->raw_data();
+        for (unsigned int j = 0; j < arr.size(); j++) {
+          if (arr[j].isVar()) {
+            arr[j].toVar()->subscribe(c, Variable::SES_VAL);
           } else {
             propImmediately = true;
           }
@@ -662,8 +697,9 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (unsigned int i=0; i<c->arg(0).size(); i++) {
-          Val arg = Val::follow_alias(c->arg(0)[0][i]);
+        Val arr = c->arg(0).toVec()->raw_data();
+        for (unsigned int i = 0; i < arr.size(); i++) {
+          Val arg = Val::follow_alias(arr[i]);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
@@ -681,9 +717,11 @@ namespace MiniZinc {
       Exists(void) : PrimitiveMap::Primitive("array_bool_or",PrimitiveMap::EXISTS,2) {}
       virtual PropStatus subscribe(Interpreter& i, Constraint* c) const {
         bool propImmediately = false;
-        for (int j = 0; j < c->arg(0)[0].size(); ++j) {
-          if (c->arg(0)[0][j].isVar()) {
-            c->arg(0)[0][j].toVar()->subscribe(c, Variable::SES_VAL);
+
+        Val arr = c->arg(0).toVec()->raw_data();
+        for (int j = 0; j < arr.size(); ++j) {
+          if (arr[j].isVar()) {
+            arr[j].toVar()->subscribe(c, Variable::SES_VAL);
           } else {
             propImmediately = true;
           }
@@ -700,8 +738,9 @@ namespace MiniZinc {
         }
       }
       virtual void unsubscribe(Interpreter& i, Constraint* c) const {
-        for (int j = 0; j < c->arg(0)[0].size(); ++j) {
-          Val arg = Val::follow_alias(c->arg(0)[0][j], &i);
+        Val arr = c->arg(0).toVec()->raw_data();
+        for (int j = 0; j < arr.size(); ++j) {
+          Val arg = Val::follow_alias(arr[j], &i);
           if (arg.isVar()) {
             arg.toVar()->unsubscribe(c);
           }
@@ -835,7 +874,17 @@ namespace MiniZinc {
       SliceXd() : PrimitiveMap::Primitive("slice_Xd",PrimitiveMap::SLICE_XD, 3) {}
       virtual void execute(Interpreter& i, const std::vector<Val>& args);
     };
-}
+    class ArrayXd : public PrimitiveMap::Primitive {
+    public:
+      ArrayXd() : PrimitiveMap::Primitive("array_Xd", PrimitiveMap::ARRAY_XD, 2) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
+    };
+    class IndexSet : public PrimitiveMap::Primitive {
+    public:
+      IndexSet() : PrimitiveMap::Primitive("index_set", PrimitiveMap::INDEX_SET, 2) {}
+      virtual void execute(Interpreter& i, const std::vector<Val>& args);
+    };
+  }
 }
 
 #endif

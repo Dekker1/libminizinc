@@ -673,16 +673,19 @@ Val MznSolver::eval_val(EnvI& env, Expression* e) {
     for (size_t i = 0; i < al->size(); ++i) {
       content[i] = eval_val(env, (*al)[i]);
     }
-    Vec* vc = Vec::a(interpreter, interpreter->newIdent(), content);
+    Val ret = Val(Vec::a(interpreter, interpreter->newIdent(), content));
 
-    std::vector<Val> idxs(al->dims()*2);
-    for (size_t i = 0; i < al->dims(); ++i) {
-      idxs[i*2] = Val(al->min(i));
-      idxs[i*2+1] = Val(al->max(i));
+    if (al->dims() > 1 || al->min(0) != 1) {
+      std::vector<Val> idxs(al->dims()*2);
+      for (size_t i = 0; i < al->dims(); ++i) {
+        idxs[i*2] = Val(al->min(i));
+        idxs[i*2+1] = Val(al->max(i));
+      }
+      Vec* ranges = Vec::a(interpreter, interpreter->newIdent(), idxs);
+      ret = Val(Vec::a(interpreter, interpreter->newIdent(), {ret, Val(ranges)}, true));
     }
-    Vec* ranges = Vec::a(interpreter, interpreter->newIdent(), idxs);
 
-    return Val(Vec::a(interpreter, interpreter->newIdent(), {Val(vc), Val(ranges)}));
+    return ret;
   }
   if (e->type().is_set()) {
     //TODO: Might not be int

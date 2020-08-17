@@ -141,40 +141,35 @@ _FOREACH<V, E> FOREACH(V&& v, E&& e) { return _FOREACH<V, E> { std::move(v), std
 
 // Slightly nicer version of FOREACH.
 template<class E>
-void ITER_VEC(CodeGen& cg, CG_Builder& frag, int r, E e) {
-#if 0
-  int rB(GET_REG(cg));
-  int rE(GET_REG(cg));
+void ITER_ARRAY(CodeGen& cg, CG_Builder& frag, int r, E e) {
   int rV(GET_REG(cg));
   int lblH(GET_LABEL(cg));
   int lblE(GET_LABEL(cg));
-  // Set up the iterators
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(rB));
-  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(r), CG::r(rE));
-  // Check if the vec is non-empty
-  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rB), CG::r(rE), CG::r(rV));
-  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(rV), CG::l(lblE));
-  PUSH_LABEL(frag, lblH);
-  // Dereference the iterator
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r), CG::r(rB), CG::r(rV));
-  // Emit code for the body
-  e(cg, frag, rV);
-  // Now increment and loop back.
-  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(rB));
-  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(rB), CG::r(rE), CG::r(rV));
-  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(rV), CG::l(lblH));
-  PUSH_LABEL(frag, lblE);
-#else
-  int rV(GET_REG(cg));
-  int lblH(GET_LABEL(cg));
-  int lblE(GET_LABEL(cg));
-  PUSH_INSTR(frag, BytecodeStream::ITER_VEC, CG::r(r), CG::l(lblE));
+  PUSH_INSTR(frag, BytecodeStream::ITER_ARRAY, CG::r(r), CG::l(lblE));
   PUSH_LABEL(frag, lblH);
   PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(rV));
   e(cg, frag, rV);
   PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(lblH));
   PUSH_LABEL(frag, lblE);
-#endif
+}
+template<class E>
+void ITER_SET(CodeGen& cg, CG_Builder& frag, int r, E e) {
+  int r_elt(GET_REG(cg));
+  int r_range_min(GET_REG(cg));
+  int r_range_max(GET_REG(cg));
+  int lblH1(GET_LABEL(cg));
+  int lblH2(GET_LABEL(cg));
+  int lblE(GET_LABEL(cg));
+  PUSH_INSTR(frag, BytecodeStream::ITER_VEC, CG::r(r), CG::l(lblE));
+  PUSH_LABEL(frag, lblH1);
+  PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(r_range_min));
+  PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(r_range_max));
+  PUSH_INSTR(frag, BytecodeStream::ITER_RANGE, CG::r(r_range_min), CG::r(r_range_max), CG::l(lblH1));
+  PUSH_LABEL(frag, lblH2);
+  PUSH_INSTR(frag, BytecodeStream::ITER_NEXT, CG::r(r_elt));
+  e(cg, frag, r_elt);
+  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(lblH2));
+  PUSH_LABEL(frag, lblE);
 }
 
 // Same as FOREACH, but when working with a vector of pairs (i.e. sets)
@@ -330,7 +325,7 @@ struct Foreach : public EmitPost {
   
   void emit_pre(CG_Builder& frag) {
     // Set up the iterators
-    PUSH_INSTR(frag, BytecodeStream::ITER_VEC, CG::r(r), CG::l(lblE));
+    PUSH_INSTR(frag, BytecodeStream::ITER_ARRAY, CG::r(r), CG::l(lblE));
     PUSH_LABEL(frag, lblH);
     // Dereference the iterator
     for(int rv : rVS) {

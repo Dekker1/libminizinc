@@ -79,7 +79,7 @@ namespace MiniZinc {
             }
             case PrimitiveMap::INT_SUM: {
               assert(stacktop == Val::follow_alias(defby->arg(1)));
-              Val arr = defby->arg(0)[0];
+              Val arr = defby->arg(0).toVec()->raw_data();
               for (int i = 0; i < arr.size(); ++i) {
                 Val arg = Val::follow_alias(arr[i]);
                 if (arg.isInt()) {
@@ -264,9 +264,9 @@ namespace MiniZinc {
           coeffs.push_back(Val(-1));
           vars.push_back(*this);
 
-          Vec* ncoeffs = Vec::allocate_array(interpreter, interpreter->newIdent(), coeffs);
+          Vec* ncoeffs = Vec::a(interpreter, interpreter->newIdent(), coeffs);
           ncoeffs->addRef(interpreter);
-          Vec* nvars = Vec::allocate_array(interpreter, interpreter->newIdent(), vars);
+          Vec* nvars = Vec::a(interpreter, interpreter->newIdent(), vars);
           nvars->addRef(interpreter);
 
           std::vector<Val> args = {Val(ncoeffs), Val(nvars), Val(-d)};

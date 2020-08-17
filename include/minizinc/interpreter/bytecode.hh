@@ -58,9 +58,9 @@ namespace MiniZinc {
 
       ISPAR,   // R1 -> R2: put whether value in R1 is not a variable into R2
       ISEMPTY, // R1 -> R2: put whether vector in R1 is empty into R2
-      LENGTH,  // R1 -> R2: put length of vector in R1 into R2
+      LENGTH,  // R1 -> R2: put length of array in R1 into R2
       GET_VEC, // R1, R2 -> R3: put element R2 of vector in R1 into R3
-      GET_VEC_NDIM, // n, R1, R2, ... Rn -> Rn+1 Rn+2: put element [R2,...,Rn] of n-dimensional vector in R1 into Rn+1 with success signal Rn+2
+      GET_ARRAY, // n, R1, R2, ... Rn -> Rn+1 Rn+2: put element [R2,...,Rn] of n-dimensional vector in R1 into Rn+1 with success signal Rn+2
 
       LB, // R1 -> R2: put lower bound of value in R1 into R2
       UB, // R1 -> R2: put upper bound of value in R1 into R2
@@ -87,6 +87,7 @@ namespace MiniZinc {
       BUILTIN, // i, n, R1, ..., Rn : call builtin function i
       TCALL, // m, i, cse : call code i in mode m (arguments are assumed to be in correct registers already). The 0/1 flag 'cse' is used to signal if a CSE lookup should be performed
 
+      ITER_ARRAY, // R, l: Iterate over array in R, jump to l when finished.
       ITER_VEC, // R, l: Iterate over vector in R, jump to l when finished.
       ITER_RANGE, // R1, R2, l: Iterate over values in [R1, R2]
       ITER_NEXT, // R: increment the topmost loop, binding the result to R. Pop and jump to loop exit if finished.

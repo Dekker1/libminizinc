@@ -358,7 +358,11 @@ namespace MiniZinc {
           int r2 = frame->bs->reg(frame->pc);
           DBG_INTERPRETER("LENGTH R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           assert(frame->reg[r1].isVec());
-          frame->reg.assign(this, r2, frame->reg[r1].size());
+          if (!frame->reg[r1].toVec()->hasIndexSet()) {
+            frame->reg.assign(this, r2, frame->reg[r1].size());
+          } else {
+            frame->reg.assign(this, r2, frame->reg[r1][0].size());
+          }
           DBG_INTERPRETER(" R" << r2  << "(" << frame->reg[r2].toString() << ")" <<  "\n");
         }
           break;
@@ -376,11 +380,11 @@ namespace MiniZinc {
           DBG_INTERPRETER(" R" << r3 <<  "(" << v.toString(DBG_TRIM_OUTPUT) << ")" <<  "\n");
         }
           break;
-        case BytecodeStream::GET_VEC_NDIM:
+        case BytecodeStream::GET_ARRAY:
         {
           Val n = frame->bs->intval(frame->pc);
           int r1 = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER("GET_VEC_NDIM " << n.toString() << "R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
+          DBG_INTERPRETER("GET_ARRAY " << n.toString() << " R" << r1  << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
           std::vector<Val> idx(n.toInt());
           for (int i=0; i<n; i++) {
             int rr = frame->bs->reg(frame->pc);
@@ -390,35 +394,44 @@ namespace MiniZinc {
           int r_res = frame->bs->reg(frame->pc);
           int r_cond = frame->bs->reg(frame->pc);
           assert(frame->reg[r1].isVec());
-          assert(frame->reg[r1].size()==2);
-          assert(frame->reg[r1][0].isVec());
-          assert(frame->reg[r1][1].isVec());
-
-          std::vector<std::pair<Val,Val>> dimensions;
-          Val realdim = 1;
-          for (int i=0; i<frame->reg[r1][1].size(); i+=2) {
-            Val a = frame->reg[r1][1][i];
-            Val b = frame->reg[r1][1][i+1];
-            dimensions.emplace_back(a,b);
-            realdim *= b-a+1;
-          }
 
           bool success = true;
-          Val realidx = 0;
-          for (int i=0; i<idx.size(); i++) {
-            Val ix = idx[i];
-            if (ix < dimensions[i].first || ix > dimensions[i].second) {
-              success = false;
-              break;
-            }
-            realdim /= dimensions[i].second-dimensions[i].first+1;
-            realidx += (ix-dimensions[i].first)*realdim;
-          }
-          assert(realidx >= 0 && realidx < frame->reg[r1][0].size());
+          Val v = Val(-2000);
 
-          Val v = 0;
-          if (success) {
-            v = Val::follow_alias(frame->reg[r1][0][realidx.toInt()], this);
+          Val content = frame->reg[r1].toVec()->raw_data();
+          if (frame->reg[r1].toVec()->hasIndexSet()) {
+            // N-Dimensional array representation
+            Val index_set = frame->reg[r1].toVec()->index_set();
+            std::vector<std::pair<Val,Val>> dimensions;
+            Val realdim = 1;
+            for (int i=0; i < index_set.size(); i+=2) {
+              Val a = index_set[i];
+              Val b = index_set[i+1];
+              dimensions.emplace_back(a,b);
+              realdim *= b-a+1;
+            }
+
+            Val realidx = 0;
+            for (int i=0; i<idx.size(); i++) {
+              Val ix = idx[i];
+              if (ix < dimensions[i].first || ix > dimensions[i].second) {
+                success = false;
+                break;
+              }
+              realdim /= dimensions[i].second-dimensions[i].first+1;
+              realidx += (ix-dimensions[i].first)*realdim;
+            }
+            assert(realidx >= 0 && realidx < content.size());
+
+            if (success) {
+              v = Val::follow_alias(content[realidx.toInt()], this);
+            }
+          } else {
+            // Compact array representation (index set 1..n)
+            success = 1 <= idx[0] && idx[0] <= frame->reg[r1].size();
+            if (success) {
+              v = Val::follow_alias(content[idx[0].toInt()-1], this);
+            }
           }
 
           frame->reg.assign(this, r_res, v);
@@ -858,6 +871,25 @@ execute_ret:
           }
         }
           break;
+        case BytecodeStream::ITER_ARRAY:
+        {
+          int r1 = frame->bs->reg(frame->pc);
+          int l = frame->bs->reg(frame->pc);
+          DBG_INTERPRETER("ITER_ARRAY " << r1  << " " << l << "\n");
+          assert(frame->reg[r1].isVec());
+          if (frame->reg[r1].toVec()->hasIndexSet()) {
+            assert(frame->reg[r1].size()==2);
+            assert(frame->reg[r1][0].isVec());
+
+            Vec* v(frame->reg[r1][0].toVec());
+            _loops.push_back(LoopState(v, l));
+          } else {
+            // Compact array representation (index set 1..n)
+            Vec* v(frame->reg[r1].toVec());
+            _loops.push_back(LoopState(v, l));
+          }
+        }
+          break;
         case BytecodeStream::ITER_VEC:
         {
           int r1 = frame->bs->reg(frame->pc);
@@ -903,6 +935,7 @@ execute_ret:
           } else {
             frame->pc = outer.exit_pc;
             _loops.pop_back();
+            DBG_INTERPRETER(" (EXIT " << outer.exit_pc <<  ")\n");
           }
         }
           break;
@@ -1016,8 +1049,8 @@ execute_ret:
 
           simplify_linexp(coeffs,vars,d);
 
-          Val coeffs_v = Val(Vec::allocate_array(this, newIdent(), coeffs));
-          Val vars_v = Val(Vec::allocate_array(this, newIdent(), vars));
+          Val coeffs_v = Val(Vec::a(this, newIdent(), coeffs));
+          Val vars_v = Val(Vec::a(this, newIdent(), vars));
           frame->reg.assign(this, r2, coeffs_v);
           frame->reg.assign(this, r3, vars_v);
           frame->reg.assign(this, r4, -d);
@@ -1080,7 +1113,7 @@ execute_ret:
                 } else if (args.size() == 1) {
                   pushAgg(args[0], -2);
                 } else {
-                  Vec* arr = Vec::allocate_array(this, newIdent(), args);
+                  Vec* arr = Vec::a(this, newIdent(), args);
                   result = Variable::a(this,boolean_domain(),false, newIdent());
                   auto def_c = Constraint::a(this, PrimitiveMap::FORALL, BytecodeProc::ROOT, {Val(arr), Val(result)});
                   assert(def_c.first);
@@ -1135,11 +1168,10 @@ execute_ret:
                   }
                 } else {
                   // Push into root context
-                  Vec* vpos = Vec::allocate_array(this, newIdent(), pos);
-                  Vec* vneg = Vec::allocate_array(this, newIdent(), neg);
+                  Vec* vpos = Vec::a(this, newIdent(), pos);
+                  Vec* vneg = Vec::a(this, newIdent(), neg);
                   /// TODO: check, why not EXISTS? Is it guaranteed that this will be processed further?
                   if (_agg.size() == 2) {
-                    Vec* empty = Vec::allocate_array(this, newIdent(), {});
                     auto c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)});
                     assert(c.first);
                     root()->addDefinition(this, c.first);

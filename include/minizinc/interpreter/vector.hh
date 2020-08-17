@@ -20,9 +20,10 @@ namespace MiniZinc {
 
   class Vec : public RefCountedObject {
   protected:
-    int _size;
+    int _size : 31;
+    bool _has_index : 1;
     Val _data[1];
-    Vec(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) : RefCountedObject(RefCountedObject::VEC,timestamp), _size(v.size()) {
+    Vec(Interpreter* interpreter, int timestamp, const std::vector<Val>& v, bool has_index) : RefCountedObject(RefCountedObject::VEC,timestamp), _size(v.size()), _has_index(has_index) {
       for (unsigned int i=0; i<v.size(); i++) {
         new (&_data[i]) Val(v[i]);
         _data[i].addRef(interpreter);
@@ -33,12 +34,11 @@ namespace MiniZinc {
     int size(void) const { assert(alive()); return _size; }
     // TODO: Should vectors be indexed from 1 internally?
     const Val& operator [](int i) const { assert(alive()); assert(i >= 0 && i<_size); return _data[i]; }
-    static Vec* a(Interpreter* interpreter, int timestamp, const std::vector<Val>& v) {
+    static Vec* a(Interpreter* interpreter, int timestamp, const std::vector<Val>& v, bool has_index = false) {
       Vec* nv = static_cast<Vec*>(::malloc(sizeof(Vec)+sizeof(Val)*std::max(0, static_cast<int>(v.size()-1))));
-      new (nv) Vec(interpreter,timestamp,v);
+      new (nv) Vec(interpreter,timestamp,v,has_index);
       return nv;
     }
-    static Vec* allocate_array(Interpreter* interpreter, int timestamp, const std::vector<Val>& v);
     void destroyModel(Interpreter* interpreter) {
       for (unsigned int i=0; i<_size; i++) {
         if (_memory_ref_count > 0u) {
@@ -77,6 +77,23 @@ namespace MiniZinc {
       return true;
     }
     bool isPar() const;
+    bool hasIndexSet() const {
+      return _has_index;
+    }
+    Val raw_data() const {
+      if (_has_index) {
+        assert(_size == 2);
+        assert((*this)[0].isVec());
+        return (*this)[0];
+      }
+      return Val(this);
+    }
+    Val index_set() const {
+      assert(_has_index);
+      assert(_size == 2);
+      assert((*this)[1].isVec());
+      return (*this)[1];
+    }
     std::vector<Val> as_vector() {
       assert(alive());
       std::vector<Val> nv;

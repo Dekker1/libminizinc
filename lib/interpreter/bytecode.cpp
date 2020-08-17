@@ -154,9 +154,9 @@ namespace MiniZinc {
           oss << "GET_VEC R" << reg(pc) << " R" << reg(pc) << " R" << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
-        case BytecodeStream::GET_VEC_NDIM:
+        case BytecodeStream::GET_ARRAY:
         {
-          oss << "GET_VEC_NDIM ";
+          oss << "GET_ARRAY ";
           long long int n=intval(pc).toInt();
           oss << n;
           for (long long int i=0; i < (n + 3); ++i) {
@@ -246,6 +246,11 @@ namespace MiniZinc {
           } else {
             oss << "TCALL " << BytecodeProc::mode_to_string[m] << " " << procs[p].name << (cse ? "" : " no_cse") << " % " << cur_pc << "\n";
           }
+        }
+          break;
+        case BytecodeStream::ITER_ARRAY:
+        {
+          oss << "ITER_ARRAY" << reg(pc) << " " << reg(pc) << " % " << cur_pc << "\n";
         }
           break;
         case BytecodeStream::ITER_VEC:

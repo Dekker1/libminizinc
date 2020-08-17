@@ -42,9 +42,38 @@ namespace MiniZinc {
     InfiniteDomain inf_dom;
     BooleanDomain bool_dom;
     SliceXd slice_xd;
+    ArrayXd array_xd;
+    IndexSet index_set;
 
     PrimitiveMap::Primitive* AllPrimitives[] = {
-      &int_plus, &int_minus, &int_sum, &int_times, &int_lin_eq, &int_lin_eq_reif, &int_lin_le, &int_lin_le_reif, &mk_intvar, &boolnot, &opnot, &clause, &clause_reif, &forall, &exists, &uniform, &sol, &sort, &sortby, &intmax, &infinity, &inf_dom, &bool_dom, &slice_xd,
+      &int_plus,
+      &int_minus,
+      &int_sum,
+      &int_times,
+
+      &int_lin_eq,
+      &int_lin_eq_reif,
+      &int_lin_le,
+      &int_lin_le_reif,
+
+      &mk_intvar,
+      &boolnot,
+      &opnot,
+      &clause,
+      &clause_reif,
+      &forall,
+      &exists,
+      &uniform,
+      &sol,
+      &sort,
+      &sortby,
+      &intmax,
+      &infinity,
+      &inf_dom,
+      &bool_dom,
+      &slice_xd,
+      &array_xd,
+      &index_set,
     };
   }
 
@@ -91,7 +120,7 @@ namespace MiniZinc {
     void Sort::execute(Interpreter& i, const std::vector<Val>& args) {
       assert(args.size()==1);
 
-      Val al = args[0][0];
+      Val al = args[0].toVec()->raw_data();
       std::vector<int> ai(al.size());
       for (int j=0; j < al.size(); j++) {
         ai[j] = al[j].toInt();
@@ -102,7 +131,7 @@ namespace MiniZinc {
       for (int j=0; j < al.size(); j++) {
         sorted[j] = Val(ai[j]);
       }
-      Vec* al_sorted = Vec::allocate_array(&i, i.newIdent(), sorted);
+      Vec* al_sorted = Vec::a(&i, i.newIdent(), sorted);
 
       i.pushAgg(Val(al_sorted), -1);
     };
@@ -110,8 +139,8 @@ namespace MiniZinc {
     void SortBy::execute(Interpreter& i, const std::vector<Val>& args) {
       assert(args.size()==2);
 
-      Val al = args[0][0];
-      Val order_e = args[1][0];
+      Val al = args[0].toVec()->raw_data();
+      Val order_e = args[1].toVec()->raw_data();
       std::vector<Val> order(order_e.size());
       std::vector<int> a(order_e.size());
       for (int j=0; j < order.size(); j++) {
@@ -130,7 +159,7 @@ namespace MiniZinc {
       for (int j = sorted.size(); j--;) {
         sorted[j] = al[a[j]];
       }
-      Vec* al_sorted = Vec::allocate_array(&i, i.newIdent(), sorted);
+      Vec* al_sorted = Vec::a(&i, i.newIdent(), sorted);
 
       i.pushAgg(Val(al_sorted), -1);
     };
@@ -159,13 +188,23 @@ namespace MiniZinc {
     void SliceXd::execute(Interpreter& i, const std::vector<Val>& args) {
       assert(args.size()==3);
       assert(args[0].isVec() && args[1].isVec() && args[2].isVec() );
-      assert(args[0][1].size() / 2 == args[1][0].size());
 
-      std::vector<Val> idxs(args[1][0].size());
+      Val content = args[0].toVec()->raw_data();
+      Val selection = args[1].toVec()->raw_data();
+      Val new_idxs = args[2].toVec()->raw_data();
+
+      std::vector<Val> idxs(args[1].size());
       std::vector<Val> slice;
-      // Initialise indexes
-      for (int j = 0; j < idxs.size(); ++j) {
-        idxs[j] = args[0][1][j*2];
+      // Initialise indexes to the index lower bound
+      if (args[0].toVec()->hasIndexSet() ) {
+        Val index_set = args[0].toVec()->index_set();
+        assert(index_set / 2 == selection.size());
+        for (int j = 0; j < idxs.size(); ++j) {
+          idxs[j] = index_set[j*2];
+        }
+      } else {
+        assert(selection.size() == 1);
+        idxs[0] = 1;
       }
 
       // Walk through array and make slice selection
@@ -174,41 +213,106 @@ namespace MiniZinc {
       while (level >= 0) {
         bool in_slice = true;
         for (int k = 0; k < idxs.size(); ++k) {
-          in_slice = in_slice && args[1][0][k][0] <= idxs[k] && idxs[k] <= args[1][0][k][1];
+          assert(selection[k].size() == 2);
+          in_slice = in_slice && selection[k][0] <= idxs[k] && idxs[k] <= selection[k][1];
         }
 
-        assert(it < args[0][0].size());
+        assert(it < content.size());
         if (in_slice) {
-          slice.push_back(args[0][0][it]);
+          slice.push_back(content[it]);
         }
         it++;
 
         while (level >= 0) {
-          if (idxs[level] < args[0][1][level*2+1]) {
-            idxs[level]++;
-            level = idxs.size() - 1;
-            break;
+          if (args[0].toVec()->hasIndexSet() ) {
+            Val index_set = args[0].toVec()->index_set();
+            if (idxs[level] < index_set[level*2+1]) {
+              idxs[level]++;
+              level = idxs.size() - 1;
+              break;
+            } else {
+              idxs[level] = index_set[level*2];
+              level--;
+            }
           } else {
-            idxs[level] = args[0][1][level*2];
-            level--;
+            assert(level == 0);
+            if (idxs[0] < content.size()) {
+              idxs[0]++;
+              // No need to reset level, there is only one.
+              break;
+            } else {
+              // Done (no need to reset index values).
+              level--;
+            }
           }
         }
       }
 
       // Format new index sets
       std::vector<Val> dom;
-      dom.reserve(args[2][0].size() * 2);
-      for (int j = 0; j < args[2][0].size(); ++j) {
-        assert(args[2][0][j].size() == 2);
-        dom.push_back(args[2][0][j][0]);
-        dom.push_back(args[2][0][j][1]);
+      dom.reserve(new_idxs.size() * 2);
+      for (int j = 0; j < new_idxs.size(); ++j) {
+        assert(new_idxs[j].size() == 2);
+        dom.push_back(new_idxs[j][0]);
+        dom.push_back(new_idxs[j][1]);
       }
 
       Vec* values = Vec::a(&i, i.newIdent(), slice);
       Vec* idx = Vec::a(&i, i.newIdent(), dom);
-      Vec* nv = Vec::a(&i, i.newIdent(), {Val(values), Val(idx)});
+      Vec* nv = Vec::a(&i, i.newIdent(), {Val(values), Val(idx)}, true);
 
       i.pushAgg(Val(nv), -1);
+    }
+
+    void ArrayXd::execute(Interpreter& i, const std::vector<Val>& args) {
+      assert(args.size()==2);
+      assert(args[0].isVec());
+
+      // Array Elements
+      Val arr = args[0].toVec()->raw_data();
+
+      if (args[1].isInt()) {
+        assert(args[1].toInt() == 0);
+        i.pushAgg(arr, -1);
+        return;
+      }
+
+      assert(args[1].isVec());
+      assert(args[1].size() % 2 == 0);
+      // Check if the index sets actually match up
+      int prod = 1;
+      for (int i = 0; i < args[1].size(); i += 2) {
+        prod *= (args[1][i+1].toInt() - args[1][i].toInt() + 1);
+      }
+      if (arr.size() != prod) {
+        throw std::runtime_error("ArrayXd cardinality mismatch");
+      }
+
+      Val ret = arr;
+      if (args[1].size() != 0 && !(args[1].size() == 2 && args[1][1].toInt() == 1)) {
+        ret = Val(Vec::a(&i, i.newIdent(), {arr, args[1]}, true));
+      }
+      i.pushAgg(ret, -1);
+    }
+
+    void IndexSet::execute(Interpreter& i, const std::vector<Val>& args) {
+      assert(args.size()==2);
+      assert(args[0].isVec() && args[1].isInt());
+
+      Val ret;
+      if (!args[0].toVec()->hasIndexSet()) {
+        assert(args[1].toInt() == 1 || args[1] == 0);
+        ret = Val(Vec::a(&i, i.newIdent(), {Val(1), Val(args[0].size())}));
+      } else if (args[1] == 0) {
+        ret = args[0].toVec()->index_set();
+      } else {
+        assert(args[0].size()==2);
+        assert(args[0][1].isVec());
+        assert(args[0][1].size() / 2 <= args[1].toInt());
+        Val index_sets = args[0].toVec()->index_set();
+        ret = Val(Vec::a(&i, i.newIdent(), {index_sets[(args[1].toInt()-1)*2], index_sets[(args[1].toInt()-1)*2+1]}));
+      }
+      i.pushAgg(ret, -1);
     }
 
   }
