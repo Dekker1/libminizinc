@@ -47,7 +47,7 @@ predicate aux_int_eq_if_1(var int: x, var int: y, var int: p) =
 
 predicate aux_float_ne_if_1(var float: x, var float: y, var int: p) =
   if is_fixed(p) then
-    if fix(p) = 1 then (x = y) else true endif
+    if fix(p) = 1 then (x != y) else true endif
   elseif is_fixed(x) /\ is_fixed(y) then         %%% Needed to avoid constant domain var
     if (fix(x) = fix(y)) then (p = 0) else true endif
   elseif is_fixed(x-y) then                      %%% Hypothetically possible to land here
@@ -121,27 +121,26 @@ predicate aux_float_le_zero_if_0(var float: x, var int: p) =
   endif;
 
 predicate aux_float_lt_zero_if_0(var float: x, var int: p) =
-  assert(false, "Floats don't work yet");
-%   assert( has_bounds(x), "Variable \(x) needs finite bounds for a big-M constraint" ) /\
-%   if is_fixed(p) then
-%     if 0==fix(p) then x<0.0 else true endif
-%   elseif lb(x)>=0.0 then
-%     p==1
-%   elseif fPostprocessDomains /\ fPostproDom_AUX then
-%     aux_float_lt_zero_if_1__POST(x, 1-p, 1-p, float_lt_EPS)
-%   elseif fMZN__UseIndicators then
-%     aux_float_le_zero_if_0__IND(x+float_lt_EPS, p)       %% Here just absolute EPS,  TODO
-%   else
-% %%    let { float: rho = float_lt_EPS_coef__ * max(abs(ub(x)), abs(lb(x))) }  % same order of magnitude as ub(x)
-%     let { float: rho = float_lt_EPS }          % absolute eps
-%     in
-%     %%% This one causes 2x- derivation of EPS:
-%     %% x < (ub(x) + rho) * p
-%     %%% Better?
-%        x <= (ub(x) + rho) * p - rho
-%     %%% This just uses absolute eps:
-%     %% x < (ub(x) + float_lt_EPS) * p
-%   endif;
+  assert( has_bounds(x), "Variable \(x) needs finite bounds for a big-M constraint" ) /\
+  if is_fixed(p) then
+    if 0==fix(p) then x<0.0 else true endif
+  elseif lb(x)>=0.0 then
+    p==1
+  elseif fPostprocessDomains /\ fPostproDom_AUX then
+    aux_float_lt_zero_if_1__POST(x, 1-p, 1-p, float_lt_EPS)
+  elseif fMZN__UseIndicators then
+    aux_float_le_zero_if_0__IND(x+float_lt_EPS, p)       %% Here just absolute EPS,  TODO
+  else
+%%    let { float: rho = float_lt_EPS_coef__ * max(abs(ub(x)), abs(lb(x))) }  % same order of magnitude as ub(x)
+    let { float: rho = float_lt_EPS }          % absolute eps
+    in
+    %%% This one causes 2x- derivation of EPS:
+    %% x < (ub(x) + rho) * p
+    %%% Better?
+       x <= (ub(x) + rho) * p - rho
+    %%% This just uses absolute eps:
+    %% x < (ub(x) + float_lt_EPS) * p
+  endif;
 
 
 % Derived cases

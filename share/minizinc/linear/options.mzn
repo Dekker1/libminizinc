@@ -25,19 +25,53 @@ ann: MIP_cut = user_cut;         %% MIP_cut: make sure no feasible solutions are
                                  %% -- seems better on average but in CPLEX, wrong LB e.g. on carpet-cutting
 ann: MIP_lazy = lazy_constraint;
 
-%-----------------------------------------------------------------------------%
-% opt bool: fIndConstr;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% "GENERAL" constraints %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+opt bool: fIndConstr;          %% User option, e.g., with -D
+                               %% Attention: as of MZN 2.4.3, you also need -DfMIPdomains=false
 bool: fMZN__UseIndicators =    %% Pass on indicator constraints
-%           if absent( fIndConstr ) then false else deopt( fIndConstr ) endif;
-           false;
+           if absent( fIndConstr ) then false
+           else deopt( fIndConstr ) endif;
     %% CPLEX 12.6.2 Concert: reifs give wrong result on 2012/amaze, so using implications only
+    
+%% MAX/MIN
+opt bool: MinMaxGeneral;       %% User option, e.g., with -D
+                               %% pass on min/max to the backend as fzn_array_float_minimum
+bool: MZN__MinMaxGeneral = if absent(MinMaxGeneral) then false else deopt(MinMaxGeneral) endif;
+
+%% CUMULATIVE
+opt bool: CumulativeSolverConfig;               %% As set in share/minizinc/Preferences.json
+opt bool: Cumulative;          %% User option, e.g., with -D
+bool: MZN__Cumulative_Fixed_d_r = if occurs(Cumulative) then deopt(Cumulative)
+                      elseif occurs(CumulativeSolverConfig) then deopt(CumulativeSolverConfig)
+                      else false endif;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Quadratic expressions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% --------------------------------------------------------------------------------------- %
+%% Forward float_times as fzn_float_times
+opt bool: QuadrFloatSolverConfig;             %% As set in share/minizinc/Preferences.json
+opt bool: QuadrFloat;                         %% User option, e.g., with -D
+bool: MZN__QuadrFloat = if occurs(QuadrFloat) then deopt(QuadrFloat)
+                      elseif occurs(QuadrFloatSolverConfig) then deopt(QuadrFloatSolverConfig)
+                      else false endif;
+
+%% Forward int_times as fzn_int_times
+opt bool: QuadrIntSolverConfig;               %% As set in share/minizinc/Preferences.json
+opt bool: QuadrInt;                           %% User option, e.g., with -D
+bool: QuadrIntFinal = if occurs(QuadrInt) then deopt(QuadrInt)
+                      elseif occurs(QuadrIntSolverConfig) then deopt(QuadrIntSolverConfig)
+                      else false endif;
+opt int: QuadrIntCard;          %% Convert int_times to fzn_int_times if the minimum
+                                %% of x, y's domain cardinalities as at least QuadrIntCard
+int: MZN__QuadrIntCard = if occurs(QuadrIntCard) then deopt(QuadrIntCard)
+                         elseif QuadrIntFinal then 0 else infinity endif;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Subtour elimination in circuit %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % --------------------------------------------------------------------------------------- %
-% opt int: nSECcuts;       %% 0,1: use MTZ formulation
+opt int: nSECcuts;       %% 0,1: use MTZ formulation
 int: nMZN__fSECcuts =    %% 1,2: pass on circuit constraints to the MIP_solverinstance's cut gen
-%           if absent( nSECcuts ) then 0 else deopt( nSECcuts ) endif;
-           0;
+           if absent( nSECcuts ) then 0
+           else deopt( nSECcuts ) endif;
 
     
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MIPdomains %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -47,38 +81,33 @@ int: nMZN__fSECcuts =    %% 1,2: pass on circuit constraints to the MIP_solverin
   %%% The code in MIPdomains.cpp processes them and also non-contiguous domains
   %%% (only-range-domains is then standardly off). MIPdomains.cpp needs all the required
   %%% __POST predicates to be declared to kick in.
-% opt bool: fMIPDomains;           %% unified decomposition constraints (...__POST) to FlatZinc
-% opt bool: fMIPdomains;           %% Can be defined from cmdline: -D "fMIPdomains=false"
+opt bool: fMIPDomains;           %% unified decomposition constraints (...__POST) to FlatZinc
+opt bool: fMIPdomains;           %% Can be defined from cmdline: -D "fMIPdomains=false"
 bool: fPostprocessDomains =      %% True to pass all domain-related
-%           if absent( fMIPdomains ) /\ absent( fMIPDomains ) then false     %% seems best for all 28.5.19
-%           elseif not absent( fMIPdomains ) then deopt( fMIPdomains )
-%           else deopt( fMIPDomains )
-%           endif;
-  false     %% seems best for all 28.5.19
-  ;
-
-% opt bool: fMIPdomAux;
+           if absent( fMIPdomains ) /\ absent( fMIPDomains ) then true
+           elseif not absent( fMIPdomains ) then deopt( fMIPdomains )
+           else deopt( fMIPDomains )
+           endif;
+opt bool: fMIPdomAux;
 bool: fPostproDom_AUX =          %% Specialized for aux_ constr
-%           if absent( fMIPdomAux ) then false else deopt( fMIPdomAux ) endif;
-           false;
-% opt bool: fMIPdomDiff;
+           if absent( fMIPdomAux ) then false
+           else deopt( fMIPdomAux ) endif;
+opt bool: fMIPdomDiff;
 bool: fPostproDom_DIFF =         %% Specialized for differences: x<y <-> z=x-y<0
-%           if absent( fMIPdomDiff ) then false else deopt( fMIPdomDiff ) endif;
-           false;
+           if absent( fMIPdomDiff ) then false                             %% seems best for Gurobi, worse for CBC
+           else deopt( fMIPdomDiff ) endif;
 
 mzn_opt_only_range_domains = not fPostprocessDomains;   %% currently unused
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Avoid creating new int vars %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % --------------------------------------------------------------------------------------- %
-% opt bool: fAvoidNewInts;
+opt bool: fAvoidNewInts;
 bool: fAvoidNI =                  %% Actually this is only for ..._lin_..., not for just x-y
-%           if absent( fAvoidNewInts ) then false else deopt( fAvoidNewInts ) endif;
-           false;
-%opt bool: fNewVarsInAuxEq;
-% bool: fAuxIntEqOLD00 = if absent(fNewVarsInAuxEq) then false else deopt(fNewVarsInAuxEq) endif;
-bool: fAuxIntEqOLD00 = false;
-% bool: fAuxFloatEqOLD00 = if absent(fNewVarsInAuxEq) then false else deopt(fNewVarsInAuxEq) endif;
-bool: fAuxFloatEqOLD00 = false;
+           if absent( fAvoidNewInts ) then false
+           else deopt( fAvoidNewInts ) endif;
+opt bool: fNewVarsInAuxEq;
+bool: fAuxIntEqOLD00 = if absent(fNewVarsInAuxEq) then false else deopt(fNewVarsInAuxEq) endif;
+bool: fAuxFloatEqOLD00 = if absent(fNewVarsInAuxEq) then false else deopt(fNewVarsInAuxEq) endif;
 
 %%%%%%%%%%%%%%%%%%%%%  Redundant constraints ---------------------------------------------- %
 bool: fMZN__IgnoreRedundantCumulative=false;
@@ -86,16 +115,13 @@ bool: fMZN__IgnoreRedundantCumulative=false;
 %%%%% bool: fMZN__IgnoreAllUserRedundant=false;   %% ignore all user-spec redundant constr
 
 %%%%%%%%%%%%%%%%%%%%% Element, minimuum convex hull --------------------------------------- %
-% opt bool: fXBZCuts01;  %% orders 0, 1
-% opt bool: fXBZCutGen;  %% only works if Cuts01
+opt bool: fXBZCuts01;  %% orders 0, 1
+opt bool: fXBZCutGen;  %% only works if Cuts01
 bool: fElementCutsXZ=false;       %% Use simple XZ & XZB cuts for element
-% bool: fElementCutsXZB = if absent(fXBZCuts01) then false else deopt(fXBZCuts01) endif;
-bool: fElementCutsXZB = false;
+bool: fElementCutsXZB = if absent(fXBZCuts01) then false else deopt(fXBZCuts01) endif;
 bool: fMinimumCutsXZ=false;       %% Use simple XZ & XZB cuts for minimum
-bool: fMinimumCutsXZB = false;
-% bool: fMinimumCutsXZB = if absent(fXBZCuts01) then false else deopt(fXBZCuts01) endif;
-bool: fUseXBZCutGen = false;
-% bool: fUseXBZCutGen = if absent(fXBZCutGen) then false else deopt(fXBZCutGen) endif;
+bool: fMinimumCutsXZB = if absent(fXBZCuts01) then false else deopt(fXBZCuts01) endif;
+bool: fUseXBZCutGen = if absent(fXBZCutGen) then false else deopt(fXBZCutGen) endif;
 
 % ----------------------------------------------------------------------------------------- %
 bool: fIntTimesBool=true;       %% Special handling of multiplication with a boolean(*const)
@@ -127,16 +153,14 @@ int: nMZN__UnaryLenMax_setInReif = nMZN__UnaryLenMax__ALL;
 %% float: float_lt_EPS_coef__ = 1e-03; ABANDONED 12.4.18 due to #207
 %%% Absolute one, used everywhere
 %%% Might make no sense for floats with smaller domains etc.
-% opt float: float_EPS;
-% float: float_lt_EPS = if absent( float_EPS ) then 1e-6 else deopt( float_EPS ) endif;
-% float: float_lt_EPS = 1e-6;
+opt float: float_EPS;
+float: float_lt_EPS = if absent( float_EPS ) then 1e-6 else deopt( float_EPS ) endif;
 
 %-----------------------------------------------------------------------------%
 %%% Set =true to PRINT TRACING messages for some constraints:
-% opt bool: fMIPTrace;
+opt bool: fMIPTrace;
 bool: mzn__my_trace_on =
-%    if absent( fMIPTrace ) then false else deopt( fMIPTrace ) endif;
-    false;
+    if absent( fMIPTrace ) then false else deopt( fMIPTrace ) endif;
 test my_trace(string: msg) ::promise_total
   = if mzn__my_trace_on then trace(msg)
     else true endif;
@@ -147,10 +171,9 @@ function var bool: my_trace(string: msg, var bool: bb) ::promise_total
   = if mzn__my_trace_on then trace(msg, bb)
     else bb endif;
 %%% Set =true to PRINT TRACING messages for the currently debugged constraints:
-% opt bool: fMIPTraceDBG;
+opt bool: fMIPTraceDBG;
 bool: mzn__my_trace__DBG_on =
-%    if absent( fMIPTraceDBG ) then false else deopt( fMIPTraceDBG ) endif;
-    false;
+    if absent( fMIPTraceDBG ) then false else deopt( fMIPTraceDBG ) endif;
 test my_trace__DBG(string: msg) ::promise_total
   = if mzn__my_trace__DBG_on then trace(msg)
     else true endif;

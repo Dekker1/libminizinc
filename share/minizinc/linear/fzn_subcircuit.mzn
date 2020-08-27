@@ -13,7 +13,7 @@ predicate fzn_subcircuit(array[int] of var int: x) =
           int: n = card(S),
           array[S] of var 1..n: order,
           array[S] of var bool: ins = array1d(S,[ x[i] != i | i in S]),
-          var l..u+1: firstin = min([ u+1 + ins[i]*(i-u-1) | i in S]), %% ...
+          var l..u+1: firstin = min([ u+1 + bool2int(ins[i])*(i-u-1) | i in S]), %% ...
           var S: lastin,
           var bool: empty = (firstin == u+1), 
     } in
@@ -53,8 +53,8 @@ predicate fzn_subcircuit(array[int] of var int: x) =
 %       ) /\
       %%% MTZ model. Note that INTEGER order vars seem better!:
       forall (i,j in S where i!=j) (
-        order[i] - order[j] + n * ( x[i]==j /\ i!=lastin )
-        %  + (n-2) * (x[j]==i)     %% the Desrochers & Laporte '91 term
+        order[i] - order[j] + n*bool2int( x[i]==j /\ i!=lastin )
+        %  + (n-2)*bool2int(x[j]==i)     %% the Desrochers & Laporte '91 term
         <= n-1 ) /\
 
        % Each node that is not in is numbered after the lastin node.

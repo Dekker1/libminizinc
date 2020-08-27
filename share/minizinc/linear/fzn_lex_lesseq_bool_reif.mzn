@@ -13,12 +13,12 @@ predicate fzn_lex_lesseq_bool_reif(array[int] of var bool: x,
     /\
     forall(i in 0..size) (
         ( b[i] -> ( x[lx + i] <= y[ly + i] ) )  /\
-           b[i] + x[lx + i] + (1-y[ly + i]) <= 2
+           bool2int(b[i]) + bool2int(x[lx + i]) + (1-bool2int(y[ly + i])) <= 2
                  /\
         ( b[i] -> ( x[lx + i] <  y[ly + i] \/ b[i+1] ) )                 /\
-       b[i] + (1-x[lx + i]) + (1-y[ly + i]) + (1-b[i+1]) <= 3
-       /\ b[i] + x[lx + i] + y[ly + i] + (1-b[i+1]) <= 3
-       /\ b[i] + x[lx + i] + (1-y[ly + i]) + (1-b[i+1]) <= 3
+       bool2int(b[i]) + (1-bool2int(x[lx + i])) + (1-bool2int(y[ly + i])) + (1-bool2int(b[i+1])) <= 3
+       /\ bool2int(b[i]) + bool2int(x[lx + i]) + bool2int(y[ly + i]) + (1-bool2int(b[i+1])) <= 3
+       /\ bool2int(b[i]) + bool2int(x[lx + i]) + (1-bool2int(y[ly + i])) + (1-bool2int(b[i+1])) <= 3
     )
     /\ b[size+1] = (ux-lx <= uy-ly)
 %  endif
@@ -39,12 +39,12 @@ predicate fzn_lex_lesseq_bool_imp(array[int] of var bool: x,
     /\
     forall(i in 0..size) (
         ( b[i] -> ( x[lx + i] <= y[ly + i] ) )  /\
-           b[i] + x[lx + i] + (1-y[ly + i]) <= 2
+           bool2int(b[i]) + bool2int(x[lx + i]) + (1-bool2int(y[ly + i])) <= 2
                  /\
         ( b[i] -> ( x[lx + i] <  y[ly + i] \/ b[i+1] ) )                 /\
-       b[i] + (1-x[lx + i]) + (1-y[ly + i]) + (1-b[i+1]) <= 3
-       /\ b[i] + x[lx + i] + y[ly + i] + (1-b[i+1]) <= 3
-       /\ b[i] + x[lx + i] + (1-y[ly + i]) + (1-b[i+1]) <= 3
+       bool2int(b[i]) + (1-bool2int(x[lx + i])) + (1-bool2int(y[ly + i])) + (1-bool2int(b[i+1])) <= 3
+       /\ bool2int(b[i]) + bool2int(x[lx + i]) + bool2int(y[ly + i]) + (1-bool2int(b[i+1])) <= 3
+       /\ bool2int(b[i]) + bool2int(x[lx + i]) + (1-bool2int(y[ly + i])) + (1-bool2int(b[i+1])) <= 3
     )
     /\ b[size+1] = (ux-lx <= uy-ly)
 ;

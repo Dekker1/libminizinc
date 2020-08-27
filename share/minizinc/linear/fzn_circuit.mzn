@@ -28,8 +28,8 @@ predicate fzn_circuit(array[int] of var int: x) =
         array[l+1..l+n-1] of var 2..n: order,
       } in
       forall (i,j in l+1..l+n-1 where i!=j /\ j in dom(x[i])) (
-        order[i] - order[j] + (n-1) * (x[i]==j)
-          + (n-3) * (x[j]==i)     %% the Desrochers & Laporte '91 term
+        order[i] - order[j] + (n-1)* bool2int(x[i]==j)
+          + (n-3)*bool2int(x[j]==i)     %% the Desrochers & Laporte '91 term
           %%%%  --- strangely enough it is much worse on vrp-s2-v2-c7_vrp-v2-c7_det_ADAPT_1_INVERSE.mzn!
           <= n-2 )
     else true endif
