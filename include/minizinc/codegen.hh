@@ -191,7 +191,7 @@ struct CG_Cond {
     Kind kind(void) const { return _kind; }
 
     C_And(BytecodeProc::Mode _m, std::vector<T>& _children)
-      : m(_m), children(_children) { }
+      : m(_m), children(_children) { assert(children.size() > 1); }
 
     BytecodeProc::Mode m;
     std::vector<T> children;
@@ -223,8 +223,7 @@ struct CG_Cond {
     }
   }
   static T _forall(BytecodeProc::Mode m, std::vector<T>& args) {
-    T ret(T::ttt());
-    auto b(args.begin());
+    size_t count = 0;
     for(T x : args) {
       _T* p(x.get());
       if(!p) {
@@ -244,15 +243,17 @@ struct CG_Cond {
         continue;
       // Haven't seen this yet, so save and mark it.
       p->reg[x.sign()].is_seen = true;
-      (*b) = x;
-      ++b;
+      args[count] = x;
+      count++;
     }
-    args.erase(b, args.end());
     clear_seen(args.begin(), args.end());
-    if(args.size() == 0)
+    args.resize(count);
+    if(count == 0) {
       return T::ttt();
-    if(args.size() == 1)
+    }
+    if(count == 1) {
       return args[0];
+    }
     return T::of_ptr(new C_And(m, args));
   }
 
@@ -539,7 +540,7 @@ struct CG {
 };
 
 inline CG_Cond::T CG_Cond::_exists(BytecodeProc::Mode m, std::vector<T>& args) {
-  std::vector<T> c_args;
+  size_t count = 0;
   for(T x : args) {
     _T* p(x.get());
     if(!p) {
@@ -560,16 +561,18 @@ inline CG_Cond::T CG_Cond::_exists(BytecodeProc::Mode m, std::vector<T>& args) {
     }
     // Haven't seen this yet, so save and mark it.
     p->reg[x.sign()].is_seen = true;
-    c_args.push_back(~x);
+    args[count] = x;
+    count++;
   }
   clear_seen(args.begin(), args.end());
-  if(args.size() == 0) {
+  args.resize(count);
+  if(count == 0) {
     return T::fff();
   }
-  if(args.size() == 1) {
+  if(count == 1) {
     return args[0];
   }
-  return ~T::of_ptr(new C_And(-CG::Mode(m), c_args));
+  return ~T::of_ptr(new C_And(-CG::Mode(m), args));
 }
 
 // Partially compiled bytecode.

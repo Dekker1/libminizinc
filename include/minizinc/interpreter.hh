@@ -24,8 +24,8 @@
 #include <minizinc/interpreter/values.hh>
 #include <minizinc/support/dtrace.h>
 
-//#define DBG_INTERPRETER(msg) std::cerr << msg
-#define DBG_INTERPRETER(msg) do {} while(0)
+#define DBG_INTERPRETER(msg) std::cerr << msg
+// #define DBG_INTERPRETER(msg) do {} while(0)
 #define DBG_TRIM_OUTPUT true
 
 namespace MiniZinc {

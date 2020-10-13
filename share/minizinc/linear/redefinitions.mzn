@@ -233,14 +233,11 @@ function array[int] of var int: aux_int_division_modulo_fn(var int: x, var int: 
 
 %% Can also have int_times(var float, var int) ......... TODO
 
+predicate int_times(int: x, var int: y, var int: z);
+predicate int_times(var int: x, int: y, var int: z) = int_times(y, x, z);
+
 predicate int_times(var int: x, var int: y, var int: z) =
-  if is_fixed(x) then
-    z==fix(x)*y             %%%%% Need to use fix() otherwise added to CSE & nothing happens
-  elseif is_fixed(y) then
-    z==x*fix(y)
-  elseif is_same(x, y) then
-    z == pow(x, 2)
-  elseif 0..1==dom(x) /\ 0..1==dom(y) then bool_and__INT(x,y,z)
+  if 0..1==dom(x) /\ 0..1==dom(y) then bool_and__INT(x,y,z)
   elseif card(dom(x))==2 /\ card(dom(y))==2 /\ 0 in dom(x) /\ 0 in dom(y)
       then let {
         var 0..1: xn;

@@ -206,7 +206,8 @@ namespace MiniZinc {
         Val lb, ub;
         if ((a.isVar() && !a.toVar()->isBounded()) || (b.isVar() && !b.toVar()->isBounded())) {
           return PS_OK;
-        } else if (a.isInt() && a == 1) {
+        }
+        if (a.isInt() && a == 1) {
           if (res.isVar()) {
             if (b.isVar()) {
               bool success = res.toVar()->intersectDom(&i, Val(b.toVar()->domain()));
@@ -227,11 +228,14 @@ namespace MiniZinc {
           }
         }
 
-        lb = a.lb();
-        ub = a.ub();
-
-        lb *= b.lb();
-        ub *= b.ub();
+        if (a.lb() > 0 && b.lb() > 0) {
+          lb = a.lb() * b.lb();
+          ub = a.ub() * b.ub();
+        } else {
+          std::vector<Val> mults = {a.lb() * b.lb(), a.lb() * b.ub(), a.ub() * b.lb(), a.ub() * b.ub()};
+          lb = *std::min_element(mults.begin(), mults.end());
+          ub = *std::max_element(mults.begin(), mults.end());
+        }
 
         if (lb == ub) {
           if (res.isVar()) {

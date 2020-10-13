@@ -2121,9 +2121,7 @@ int locate_range(int l, int u, CodeGen& cg, CG_Builder& frag) {
     return b.first;
   }
   if (l == 0 && u == 1) {
-    OPEN_OTHER(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("boolean_domain"));
-    CLOSE_AGG(cg, frag);
     int r = GET_REG(cg);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     cg.env().cache_store_range(l, u, std::make_pair(r, CG_Cond::ttt()));
@@ -2145,16 +2143,17 @@ int locate_range(int l, int u, CodeGen& cg, CG_Builder& frag) {
 
 CG::Binding bind_domain(VarDecl* vd, CodeGen& cg, CG_Builder& frag) {
   if(vd->type().bt() == Type::BT_BOOL) {
-    return {locate_range(0, 1, cg, frag), CG_Cond::ttt()};
+    int r(GET_REG(cg));
+    PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("boolean_domain"));
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+    return {r, CG_Cond::ttt()};
   }
   if (Expression* d = vd->ti()->domain()) {
     // Ignoring partiality here.
     return CG::bind(d, cg, frag);
   }
   int r(GET_REG(cg));
-  OPEN_OTHER(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinite_domain"));
-  CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   return {r, CG_Cond::ttt()};
 }
@@ -2584,20 +2583,28 @@ std::pair<int, CG_Cond::T> _bind(Expression* e, CodeGen& cg, CG_Builder& frag) {
   } catch(const std::out_of_range& exn) { }
 
   switch (e->eid()) {
-  case Expression::E_INTLIT:
+  case Expression::E_INTLIT: {
     // return std::make_pair(CG::locate_immi(e->template cast<IntLit>()->v().toInt(), cg, frag), CG_Cond::ttt());
-    return std::make_pair(bind_cst(e->template cast<IntLit>()->v().toInt(), cg, frag), CG_Cond::ttt());
+    IntVal i = e->cast<IntLit>()->v();
+    if (!i.isFinite()) {
+      int r(GET_REG(cg));
+      PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(i.isPlusInfinity(), cg, frag)));
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+      return {r, CG_Cond::ttt()};
+    }
+    return {bind_cst(i.toInt(), cg, frag), CG_Cond::ttt()};
+  }
   case Expression::E_FLOATLIT:
     // return std::make_pair(CG::locate_par(e->template cast<FloatLit>(), cg, frag), nullptr);
-    TODO();
-    return CG::Binding(0, CG_Cond::ttt());
+    // NOT YET IMPLEMENTED
+    return CG::Binding(bind_cst(911911, cg, frag), CG_Cond::ttt());
   case Expression::E_SETLIT:
     return CG::bind(e->template cast<SetLit>(), ctx, cg, frag);
   case Expression::E_BOOLLIT:
     throw InternalError("bind called on Boolean expression.");
   case Expression::E_STRINGLIT:
-    TODO();
-    return CG::Binding(0, CG_Cond::ttt());
+    // NOT YET IMPLEMENTED
+    return CG::Binding(bind_cst(911911, cg, frag), CG_Cond::ttt());
   case Expression::E_ID:
     return CG::bind(e->template cast<Id>(), ctx, cg, frag);
   case Expression::E_ANON:
@@ -3120,25 +3127,42 @@ CG::Binding bind_assert_g(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG::bind(call->arg(2), cg, frag);
 }
 
-template<int X>
 CG::Binding bind_arrayXd(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  assert(call->n_args() == X + 1);
+  assert(call->n_args() == 2);
+  CG::Binding orig(CG::bind(call->arg(0), cg, frag));
+  CG::Binding target(CG::bind(call->arg(1), cg, frag));
+
+  // Get index sets from orig
+  int r(GET_REG(cg));
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("index_set"), CG::r(orig.first), CG::r(bind_cst(0, cg, frag)));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+
+  // Create new array
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("array_Xd"), CG::r(target.first), CG::r(r));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
+
+  return {r, CG_Cond::forall(ctx, orig.second, target.second)};
+}
+
+template<int N>
+CG::Binding bind_arrayNd(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == N + 1);
   std::vector<CG_Cond::T> cond;
 
   // Bind all index sets
-  std::vector<int> r_index(X);
-  for(int ii = 0; ii < X; ++ii) {
+  std::vector<int> r_index(N);
+  for(int ii = 0; ii < N; ++ii) {
     CG::Binding b(CG::bind(call->arg(ii), cg, frag));
     r_index[ii] = b.first;
     cond.push_back(b.second);
   }
 
   // Bind array expression
-  CG::Binding arr = CG::bind(call->arg(X), cg, frag);
+  CG::Binding arr = CG::bind(call->arg(N), cg, frag);
 
   int rI(GET_REG(cg));
   OPEN_VEC(cg, frag);
-    for (int ii = 0; ii < X; ++ii) {
+    for (int ii = 0; ii < N; ++ii) {
       // TODO: Ensure the index set is a range (2-elements)
       PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_index[ii]), CG::r(bind_cst(1, cg, frag)), CG::r(rI));
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rI));
@@ -3166,7 +3190,7 @@ CG::Binding bind_array1d(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   } else {
     // Index set given by the user
     assert(call->n_args() == 2);
-    return bind_arrayXd<1>(call, ctx, cg, frag);
+    return bind_arrayNd<1>(call, ctx, cg, frag);
   }
 }
 
@@ -3309,6 +3333,10 @@ CG::Binding bind_bool2int(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1);
   return CG::force_or_bind(call->arg(0), BytecodeProc::FUN, cg, frag);
 }
+CG::Binding bind_int2float(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1);
+  return CG::bind(call->arg(0), cg, frag);
+}
 
 CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
 CG_Cond::T compile_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag);
@@ -3350,6 +3378,7 @@ CG::Binding bind_max(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     PUSH_LABEL(frag, l_end);
   });
 
+  // TODO: Fail if array size < 1
   return CG::Binding(r, CG_Cond::ttt());
 }
 
@@ -3357,39 +3386,58 @@ CG::Binding bind_arg_max(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   assert(call->n_args() == 1); 
   CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
   int r(GET_REG(cg));
-  int r_v(GET_REG(cg));
-  int r_i(GET_REG(cg));
-  int r_sz(GET_REG(cg)); 
-  int r_test(GET_REG(cg));
   int r_elt(GET_REG(cg));
+  int r_v(GET_REG(cg));
+  int r_test(GET_REG(cg));
+  int r_index(GET_REG(cg));
 
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r_i));
-  PUSH_INSTR(frag, BytecodeStream::LENGTH, CG::r(b_A.first), CG::r(r_sz));
-  int l_fst(GET_LABEL(cg));
-  int l_hd(GET_LABEL(cg));
-  int l_tl(GET_LABEL(cg));
-  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIF, CG::r(r_test), CG::l(l_fst));
-  PUSH_INSTR(frag, BytecodeStream::ABORT);
-  PUSH_LABEL(frag, l_fst);
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("index_set"), CG::r(b_A.first), CG::r(bind_cst(1, cg, frag)));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_index));
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(0, cg, frag)));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_v));
 
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_v));
-  PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(1), CG::r(r));
-  
-  PUSH_LABEL(frag, l_hd);
-  PUSH_INSTR(frag, BytecodeStream::INCI, CG::r(r_i));
-  PUSH_INSTR(frag, BytecodeStream::LEI, CG::r(r_i), CG::r(r_sz), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_tl));
-  
-  PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(b_A.first), CG::r(r_i), CG::r(r_elt));
-  PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_v), CG::r(r_elt), CG::r(r_test));
-  PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_hd));
-  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_elt), CG::r(r_v));
-  PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_i), CG::r(r));
-  PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_hd));
-  PUSH_LABEL(frag, l_tl);
+  int l_end(GET_LABEL(cg));
+  ITER_SET(cg, frag, r_index, [&](CodeGen& cg, CG_Builder& frag, int r_i) {
+    // Array access should be valid since we are using the actual index set.
+    PUSH_INSTR(frag, BytecodeStream::GET_ARRAY, CG::i(1), CG::r(b_A.first), CG::r(r_i), CG::r(r_elt), CG::r(r_test));
+    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_v), CG::r(r_elt), CG::r(r_test));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_end));
+    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_elt), CG::r(r_v));
+    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_i), CG::r(r));
+    PUSH_LABEL(frag, l_end);
+  });
+
+  // TODO: Fail if array size < 1
   return CG::Binding(r, CG_Cond::ttt());
-  return bind_call(call, ctx, cg, frag);
+}
+
+CG::Binding bind_arg_min(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  assert(call->n_args() == 1); 
+  CG::Binding b_A(CG::bind(call->arg(0), cg, frag));
+  int r(GET_REG(cg));
+  int r_elt(GET_REG(cg));
+  int r_v(GET_REG(cg));
+  int r_test(GET_REG(cg));
+  int r_index(GET_REG(cg));
+
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("index_set"), CG::r(b_A.first), CG::r(bind_cst(1, cg, frag)));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_index));
+  PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"), CG::r(bind_cst(1, cg, frag)));
+  PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_v));
+
+  int l_end(GET_LABEL(cg));
+  ITER_SET(cg, frag, r_index, [&](CodeGen& cg, CG_Builder& frag, int r_i) {
+    // Array access should be valid since we are using the actual index set.
+    PUSH_INSTR(frag, BytecodeStream::GET_ARRAY, CG::i(1), CG::r(b_A.first), CG::r(r_i), CG::r(r_elt), CG::r(r_test));
+    PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_elt), CG::r(r_v), CG::r(r_test));
+    PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_end));
+    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_elt), CG::r(r_v));
+    PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_i), CG::r(r));
+    PUSH_LABEL(frag, l_end);
+  });
+
+  // TODO: Fail if array size < 1
+  return CG::Binding(r, CG_Cond::ttt());
 }
 
 CG::Binding bind_set_min(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
@@ -3511,6 +3559,15 @@ CG_Cond::T eval_has_bounds(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) 
   return CG_Cond::ttt();
 }
 
+CG::Binding bind_TODO(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  PUSH_INSTR(frag, BytecodeStream::ABORT);
+  return {0, CG_Cond::fff()};
+}
+CG_Cond::T eval_TODO(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
+  PUSH_INSTR(frag, BytecodeStream::ABORT);
+  return CG_Cond::fff();
+}
+
 template<int X>
 CG_Cond::T eval_argX_only(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return CG::compile(call->arg(X-1), cg, frag);
@@ -3523,15 +3580,16 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair(c.ids.exists.str(), builtin_t { eval_exists, bind_error_g } ));
   tbl.insert(std::make_pair(c.ids.forall.str(), builtin_t { eval_forall, bind_error_g } ));
   tbl.insert(std::make_pair(c.ids.assert.str(), builtin_t { eval_assert_b, bind_assert_g } ));
+  tbl.insert(std::make_pair("arrayXd", builtin_t { eval_error_b, bind_arrayXd } ));
   tbl.insert(std::make_pair("array1d", builtin_t { eval_error_b, bind_array1d } ));
-  tbl.insert(std::make_pair("array2d", builtin_t { eval_error_b, bind_arrayXd<2> } ));
-  tbl.insert(std::make_pair("array3d", builtin_t { eval_error_b, bind_arrayXd<3> } ));
-  tbl.insert(std::make_pair("array4d", builtin_t { eval_error_b, bind_arrayXd<4> } ));
-  tbl.insert(std::make_pair("array5d", builtin_t { eval_error_b, bind_arrayXd<5> } ));
-  tbl.insert(std::make_pair("array6d", builtin_t { eval_error_b, bind_arrayXd<6> } ));
-  tbl.insert(std::make_pair("array7d", builtin_t { eval_error_b, bind_arrayXd<7> } ));
-  tbl.insert(std::make_pair("array8d", builtin_t { eval_error_b, bind_arrayXd<8> } ));
-  tbl.insert(std::make_pair("array9d", builtin_t { eval_error_b, bind_arrayXd<9> } ));
+  tbl.insert(std::make_pair("array2d", builtin_t { eval_error_b, bind_arrayNd<2> } ));
+  tbl.insert(std::make_pair("array3d", builtin_t { eval_error_b, bind_arrayNd<3> } ));
+  tbl.insert(std::make_pair("array4d", builtin_t { eval_error_b, bind_arrayNd<4> } ));
+  tbl.insert(std::make_pair("array5d", builtin_t { eval_error_b, bind_arrayNd<5> } ));
+  tbl.insert(std::make_pair("array6d", builtin_t { eval_error_b, bind_arrayNd<6> } ));
+  tbl.insert(std::make_pair("array7d", builtin_t { eval_error_b, bind_arrayNd<7> } ));
+  tbl.insert(std::make_pair("array8d", builtin_t { eval_error_b, bind_arrayNd<8> } ));
+  tbl.insert(std::make_pair("array9d", builtin_t { eval_error_b, bind_arrayNd<9> } ));
   tbl.insert(std::make_pair("array_union", builtin_t { eval_error_b, bind_array_union } ));
   tbl.insert(std::make_pair("index_set", builtin_t { eval_error_b, bind_index_set} ));
   tbl.insert(std::make_pair("index_set_1of2", builtin_t { eval_error_b, bind_index_set_XofY<1, 2>} ));
@@ -3553,8 +3611,10 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("set2array", builtin_t { eval_error_b, bind_set2array } ));
   tbl.insert(std::make_pair("dom_bounds_array", builtin_t { eval_error_b, bind_dom_bounds_array } ));
   tbl.insert(std::make_pair("arg_max", builtin_t { eval_error_b, bind_arg_max } ));
+  tbl.insert(std::make_pair("arg_min", builtin_t { eval_error_b, bind_arg_min } ));
   tbl.insert(std::make_pair("card", builtin_t { eval_error_b, bind_card } ));
   tbl.insert(std::make_pair(c.ids.bool2int.str(), builtin_t { eval_error_b, bind_bool2int } ));
+  tbl.insert(std::make_pair(c.ids.int2float.str(), builtin_t { eval_error_b, bind_bool2int } ));
   tbl.insert(std::make_pair("uniform", builtin_t { eval_error_b, bind_internal } ));
   tbl.insert(std::make_pair("sol", builtin_t { eval_error_b, bind_internal } ));
   tbl.insert(std::make_pair("sort_by", builtin_t { eval_error_b, bind_internal } ));
@@ -3573,6 +3633,11 @@ builtin_table init_builtins(void) {
   tbl.insert(std::make_pair("internal_set_min", builtin_t { eval_error_b, bind_set_min} ));
   tbl.insert(std::make_pair("symmetry_breaking_constraint", builtin_t { eval_argX_only<1>, bind_error_g} ));
   tbl.insert(std::make_pair("redundant_constraint", builtin_t { eval_argX_only<1>, bind_error_g} ));
+  // OPTIONAL TYPE INTERNALS
+  tbl.insert(std::make_pair("reverse_map", builtin_t { eval_error_b, bind_TODO} ));
+  tbl.insert(std::make_pair("occurs", builtin_t { eval_TODO, bind_error_g} ));
+  tbl.insert(std::make_pair("absent", builtin_t { eval_TODO, bind_error_g} ));
+  tbl.insert(std::make_pair("deopt", builtin_t { eval_error_b, bind_TODO} ));
   return tbl;
 }
 builtin_table& builtins(void) {

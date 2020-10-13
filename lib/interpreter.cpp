@@ -781,7 +781,9 @@ execute_ret:
           std::vector<Val> args(n);
           for (int i=0; i<n; i++) {
             int r = frame->bs->reg(frame->pc);
-            args[i].assign(this, frame->reg[r]);
+            // Do not increase the reference count. Vector is destroyed after
+            // BUILTIN execution without cleanup
+            args[i] = frame->reg[r];
             DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
           }
           DBG_INTERPRETER("\n");

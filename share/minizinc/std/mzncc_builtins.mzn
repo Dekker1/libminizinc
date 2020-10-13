@@ -112,6 +112,16 @@ function var int: op_plus(var int: x, var int: y) ::promise_total =
 
 /** @group builtins.arithmetic Return \a x * \a y */
 function int: op_times(int: x, int: y) = x * y;
+function var int: op_times(int: x, var int: y) ::promise_total =
+  if x = 1 then
+    y
+  else
+    let {
+      var int: z;
+      constraint int_times(x, y, z);
+    } in z
+  endif;
+function var int: op_times(var int: x, int: y) = op_times(y, x);
 /** @group builtins.arithmetic Return \a x * \a y */
 function var int: op_times(var int: x, var int: y) ::promise_total =
   let {
