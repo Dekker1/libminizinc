@@ -47,7 +47,7 @@ default:
   cache:
     key: "$CI_JOB_STAGE:$CI_JOB_NAME"
     paths: [.ccache, vendor.zip*]
-  only: [tags, merge_requests, pipelines, develop, master]
+  only: [tags, merge_requests, pipelines, develop, master, feature/on_restart]
 
 build:linux:
   extends: .build
