@@ -164,25 +164,25 @@ namespace MiniZinc {
     }
   }
 
-  std::string
-  Val::toString(bool trim) const {
+  std::string Val::toString(bool trim) const {
     std::ostringstream oss;
-    if (isInt()) {
-      oss << toIntVal();
-    } else if (isVar()) {
-      if (timestamp() >= 0) {
+    Val v = follow_alias(*this);
+    if (v.isInt()) {
+      oss << v.toIntVal();
+    } else if (v.isVar()) {
+      if (v.timestamp() >= 0) {
         oss << "X" << timestamp() << "(";
       }
-      oss << toVar();
-      if (toVar()->timestamp() >= 0) {
+      oss << v.lb().toString() << "," << v.ub().toString();
+      if (v.toVar()->timestamp() >= 0) {
         oss << ")";
       }
     } else {
-      oss << "X" << toVec()->timestamp() << "[";
-      if (!trim || size() <= 4) {
-        for (size_t i=0; i<size(); i++) {
-          oss << (*this)[i].toString(trim);
-          if (i<size()-1)
+      oss << "X" << v.toVec()->timestamp() << "[";
+      if (!trim || v.size() <= 4) {
+        for (size_t i = 0; i < v.size(); i++) {
+          oss << v[i].toString(trim);
+          if (i < v.size() - 1)
             oss << ",";
         }
       } else {
