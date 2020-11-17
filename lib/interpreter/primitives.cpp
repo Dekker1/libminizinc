@@ -289,7 +289,7 @@ namespace MiniZinc {
       }
 
       Val ret = arr;
-      if (args[1].size() != 0 && !(args[1].size() == 2 && args[1][1].toInt() == 1)) {
+      if (args[1].size() != 0 && !(args[1].size() == 2 && args[1][0].toInt() == 1)) {
         ret = Val(Vec::a(&i, i.newIdent(), {arr, args[1]}, true));
       }
       i.pushAgg(ret, -1);
