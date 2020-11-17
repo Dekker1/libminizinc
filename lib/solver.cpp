@@ -996,17 +996,33 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
 
 void MznSolver::addDefinitions() {
   /// TODO: currently this will always add all variables and constraints
+  Variable* v = interpreter->root();
+  std::set<int> output;
+  for (Constraint* c : v->definitions()) {
+    if (interpreter->_procs[c->pred()].name == "output_this") {
+      assert(c->size() == 1);
+      Val arg = c->arg(0);
+      assert(arg.isVec());
+      for(int i = 0; i < arg.size(); ++i) {
+        Val real =  Val::follow_alias(Val(arg[i]));
+        if (real.isVar()) {
+          output.insert(real.toVar()->timestamp());
+        }
+      }
+
+      break;
+    }
+  }
   for (Variable* v = interpreter->root()->next(); v != interpreter->root(); v = v->next()) {
     // Only add variables that are not aliased
     if (Val(v) == Val::follow_alias(Val(v))) {
-      si->addVariable(v);
+      si->addVariable(v, output.empty() || output.find(v->timestamp()) != output.end());
     }
   }
-  Variable* v = interpreter->root();
   do {
     for (Constraint* c : v->definitions()) {
       if (interpreter->_procs[c->pred()].name == "output_this") {
-        output = c;
+        continue;
       } else {
         si->addConstraint(interpreter->_procs, c);
       }

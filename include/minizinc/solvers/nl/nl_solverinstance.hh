@@ -52,7 +52,7 @@ namespace MiniZinc {
 
       // TODO: implement
       void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override { assert(false); };
-      void addVariable(Variable* var) override { assert(false); };
+      void addVariable(Variable* var, bool isOutput) override { assert(false); };
       Val getSolutionValue(Variable* var) override { return Val(); };
 
     protected:

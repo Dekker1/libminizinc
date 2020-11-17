@@ -77,7 +77,7 @@ namespace MiniZinc {
 
       void addFunction(FunctionI* fi) override;
       void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override;
-      void addVariable(Variable* var) override;
+      void addVariable(Variable* var, bool isOuput) override;
       Val getSolutionValue(Variable* var) override;
 
       // Able to return to the solver into a position where no search decisions
@@ -99,7 +99,7 @@ namespace MiniZinc {
       void createFunctionItems();
       Expression* getSolutionValue(Id* id);
       Expression* val_to_expr(Type ty, Val v);
-      VarDecl* add_var_to_model(int ident, TypeInst* ti, bool view=false);
+      VarDecl* add_var_to_model(int ident, TypeInst* ti, bool view=false, bool isOutput=false);
   };
 
   class FZN_SolverFactory: public SolverFactory {

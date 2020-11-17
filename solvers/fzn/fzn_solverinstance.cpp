@@ -197,16 +197,18 @@ namespace MiniZinc {
     _model->registerFn(env.envi(), fi);
   }
 
-  VarDecl* FZNSolverInstance::add_var_to_model(int ident, TypeInst* ti, bool view) {
+  VarDecl* FZNSolverInstance::add_var_to_model(int ident, TypeInst* ti, bool view, bool isOutput) {
     VarDecl* vd;
     if (!view) {
       vd = new VarDecl(Location().introduce(), ti, ident);
 
-      vd->addAnnotation(constants().ann.output_var);
-      bool is_bool = ti->type().isbool();
-      auto output_ti = new TypeInst(Location().introduce(), is_bool ? Type::parbool() : Type::parint(), nullptr);
-      auto output_vd = new VarDecl(Location().introduce(), output_ti, ident);
-      env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
+      if (isOutput) {
+        vd->addAnnotation(constants().ann.output_var);
+        bool is_bool = ti->type().isbool();
+        auto output_ti = new TypeInst(Location().introduce(), is_bool ? Type::parbool() : Type::parint(), nullptr);
+        auto output_vd = new VarDecl(Location().introduce(), output_ti, ident);
+        env.output()->addItem(new VarDeclI(Location().introduce(), output_vd));
+      }
     } else {
       vd = new VarDecl(Location().introduce(), ti, "view_" + std::to_string(ident));
     }
@@ -336,7 +338,7 @@ namespace MiniZinc {
     _model->addItem(ci);
   };
 
-  void FZNSolverInstance::addVariable(Variable* var) {
+  void FZNSolverInstance::addVariable(Variable* var, bool isOutput) {
     GCLock lock;
     Vec* dom = var->domain();
     assert(dom->size() >= 2 && dom->size() % 2 == 0);
@@ -353,7 +355,7 @@ namespace MiniZinc {
     }
     SetLit* dom_set = new SetLit(Location().introduce(), IntSetVal::a(ranges));
     auto ti = new TypeInst(Location().introduce(), Type::varint(), dom_set);
-    VarDecl* vd = add_var_to_model(var->timestamp(), ti);
+    VarDecl* vd = add_var_to_model(var->timestamp(), ti, false, isOutput);
     vdmap.emplace(std::piecewise_construct, std::forward_as_tuple(var->timestamp()), std::forward_as_tuple(vd, nullptr, true, false));
   }
 

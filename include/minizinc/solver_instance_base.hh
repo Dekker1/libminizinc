@@ -79,7 +79,7 @@ namespace MiniZinc {
 
     virtual void addFunction(FunctionI* fi) {};
     virtual void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) = 0;
-    virtual void addVariable(Variable* var) = 0;
+    virtual void addVariable(Variable* var, bool isOutput) = 0;
     virtual Val getSolutionValue(Variable* var) = 0;
 
     /// reset the model to its core (removing temporary cts) and the solver to the root node of the search 
