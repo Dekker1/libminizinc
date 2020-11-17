@@ -308,7 +308,7 @@ namespace MiniZinc {
       } else {
         assert(args[0].size()==2);
         assert(args[0][1].isVec());
-        assert(args[0][1].size() / 2 <= args[1].toInt());
+        assert(args[0][1].size() / 2 >= args[1].toInt());
         Val index_sets = args[0].toVec()->index_set();
         ret = Val(Vec::a(&i, i.newIdent(), {index_sets[(args[1].toInt()-1)*2], index_sets[(args[1].toInt()-1)*2+1]}));
       }
