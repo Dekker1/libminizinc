@@ -83,7 +83,7 @@ int: nMZN__fSECcuts = 0;   %% 1,2: pass on circuit constraints to the MIP_solver
   %%% __POST predicates to be declared to kick in.
 % opt bool: fMIPDomains;           %% unified decomposition constraints (...__POST) to FlatZinc
 % opt bool: fMIPdomains;           %% Can be defined from cmdline: -D "fMIPdomains=false"
-bool: fPostprocessDomains = true;      %% True to pass all domain-related
+bool: fPostprocessDomains = false;      %% True to pass all domain-related
            % if absent( fMIPdomains ) /\ absent( fMIPDomains ) then true
            % elseif not absent( fMIPdomains ) then deopt( fMIPdomains )
            % else deopt( fMIPDomains )
