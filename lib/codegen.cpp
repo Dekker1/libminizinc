@@ -3277,7 +3277,7 @@ CG::Binding bind_ub_array(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   int r_test(GET_REG(cg));
   int l_end(GET_LABEL(cg));
   ITER_ARRAY(cg, frag, b_A.first, [&](CodeGen& cg, CG_Builder& frag, int r_elt) {
-    PUSH_INSTR(frag, BytecodeStream::LB, CG::r(r_elt), CG::r(r_tmp));
+    PUSH_INSTR(frag, BytecodeStream::UB, CG::r(r_elt), CG::r(r_tmp));
     PUSH_INSTR(frag, BytecodeStream::LTI, CG::r(r_agg), CG::r(r_tmp), CG::r(r_test));
     PUSH_INSTR(frag, BytecodeStream::JMPIFNOT, CG::r(r_test), CG::l(l_end));
     PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_tmp), CG::r(r_agg));
