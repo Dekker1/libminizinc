@@ -861,9 +861,9 @@ struct CodeGen {
   // Function resolution
   void register_function(FunctionI* f) { fun_map.add_body(f); }
 
-  CG_ProcID resolve_fun(FunctionI* f);
+  CG_ProcID resolve_fun(FunctionI* f, bool reserved_name = false);
   // CG_ProcID resolve_fun_pred(FunctionI* f);
-  CG_ProcID resolve_pred_def(FunctionI* f, BytecodeProc::Mode m);
+  // CG_ProcID resolve_pred_def(FunctionI* f, BytecodeProc::Mode m);
 
   std::vector< CG_Proc > bytecode; // Bytecode we've built
 
@@ -915,8 +915,8 @@ const char* instr_name(BytecodeStream::Instr i);
 const char* agg_name(AggregationCtx::Symbol s);
 const char* mode_name(BytecodeProc::Mode m);
 
-std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m);
-std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m);
+std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m, bool reserved_name = false);
+std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m, bool reserved_name = false);
 
 };
 

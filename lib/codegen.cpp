@@ -529,11 +529,11 @@ CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, in
   throw InternalError("Unexpected fall-through in linear_cond.");
 }
 
-CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
+CG_ProcID CodeGen::resolve_fun(FunctionI* fun, bool reserved_name) {
   auto it(fun_bodies.find(fun));
   if(it != fun_bodies.end())
     return it->second;
-  
+
   GCLock lock;
 
   int p_idx = bytecode.size();
@@ -541,7 +541,7 @@ CG_ProcID CodeGen::resolve_fun(FunctionI* fun) {
   ASTExprVec<VarDecl> params(fun->params());
 
   std::stringstream ss;
-  if (fun->e()) {
+  if (!reserved_name && fun->e()) {
     ss << "f_" << fun->id().str();
     for (auto& param : params) {
       ss << "_";
@@ -602,7 +602,7 @@ struct dispatch_node {
   uint64_t sig;
 };
 
-std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m) {
+std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const ASTString& ident, const Type& ret_type, std::vector<Type> arg_types, BytecodeProc::Mode m, bool reserved_name) {
   for (auto& arg_type : arg_types) {
     arg_type.ti(Type::TI_PAR);
   }
@@ -615,8 +615,9 @@ std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const
 
   if(it != cg.dispatch.end()) {
     auto d_proc(it->second);
-    if(d_proc.first.is_builtin() || cg.bytecode[d_proc.first.id()].is_available(call_mode))
+    if(d_proc.first.is_builtin() || cg.bytecode[d_proc.first.id()].is_available(call_mode)) {
       return {d_proc.first, call_mode, d_proc.second};
+    }
   }
 
   GCLock lock;
@@ -644,7 +645,7 @@ std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const
 
   std::vector<CG_ProcID> procs;
   for(FunctionI* b : bodies) {
-    CG_ProcID body(cg.resolve_fun(b));
+    CG_ProcID body(cg.resolve_fun(b, reserved_name && bodies.size() == 1));
     // Force the body to be created
     procs.push_back(body);
     if(!cg.bytecode[body.id()].is_available(call_mode)) {
@@ -655,8 +656,9 @@ std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const
 
   // If there's a unique candidate, go for it.
   if(procs.size() == 1) {
-    if(it == cg.dispatch.end())
+    if(it == cg.dispatch.end()) {
       cg.dispatch.insert(std::make_pair(sig, std::make_pair(procs[0], false)));
+    }
     return {procs[0], call_mode, false};
   }
 
@@ -668,45 +670,49 @@ std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const
     int p_idx = cg.bytecode.size();
 
     std::stringstream ss;
-    ss << "d_" << ident.str();
-    for (auto& type : arg_types) {
-      ss << "_";
-      if (type.dim() > 0) {
-        ss << "d" << type.dim();
-      } else if (type.dim() < 0) {
-        ss << "dT";
-      }
-      if (type.is_set()) {
-        ss << "s";
-      }
-      switch (type.bt()) {
-        case Type::BT_BOOL: {
-          ss << "b";
-          break;
+    if (reserved_name) {
+      ss << ident.str();
+    } else {
+      ss << "d_" << ident.str();
+      for (auto& type : arg_types) {
+        ss << "_";
+        if (type.dim() > 0) {
+          ss << "d" << type.dim();
+        } else if (type.dim() < 0) {
+          ss << "dT";
         }
-        case Type::BT_INT: {
-          ss << "i";
-          break;
-        }
-        case Type::BT_FLOAT: {
-          ss << "f";
-          break;
-        }
-        case Type::BT_STRING: {
+        if (type.is_set()) {
           ss << "s";
-          break;
         }
-        case Type::BT_ANN: {
-          ss << "a";
-          break;
-        }
-        case Type::BT_TOP: {
-          ss << "t";
-          break;
-        }
-        default: {
-          assert(false);
-          break;
+        switch (type.bt()) {
+          case Type::BT_BOOL: {
+            ss << "b";
+            break;
+          }
+          case Type::BT_INT: {
+            ss << "i";
+            break;
+          }
+          case Type::BT_FLOAT: {
+            ss << "f";
+            break;
+          }
+          case Type::BT_STRING: {
+            ss << "s";
+            break;
+          }
+          case Type::BT_ANN: {
+            ss << "a";
+            break;
+          }
+          case Type::BT_TOP: {
+            ss << "t";
+            break;
+          }
+          default: {
+            assert(false);
+            break;
+          }
         }
       }
     }
@@ -798,14 +804,14 @@ std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, const
 }
 
 
-std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m) {
+std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, Call* call, BytecodeProc::Mode m, bool reserved_name) {
   std::vector<Type> arg_types;
   int sz = call->n_args();
   for(int ii = 0; ii < sz; ++ii) {
     Type t(call->arg(ii)->type());
     arg_types.push_back(t);
   }
-  return find_call_fun(cg, call->id(), call->type(), arg_types, m);
+  return find_call_fun(cg, call->id(), call->type(), arg_types, m, reserved_name);
 }
 /*
 CG_ProcID find_call_pred(CodeGen& cg, Call* c) {
@@ -2162,7 +2168,12 @@ class Compile : public ItemVisitor {
 private:
   friend class ItemIter<Compile>;
 
-  Compile(CodeGen& _cg) : cg(_cg) /*, bool_dom(-1) */ { }
+  Compile(CodeGen& _cg) : cg(_cg) /*, bool_dom(-1) */ {
+    // Force the compilation of predicate definitions that can be generated by the compiler
+    find_call_fun(cg, {"bool_clause"}, Type::varbool(), {Type::varbool(1), Type::varbool(1)}, BytecodeProc::ROOT, true);
+    find_call_fun(cg, {"bool_clause_reif"}, Type::varbool(), {Type::varbool(1), Type::varbool(1), Type::varbool()}, BytecodeProc::ROOT, true);
+    find_call_fun(cg, {"int_lin_eq"}, Type::varbool(), {Type::parint(1), Type::varint(1), Type::parint()}, BytecodeProc::ROOT, true);
+  }
 
   /// Enter model
   bool enterModel(Model* m) { return true; }
