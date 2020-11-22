@@ -376,6 +376,7 @@ namespace MiniZinc {
 
   class Interpreter {
     friend class Trail;
+    friend class Constraint;
     friend class MznSolver;
   public:
     enum Status { ROGER, ABORTED, INCONSISTENT, ERROR, MAX_STATUS=ERROR };
@@ -388,7 +389,7 @@ namespace MiniZinc {
     std::vector<BytecodeProc>& _procs;
     int _identCount;
     std::vector<void*> cse; // Different instantiations of CSETable
-    std::vector<Constraint*> delayed_calls;
+    std::unordered_map<Constraint*, Variable*> delayed_constraints;
     std::deque<Constraint*> _propQueue;
     RegisterFile globals;
     Status _status = ROGER;
@@ -467,7 +468,7 @@ namespace MiniZinc {
     void schedule(Constraint* d, const Variable::SubscriptionEvent& ev);
     void deschedule(Constraint* d);
     void propagate(void);
-    void call(int code, const BytecodeProc::Mode& mode, const std::vector<Val>& args, bool delayed=false);
+    void call(int code, std::vector<Val>&& args);
 
     Val infinite_domain() {
       return Val(infinite_dom);

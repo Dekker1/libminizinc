@@ -1174,16 +1174,18 @@ execute_ret:
                   Vec* vneg = Vec::a(this, newIdent(), neg);
                   /// TODO: check, why not EXISTS? Is it guaranteed that this will be processed further?
                   if (_agg.size() == 2) {
-                    auto c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)});
+                    auto c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)}, 0, 1, true);
                     assert(c.first);
                     root()->addDefinition(this, c.first);
+                    delayed_constraints.emplace(std::make_pair(c.first, root()));
                     pushAgg(1, -2);
                   } else {
                     result = Variable::a(this,boolean_domain(),false, newIdent());
-                    auto def_c = Constraint::a(this, PrimitiveMap::CLAUSE_REIF, BytecodeProc::ROOT, {Val(vpos), Val(vneg), Val(result)});
+                    auto def_c = Constraint::a(this, PrimitiveMap::CLAUSE_REIF, BytecodeProc::ROOT, {Val(vpos), Val(vneg), Val(result)}, 0, 1, true);
                     assert(def_c.first);
                     result->addRef(this);
                     result->addDefinition(this, def_c.first);
+                    delayed_constraints.emplace(std::make_pair(def_c.first, result));
                     pushAgg(Val(result),-2);
                     RefCountedObject::rmRef(this, result);
                   }
@@ -1297,92 +1299,115 @@ execute_ret:
   }
 
   void
-  Interpreter::call(int code, const BytecodeProc::Mode& mode0, const std::vector<Val>& args0, bool delayed) {
-    /// TODO!
-//    if (_status != ROGER) {
-//      return;
-//    }
-//    BytecodeProc::Mode mode = mode0;
-//    std::vector<Val> args = args0;
-//    assert(code >= 0);
-//    assert(code < _procs.size());
-//    int n = _procs[code].nargs;
-//    DBG_INTERPRETER("Interpreter::call " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << "\n");
-//    // TODO: See if args is created when not necessary
-//    assert(n == args.size());
-//    bool cse_suited = n < 5 && mode != BytecodeProc::RAW && !delayed;
-//    CSETable::Key cse_key;
-//    if (cse_suited) {
-//      cse_key = CSETable::Key(args);
-//      // Lookup item in CSE
-//      auto lookup = cse_lookup(code, cse_key, mode);
-//      if (lookup.second) {
-//        cse_key.destroy();
-//        if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
-//          assert(lookup.first.isInt());
-//          if (lookup.first().toInt() != 1) {
-//            _status = INCONSISTENT;
-//            // Invariant: Last instruction in the frame is always an ABORT instruction
-//            _stack.back().pc = _stack.back().bs->size()-1;
-//          }
-//        } else {
-//          pushAgg(lookup.first, -1);
-//        }
-//        return;
-//      }
-//    }
-//    if (_procs[code].mode[mode].size() == 0) {
-//      DBG_INTERPRETER("--- FZN Builtin\n");
-//      // this is a FlatZinc builtin
-//      int ident = (mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG) ? -1 : newIdent();
-//      assert (mode == BytecodeProc::RAW || mode == BytecodeProc::ROOT);
-//      Definition* def = Definition::a(this,nullptr,false,code,mode,args,ident);
-//      pushDef(def);
-//      if (cse_suited) {
-//        Val v = (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) ? Val(1) : Val(def);
-//        cse_insert(code, cse_key, mode, v);
-//      }
-//      if (ident >= 0) {
-//        pushAgg(Val(def), -1);
-//      }
-//      return;
-//    } else {
-//      // Ensure the last RET is next on the program counter
-//      _stack.back().pc--;
-//      _stack.emplace_back(_procs[code].mode[mode]);
-//      BytecodeFrame* newFrame = &_stack[_stack.size()-1];
-//      newFrame->cse_info.emplace_back(code, mode, cse_key, _agg.back().size());
-//      newFrame->reg.mov(this, args);
-//      return run();
-//    }
+  Interpreter::call(int code, std::vector<Val>&& args) {
+    if (_status != ROGER) {
+      return;
+    }
+    assert(code >= 0);
+    assert(code < _procs.size());
+    int n = _procs[code].nargs;
+    const bool cse = true;
+    BytecodeProc::Mode mode = BytecodeProc::ROOT;
+    DBG_INTERPRETER("Interpreter::call " << BytecodeProc::mode_to_string[mode] << " " << code << "(" << _procs[code].name << ")" << (cse ? "" : " no_cse"));
+    // TODO: See if args is created when not necessary
+    assert(n == args.size());
+    for (int i=0; i < n; i++) {
+      DBG_INTERPRETER(" R" << i << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
+    }
+    DBG_INTERPRETER("\n");
+
+    // Lookup for Common Subexpression Elimination
+    size_t cse_depth = _cse_stack.size();
+    if (cse) {
+      _cse_stack.emplace_back(*this, code, mode, args, _agg.back().size());
+      // Lookup item in CSE
+      auto lookup = cse_find(code, _cse_stack.back().getKey(), mode);
+      if (lookup.second) {
+        _cse_stack.back().destroy(*this);
+        _cse_stack.pop_back();
+        if (mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG) {
+          assert(lookup.first.isInt());
+          if (lookup.first.toInt() != 1) {
+            _status = INCONSISTENT;
+            // Invariant: Last instruction in the frame is always an ABORT instruction
+            return;
+          }
+        } else {
+          // pushAgg(lookup.first, -1);
+          assert(false); // Delayed calls can only be ROOT mode
+        }
+        return;
+      }
+    }
+
+    if (_procs[code].mode[mode].size() == 0) {
+      DBG_INTERPRETER("--- FZN Builtin\n");
+      // this is a FlatZinc builtin
+      assert(code != PrimitiveMap::MK_INTVAR);
+      assert(mode==BytecodeProc::ROOT || mode==BytecodeProc::ROOT_NEG);
+      auto c = Constraint::a(this, code, mode, args);
+      if (!(c.first || c.second)) {
+        // Propagation failed
+        _status = INCONSISTENT;
+        return;
+      }
+      if (c.first){
+        pushConstraint(c.first);
+      }
+      if (cse) {
+        Val ret(c.second);
+        cse_insert(code, _cse_stack.back().getKey(), mode, ret);
+        _cse_stack.pop_back();
+      }
+      return;
+    }
+
+
+    // Make the next instruction RET
+    _stack.back().pc--;
+    _stack.emplace_back(_procs[code].mode[mode], code, mode);
+    BytecodeFrame& newFrame = _stack.back();
+    newFrame.cse_frame_depth = cse_depth;
+    newFrame.reg.mov(this, args);
+
+    return run();
   }
 
   bool Interpreter::runDelayed() {
-    /// TODO!
-//    std::vector<Definition*> wave = std::move(delayed_calls);
-//    delayed_calls.clear();
-//    for (auto def : wave) {
-//      if (def->exists()) {
-//        auto mode = static_cast<BytecodeProc::Mode>(def->mode());
-//        std::vector<Val> args(def->size());
-//        for (int i = 0; i < def->size(); ++i) {
-//          args[i] = def->arg(i);
-//        }
-//        call(def->pred(), mode, args, true);
-//        if (_status != ROGER) {
-//          break;
-//        }
-//        Val ret(1);
-//        if (mode != BytecodeProc::ROOT && mode != BytecodeProc::ROOT_NEG) {
-//          ret = _agg.back().back();
-//          assert(ret.isDef() || ret.isInt());
-//        }
-//        def->alias(this, ret);
-//      }
-//      RefCountedObject::rmMemRef(this, def);
-//    }
-//    return !delayed_calls.empty();
-    return false;
+   std::unordered_map<Constraint*, Variable*> wave = std::move(delayed_constraints);
+   delayed_constraints.clear();
+   for (auto pair : wave) {
+     // Only run delayed constraints that have a definition.
+     Constraint* c = pair.first;
+     if (_procs[c->pred()].mode[BytecodeProc::ROOT].size() == 0) {
+       continue;
+     }
+
+     // Remove placeholder constraint from variable
+     Val alias = Val::follow_alias(Val(pair.second));
+     Variable* v = alias.isVar() ? alias.toVar() : root();
+     // TODO: This might be quite expensive. Should we store _definitions differently?
+     auto pos = std::find(std::begin(v->_definitions), std::end(v->_definitions), c);
+     assert(pos != v->_definitions.end());
+     v->_definitions.erase(pos);
+
+     // Copy arguments into vector
+     std::vector<Val> args(c->size());
+     for (int i = 0; i < c->size(); ++i) {
+       args[i] = c->arg(i);
+     }
+
+     // Execute constraint
+     std::swap(v, _root_var);
+     call(c->pred(), std::move(args));
+     std::swap(v, _root_var);
+
+     // Stop if execution caused an error
+     if (_status != ROGER) {
+       break;
+     }
+   }
+   return !delayed_constraints.empty();
   }
 
   size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {

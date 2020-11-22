@@ -25,14 +25,15 @@ namespace MiniZinc {
     Val _ann;
     unsigned int _pred : 24;
     unsigned int _mode : 8;
-    unsigned int _size : 31;
+    unsigned int _size : 30;
     /// Whether the constraint is scheduled for propagation
     unsigned int _scheduled : 1;
+    unsigned int _delayed : 1;
     Val _defines;
     Val _args[1];
-    Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines);
+    Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines, bool delayed);
   public:
-    static std::pair<Constraint*, bool> a(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val defines=1, Val ann=0);
+    static std::pair<Constraint*, bool> a(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann=0, Val defines=1, bool delayed=false);
     void destroy(Interpreter* interpreter);
     void reconstruct(Interpreter* interpreter);
 

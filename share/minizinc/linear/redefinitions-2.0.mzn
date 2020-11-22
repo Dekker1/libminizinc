@@ -1,3 +1,10 @@
+predicate bool_clause_reif(array[int] of var bool: p, array[int] of var bool: n, bool: c) =
+  if c then
+    bool_clause(p, n)
+  else
+    forall([not x | x in p] ++ n)
+  endif;
+
 predicate bool_clause_reif(array[int] of var bool: p, array[int] of var bool: n, var bool: c) =
     c = ( sum(i in index_set(p))( bool2int(p[i]) )
           - sum(i in index_set(n))( bool2int(n[i]) )
@@ -5,7 +12,6 @@ predicate bool_clause_reif(array[int] of var bool: p, array[int] of var bool: n,
             >= 1
         );
 
-    
 predicate array_int_minimum(var int: m, array[int] of var int: x) =
     array_int_minimum_I( m, [ x[i] | i in index_set(x)]);
 predicate array_int_maximum(var int: m, array[int] of var int: x) =

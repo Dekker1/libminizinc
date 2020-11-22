@@ -984,7 +984,8 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   if (ifMzn2Fzn()) {
     assert(dynamic_cast<FZNSolverInstance*>(si));
     // Print flatzinc to file
-    static_cast<FZNSolverInstance*>(si)->printModelToFile(file.substr(0, file.size()-4) + std::string(".fzn"));
+    static_cast<FZNSolverInstance*>(si)->printFlatZincToFile(file.substr(0, file.size()-4) + std::string(".fzn"));
+    static_cast<FZNSolverInstance*>(si)->printOutputToFile(file.substr(0, file.size()-4) + std::string(".ozn"));
 
     if (flag_statistics) {
       si->printStatistics();

@@ -21,6 +21,9 @@ namespace MiniZinc {
     for (unsigned int i=0; i<_size; i++) {
       _args[i].rmRef(interpreter);
     }
+    if (_delayed) {
+      interpreter->delayed_constraints.erase(this);
+    }
   }
 
   void
@@ -30,8 +33,8 @@ namespace MiniZinc {
     }
   }
 
-  Constraint::Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines)
-    : _pred(pred), _mode(mode), _size(args.size()), _scheduled(0)
+  Constraint::Constraint(Interpreter* interpreter,int pred,char mode,const std::vector<Val>& args,Val ann,Val defines, bool delayed)
+    : _pred(pred), _mode(mode), _size(args.size()), _scheduled(0), _delayed(delayed)
   {
     _ann.addRef(interpreter);
     for (unsigned int i=0; i<args.size(); i++) {
@@ -43,9 +46,9 @@ namespace MiniZinc {
     }
   }
 
-  std::pair<Constraint*, bool> Constraint::a(Interpreter* interpreter, int pred, char mode, const std::vector<Val>& args, Val defines, Val ann) {
+  std::pair<Constraint*, bool> Constraint::a(Interpreter* interpreter, int pred, char mode, const std::vector<Val>& args, Val defines, Val ann, bool delayed) {
     Constraint* c = static_cast<Constraint*>(::malloc(sizeof(Constraint)+sizeof(Val)*(std::max(0,static_cast<int>(args.size())-1))));
-    c = new (c) Constraint(interpreter,pred,mode,args,ann,defines);
+    c = new (c) Constraint(interpreter,pred,mode,args,ann,defines,delayed);
     PropStatus ps = interpreter->subscribe(c);
     if (ps == PS_ENTAILED || ps == PS_FAILED) {
       interpreter->unsubscribe(c);
