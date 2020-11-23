@@ -1020,9 +1020,14 @@ void MznSolver::addDefinitions() {
       si->addVariable(v, output.empty() || output.find(v->timestamp()) != output.end());
     }
   }
+  auto fzn = dynamic_cast<FZNSolverInstance*>(si);
   do {
     for (Constraint* c : v->definitions()) {
       if (interpreter->_procs[c->pred()].name == "output_this") {
+        if (fzn) {
+          assert(c->size() == 1);
+          fzn->outputArray(c->arg(0).toVec());
+        }
         continue;
       } else {
         si->addConstraint(interpreter->_procs, c);
@@ -1030,6 +1035,9 @@ void MznSolver::addDefinitions() {
     }
     v = v->next();
   } while (v != interpreter->root());
+  if (output.empty() && fzn != nullptr) {
+    fzn->outputDict(interpreter->root());
+  }
   // TODO: Domain Changes
 }
 

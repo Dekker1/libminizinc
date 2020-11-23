@@ -343,7 +343,7 @@ namespace MiniZinc {
     Vec* dom = var->domain();
     assert(dom->size() >= 2 && dom->size() % 2 == 0);
 
-    if (dom->size() == 2 && (*dom)[0] == 0 && (*dom)[1] == 1) {
+    if (!isOutput && dom->size() == 2 && (*dom)[0] == 0 && (*dom)[1] == 1) {
       vdmap.emplace(std::piecewise_construct, std::forward_as_tuple(var->timestamp()), std::forward_as_tuple(nullptr, nullptr, false, false));
       uninitialised_vars.insert(var->timestamp());
       return;
@@ -416,7 +416,7 @@ namespace MiniZinc {
     }
     out << "%%%mzn-stat-end" << endl << endl;
   }
-  void FZNSolverInstance::printModelToFile(std::string filename) {
+  void FZNSolverInstance::printFlatZincToFile(std::string filename) {
     std::ofstream os(filename);
     Printer p(os, 0, true);
     for (FunctionIterator it = _model->begin_functions(); it != _model->end_functions(); ++it) {
@@ -444,6 +444,55 @@ namespace MiniZinc {
       auto si = SolveI::sat(Location().introduce());
       p.print(si);
     }
+  }
+  void FZNSolverInstance::printOutputToFile(std::string filename) {
+    Model* output = env.output();
+    std::ofstream os(filename);
+    Printer p(os, 0, true);
+    p.print(output);
+  }
+  void FZNSolverInstance::outputArray(Vec* arr) {
+    GCLock lock;
+    std::vector<Expression*> content;
+    for (int i = 0; i < arr->size(); ++i) {
+      Val real = Val::follow_alias((*arr)[i]);
+      content.push_back(val_to_expr(Type::parint(), real));
+    }
+    auto* al = new ArrayLit(Location().introduce(), content);
+    std::vector<Expression*> sarg = {new Call(Location().introduce(), constants().ids.show, {al})};
+    auto* sal = new ArrayLit(Location().introduce(), sarg);
+    env.output()->addItem(new OutputI(Location().introduce(), sal));
+  }
+  void FZNSolverInstance::outputDict(Variable* start) {
+    GCLock lock;
+    std::vector<Expression*> content;
+    auto* open = new StringLit(Location().introduce(), "{");
+    auto* close = new StringLit(Location().introduce(), "}");
+    auto* comma = new StringLit(Location().introduce(), ",");
+    auto* quote = new StringLit(Location().introduce(), "\"");
+    auto* quote_colon = new StringLit(Location().introduce(), "\":");
+    auto* var_start = new StringLit(Location().introduce(), "X_INTRODUCED_");
+
+    content.push_back(open);
+    Variable* v = start->next(); // Skip root node
+    bool first = true;
+    do {
+      if (!first) {
+        content.push_back(comma);
+      }
+      Val real = Val::follow_alias(Val(v));
+      content.push_back(quote);
+      content.push_back(var_start);
+      content.push_back(new StringLit(Location().introduce(), std::to_string(v->timestamp())));
+      content.push_back(quote_colon);
+      content.push_back(new Call(Location().introduce(), constants().ids.show, {val_to_expr(Type::parint(), real)}));
+      v = v->next();
+      first = false;
+    } while (v != start);
+    content.push_back(close);
+    auto* al = new ArrayLit(Location().introduce(), content);
+    env.output()->addItem(new OutputI(Location().introduce(), al));
+
   }
 
   SolverInstance::Status
@@ -509,7 +558,7 @@ namespace MiniZinc {
     bool sigint = opt.fzn_sigint;
 
     FileUtils::TmpFile fznFile(".fzn");
-    printModelToFile(fznFile.name());
+    printFlatZincToFile(fznFile.name());
     cmd_line.push_back(fznFile.name());
 
     FileUtils::TmpFile* pathsFile = NULL;

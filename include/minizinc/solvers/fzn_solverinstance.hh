@@ -70,7 +70,10 @@ namespace MiniZinc {
 
       Status solve(void) override;
       void printStatistics(bool fLegend=0) override;
-      void printModelToFile(std::string filename);
+      void printFlatZincToFile(std::string filename);
+      void printOutputToFile(std::string filename);
+      void outputArray(Vec* arr);
+      void outputDict(Variable* start);
 
       void processFlatZinc(void) override;
 
