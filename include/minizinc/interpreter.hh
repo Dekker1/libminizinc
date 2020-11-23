@@ -376,7 +376,6 @@ namespace MiniZinc {
 
   class Interpreter {
     friend class Trail;
-    friend class Constraint;
     friend class MznSolver;
   public:
     enum Status { ROGER, ABORTED, INCONSISTENT, ERROR, MAX_STATUS=ERROR };
@@ -475,6 +474,12 @@ namespace MiniZinc {
     }
     Val boolean_domain() {
       return Val(boolean_dom);
+    }
+    void register_delayed(Constraint* c, Variable* v) {
+      delayed_constraints[c] = v;
+    }
+    void remove_delayed(Constraint* c) {
+      delayed_constraints.erase(c);
     }
 
     Variable* root() { return _root_var; }

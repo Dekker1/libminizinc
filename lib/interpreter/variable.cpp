@@ -291,6 +291,9 @@ namespace MiniZinc {
         }
       }
     }
+    if (c->delayed()) {
+      interpreter->register_delayed(c, this);
+    }
     interpreter->trail.trail_add_def(this,c);
   }
 

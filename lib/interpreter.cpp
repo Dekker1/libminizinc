@@ -1172,12 +1172,10 @@ execute_ret:
                   // Push into root context
                   Vec* vpos = Vec::a(this, newIdent(), pos);
                   Vec* vneg = Vec::a(this, newIdent(), neg);
-                  /// TODO: check, why not EXISTS? Is it guaranteed that this will be processed further?
                   if (_agg.size() == 2) {
                     auto c = Constraint::a(this, PrimitiveMap::CLAUSE, BytecodeProc::ROOT, {Val(vpos), Val(vneg)}, 0, 1, true);
                     assert(c.first);
                     root()->addDefinition(this, c.first);
-                    delayed_constraints.emplace(std::make_pair(c.first, root()));
                     pushAgg(1, -2);
                   } else {
                     result = Variable::a(this,boolean_domain(),false, newIdent());
@@ -1185,7 +1183,6 @@ execute_ret:
                     assert(def_c.first);
                     result->addRef(this);
                     result->addDefinition(this, def_c.first);
-                    delayed_constraints.emplace(std::make_pair(def_c.first, result));
                     pushAgg(Val(result),-2);
                     RefCountedObject::rmRef(this, result);
                   }
@@ -1379,6 +1376,7 @@ execute_ret:
    for (auto pair : wave) {
      // Only run delayed constraints that have a definition.
      Constraint* c = pair.first;
+     assert(c->delayed());
      if (_procs[c->pred()].mode[BytecodeProc::ROOT].size() == 0) {
        continue;
      }

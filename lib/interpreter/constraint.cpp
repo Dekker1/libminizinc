@@ -21,8 +21,8 @@ namespace MiniZinc {
     for (unsigned int i=0; i<_size; i++) {
       _args[i].rmRef(interpreter);
     }
-    if (_delayed) {
-      interpreter->delayed_constraints.erase(this);
+    if (delayed()) {
+      interpreter->remove_delayed(this);
     }
   }
 
