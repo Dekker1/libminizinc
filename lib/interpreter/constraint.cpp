@@ -40,7 +40,7 @@ namespace MiniZinc {
     for (unsigned int i=0; i<args.size(); i++) {
       new (&_args[i]) Val(args[i]);
       _args[i].addRef(interpreter);
-      if (pred > PrimitiveMap::MAX_LIN) {
+      if (!_delayed && pred > PrimitiveMap::MAX_LIN) {
         _args[i].finalizeLin(interpreter);
       }
     }
