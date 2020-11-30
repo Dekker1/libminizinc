@@ -202,7 +202,9 @@ function var float: sum2float( array[int] of int: c, array[int] of var int: x ) 
 %% lin_expr, const
 predicate int_lin_le_reif(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
-  if fPostprocessDomains /\ fPostproDom_DIFF then
+  if length(c) == 1 then
+    int_le_reif(c[1]*x[1], d, b)
+  elseif fPostprocessDomains /\ fPostproDom_DIFF then
     int_le_reif(sum(i in index_set(x))( c[i] * x[i] ), d, b)
   elseif fAvoidNI then
     aux_float_le_if_1(sum2float( c, x ), d, b) /\
@@ -223,7 +225,9 @@ predicate int_lin_lt_reif(array[int] of int: c, array[int] of var int: x,
 %% lin_expr, const
 predicate int_lin_eq_reif(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
-    if fPostprocessDomains /\ fPostproDom_DIFF then
+    if length(c) == 1 then
+      int_eq_reif(c[1]*x[1], d, b)
+    elseif fPostprocessDomains /\ fPostproDom_DIFF then
       int_eq_reif(sum(i in index_set(x))( c[i]*x[i] ), d, b)
     elseif fAvoidNI /\ fAuxIntEqOLD00 then
       aux_int_eq_iff_1__float(sum2float( c, x ), d, b)
@@ -233,7 +237,9 @@ predicate int_lin_eq_reif(array[int] of int: c, array[int] of var int: x,
 
 %% lin_expr, const
 predicate int_lin_ne(array[int] of int: c, array[int] of var int: x, int: d) =
-  if fPostprocessDomains /\ fPostproDom_DIFF then
+  if length(c) == 1 then
+    int_ne(c[1]*x[1], d)
+  elseif fPostprocessDomains /\ fPostproDom_DIFF then
     int_ne(sum(i in index_set(x))( c[i]*x[i] ),d)
   elseif fAvoidNI then
     int_lin_eq_reif(c, x, d, false)
@@ -244,7 +250,9 @@ predicate int_lin_ne(array[int] of int: c, array[int] of var int: x, int: d) =
 %% lin_expr, const
 predicate int_lin_ne_reif(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
-    if fPostprocessDomains /\ fPostproDom_DIFF then
+    if length(c) == 1 then
+      int_ne_reif(c[1]*x[1], d, b)
+    elseif fPostprocessDomains /\ fPostproDom_DIFF then
       int_ne_reif(sum(i in index_set(x))( c[i]*x[i] ), d, b)
     else
       int_lin_eq_reif(c, x, d, not (b))
