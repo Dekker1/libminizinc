@@ -22,6 +22,11 @@
 #include <streambuf>
 #include <unordered_map>
 
+// #define DBG_CALLTRACE(msg) std::cerr << msg
+#define DBG_CALLTRACE(msg) \
+  do {                     \
+  } while (0)
+
 namespace MiniZinc {
 
 Val AggregationCtx::createVec(Interpreter* interpreter, int timestamp) const {
@@ -645,6 +650,18 @@ void Interpreter::run(void) {
           return;
         }
 
+        DBG_CALLTRACE("<");
+        for (size_t i = 0; i < _stack.size() - 1; ++i) {
+          DBG_CALLTRACE("--");
+        }
+        DBG_CALLTRACE(" " << (_cse_stack.back().mode == BytecodeProc::ROOT ||
+                                      _cse_stack.back().mode == BytecodeProc::ROOT_NEG
+                                  ? "POSTED"
+                                  : (_cse_stack.back().stack_size == _agg.back().size() - 1
+                                         ? _agg[_agg.size() - 1].back().toString(DBG_TRIM_OUTPUT)
+                                         : ""))
+                          << "\n");
+
         while (_cse_stack.size() > frame->cse_frame_depth) {
           CSEFrame& entry = _cse_stack.back();
           int nargs = _procs[entry.proc].nargs;
@@ -676,12 +693,17 @@ void Interpreter::run(void) {
         int n = _procs[code].nargs;
         DBG_INTERPRETER("CALL " << BytecodeProc::mode_to_string[mode] << " " << code << "("
                                 << _procs[code].name << ")" << (cse ? "" : " no_cse"));
+        for (size_t i = 0; i < _stack.size(); ++i) {
+          DBG_CALLTRACE("--");
+        }
+        DBG_CALLTRACE("> " << _procs[code].name << "(");
         // TODO: See if args is created when not necessary
         std::vector<Val> args(n);
         for (int i = 0; i < n; i++) {
           int r = frame->bs->reg(frame->pc);
           args[i] = frame->reg[r];
           DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
+          DBG_CALLTRACE(args[i].toString(DBG_TRIM_OUTPUT) << ((i + 1 < n) ? ", " : ")\n"));
         }
 
         DBG_INTERPRETER("\n");
@@ -711,11 +733,16 @@ void Interpreter::run(void) {
 
         if (_procs[code].mode[mode].size() == 0 || _procs[code].delay) {
           DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
+          DBG_CALLTRACE("<");
+          for (size_t i = 0; i < _stack.size(); ++i) {
+            DBG_CALLTRACE("--");
+          }
           // this is a FlatZinc builtin
           if (code == PrimitiveMap::MK_INTVAR) {
             assert(mode == BytecodeProc::ROOT);
             Variable* v = Variable::a(this, args[0], true, newIdent());
             pushAgg(Val(v), -1);
+            DBG_CALLTRACE(" " << Val(v).toString() << "\n");
           } else {
             assert(mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG);
             auto c = Constraint::a(this, code, mode, args);
@@ -734,6 +761,7 @@ void Interpreter::run(void) {
               cse_insert(code, _cse_stack.back().getKey(), mode, ret);
               _cse_stack.pop_back();
             }
+            DBG_CALLTRACE(" POSTED\n");
             /// TODO: delayed calls
             //            if (_procs[code].delay) {
             //              delayed_calls.push_back(c);
@@ -776,11 +804,17 @@ void Interpreter::run(void) {
         auto mode = static_cast<BytecodeProc::Mode>(mode_c);
         DBG_INTERPRETER("TCALL " << BytecodeProc::mode_to_string[mode] << " " << code << "("
                                  << _procs[code].name << ")" << (cse ? "" : " no_cse") << "\n");
+        for (size_t i = 0; i < _stack.size() - 1; ++i) {
+          DBG_CALLTRACE("==");
+        }
+        DBG_CALLTRACE("> " << _procs[code].name << "(");
         // TODO: Avoid creating the args vector
         int nargs = _procs[code].nargs;
         std::vector<Val> args(nargs);
         for (int i = 0; i < args.size(); ++i) {
           args[i] = frame->reg[i];
+          DBG_CALLTRACE(args[i].toString(DBG_TRIM_OUTPUT)
+                        << ((i + 1 < args.size()) ? ", " : ")\n"));
         }
 
         if (cse) {
@@ -1260,10 +1294,12 @@ void Interpreter::call(int code, std::vector<Val>&& args) {
   BytecodeProc::Mode mode = BytecodeProc::ROOT;
   DBG_INTERPRETER("Interpreter::call " << BytecodeProc::mode_to_string[mode] << " " << code << "("
                                        << _procs[code].name << ")" << (cse ? "" : " no_cse"));
+  DBG_CALLTRACE("\n> " << _procs[code].name << "(");
   // TODO: See if args is created when not necessary
   assert(n == args.size());
   for (int i = 0; i < n; i++) {
     DBG_INTERPRETER(" R" << i << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
+    DBG_CALLTRACE(args[i].toString(DBG_TRIM_OUTPUT) << ((i + 1 < n) ? ", " : ")\n"));
   }
   DBG_INTERPRETER("\n");
 
