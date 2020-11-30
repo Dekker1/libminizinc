@@ -148,17 +148,15 @@ void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, Val& d) {
         ci++;
       }
     }
-    if (foundDuplicates) {
-      int j = 0;
-      for (unsigned int i = 0; i < coeffs_simple.size(); i++) {
-        if (coeffs_simple[i] != 0) {
-          coeffs[j] = coeffs_simple[i];
-          vars[j++] = vars_simple[i];
-        }
+    int j = 0;
+    for (unsigned int i = 0; i < coeffs_simple.size(); i++) {
+      if (coeffs_simple[i] != 0) {
+        coeffs[j] = coeffs_simple[i];
+        vars[j++] = vars_simple[i];
       }
-      coeffs.resize(j);
-      vars.resize(j);
     }
+    coeffs.resize(j);
+    vars.resize(j);
   }
 }
 
