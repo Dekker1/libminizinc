@@ -501,30 +501,58 @@ int bind_binop_par_set(CodeGen& cg, CG_Builder& frag, BinOpType op, int r_lhs, i
   throw InternalError("Unexpected fall-through in bind_binop_par_set.");
 }
 
-CG_Cond::T linear_cond(CodeGen& cg, CG_Builder& frag, BinOpType op, Mode ctx, int r_lhs, int r_rhs) {
+CG_Cond::T linear_cond(CodeGen &cg, CG_Builder &frag, BinOpType op, Mode ctx,
+                       int r_lhs, int r_rhs) {
   GCLock lock;
-  switch(op) {
-    // Actual builtins
-    case BOT_EQUIV:
-    case BOT_LQ:
-    case BOT_LE:
-    case BOT_EQ: {
-      int c = GET_REG(cg);
-      int x = GET_REG(cg);
-      int k = GET_REG(cg);
-      int z = (op==BOT_LE ? +1 : 0);
-      PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(r_lhs), CG::r(r_rhs), CG::i(z), CG::r(c), CG::r(x), CG::r(k));
-      const char* ident = (op==BOT_LE || op==BOT_LQ) ? "pre_int_lin_le" : "pre_int_lin_eq";
-      return CG_Cond::call({ident}, ctx, true, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
-    }
-    case BOT_NQ:
-      return ~linear_cond(cg, frag, BOT_EQ, -ctx, r_lhs, r_rhs);
-    case BOT_GR:
-      return linear_cond(cg, frag, BOT_LE, ctx, r_rhs, r_lhs);
-    case BOT_GQ:
-      return linear_cond(cg, frag, BOT_LQ, ctx, r_rhs, r_lhs);
-    default:
-      break;
+  switch (op) {
+  // Actual builtins
+  case BOT_LQ:
+  case BOT_LE: {
+    // Check bounds
+    int lb_lhs = GET_REG(cg);
+    int ub_rhs = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::LB, CG::r(r_lhs), CG::r(lb_lhs));
+    PUSH_INSTR(frag, BytecodeStream::UB, CG::r(r_rhs), CG::r(ub_rhs));
+    PUSH_INSTR(frag, (op==BOT_LE ? BytecodeStream::LTI : BytecodeStream::LEI), CG::r(lb_lhs), CG::r(ub_rhs), CG::r(lb_lhs));
+    int c = GET_REG(cg);
+    int x = GET_REG(cg);
+    int k = GET_REG(cg);
+    int z = (op==BOT_LE ? +1 : 0);
+    PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(r_lhs), CG::r(r_rhs), CG::i(z), CG::r(c), CG::r(x), CG::r(k));
+    auto linear = CG_Cond::call({"pre_int_lin_le"}, ctx, true, {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()}, {CG::r(c), CG::r(x), CG::r(k)});
+    return CG_Cond::forall(ctx, CG_Cond::reg(lb_lhs, true), linear);
+  }
+  case BOT_EQUIV:
+  case BOT_EQ: {
+    // Check domain
+    int dom_lhs = GET_REG(cg);
+    int dom_rhs = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::DOM, CG::r(r_lhs), CG::r(dom_lhs));
+    PUSH_INSTR(frag, BytecodeStream::DOM, CG::r(r_rhs), CG::r(dom_rhs));
+    PUSH_INSTR(frag, BytecodeStream::INTERSECTION, CG::r(dom_lhs),
+               CG::r(dom_rhs), CG::r(dom_lhs));
+    PUSH_INSTR(frag, BytecodeStream::ISEMPTY, CG::r(dom_lhs), CG::r(dom_rhs));
+    PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(dom_rhs), CG::r(dom_rhs));
+    // Create linear equation
+    int k = GET_REG(cg);
+    int c = GET_REG(cg);
+    int x = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::SIMPLIFY_LIN, CG::r(r_lhs), CG::r(r_rhs),
+               CG::i(0), CG::r(c), CG::r(x), CG::r(k));
+    auto linear = CG_Cond::call(
+        {"pre_int_lin_eq"}, ctx, true,
+        {Type::varbool(), Type::parint(1), Type::varint(1), Type::parint()},
+        {CG::r(c), CG::r(x), CG::r(k)});
+    return CG_Cond::forall(ctx, CG_Cond::reg(dom_rhs, true), linear);
+  }
+  case BOT_NQ:
+    return ~linear_cond(cg, frag, BOT_EQ, -ctx, r_lhs, r_rhs);
+  case BOT_GR:
+    return linear_cond(cg, frag, BOT_LE, ctx, r_rhs, r_lhs);
+  case BOT_GQ:
+    return linear_cond(cg, frag, BOT_LQ, ctx, r_rhs, r_lhs);
+  default:
+    break;
   }
   throw InternalError("Unexpected fall-through in linear_cond.");
 }
