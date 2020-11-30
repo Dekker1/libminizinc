@@ -11,33 +11,34 @@
 
 #pragma once
 
-#include <string>
 #include <minizinc/solver_instance.hh>
 
-#ifdef ERROR    // Microsoft.
+#include <string>
+
+#ifdef ERROR  // Microsoft.
 #undef ERROR
 #endif
 
 namespace MiniZinc {
 
-  class RestartableSolverInstance {
-  public:
-    // Able to return to the solver into a position where no search decisions
-    // have been made. SolverInstance must allow addDefinition calls after
-    // restart call.
-    virtual void restart() = 0;
-  };
+class RestartableSolverInstance {
+public:
+  // Able to return to the solver into a position where no search decisions
+  // have been made. SolverInstance must allow addDefinition calls after
+  // restart call.
+  virtual void restart() = 0;
+};
 
-  class TrailableSolverInstance : public RestartableSolverInstance {
-  public:
-    // Returns the number of stored states
-    virtual size_t states() = 0;
+class TrailableSolverInstance : public RestartableSolverInstance {
+public:
+  // Returns the number of stored states
+  virtual size_t states() = 0;
 
-    // Able to store the current solver state to the Trail.
-    virtual void pushState() = 0;
+  // Able to store the current solver state to the Trail.
+  virtual void pushState() = 0;
 
-    // Able to restore the last solver state that was saved to the Trail.
-    virtual void popState() = 0;
-  };
+  // Able to restore the last solver state that was saved to the Trail.
+  virtual void popState() = 0;
+};
 
-}
+}  // namespace MiniZinc

@@ -13,30 +13,31 @@
 #define __MINIZINC_PATHPRINTER_HH
 
 #include <minizinc/ast.hh>
+
 #include <unordered_map>
 
 namespace MiniZinc {
 
-  class Model;
+class Model;
 
-  class PathFilePrinter {
-
+class PathFilePrinter {
   typedef std::pair<std::string, std::string> NamePair;
-  typedef std::unordered_map<Id*, NamePair > NameMap;
+  typedef std::unordered_map<Id*, NamePair> NameMap;
 
   NameMap betternames;
-  private:
-    std::ostream& os;
-    int constraint_index;
 
-    void addBetterName(Id* id, std::string name, std::string path, bool overwrite);
+private:
+  std::ostream& os;
+  int constraint_index;
 
-  public:
-    PathFilePrinter(std::ostream& o, EnvI& envi);
-    void print(Model* m);
-    void print(Item* i);
-  };
-  
-}
+  void addBetterName(Id* id, std::string name, std::string path, bool overwrite);
+
+public:
+  PathFilePrinter(std::ostream& o, EnvI& envi);
+  void print(Model* m);
+  void print(Item* i);
+};
+
+}  // namespace MiniZinc
 
 #endif

@@ -10,24 +10,23 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include <minizinc/interpreter/vector.hh>
 #include <minizinc/interpreter.hh>
+#include <minizinc/interpreter/vector.hh>
 
 namespace MiniZinc {
 
-  bool
-  Vec::isPar() const {
-    assert(alive());
-    for (int i = 0; i < this->size(); ++i) {
-      Val v = this->operator[](i);
-      if (v.isVec() && (!v.toVec()->isPar())) {
-        return false;
-      }
-      if (v.isVar()) {
-        return false;
-      }
+bool Vec::isPar() const {
+  assert(alive());
+  for (int i = 0; i < this->size(); ++i) {
+    Val v = this->operator[](i);
+    if (v.isVec() && (!v.toVec()->isPar())) {
+      return false;
     }
-    return true;
+    if (v.isVar()) {
+      return false;
+    }
   }
-
+  return true;
 }
+
+}  // namespace MiniZinc

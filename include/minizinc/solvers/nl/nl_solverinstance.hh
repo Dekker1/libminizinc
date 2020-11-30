@@ -7,10 +7,9 @@
 #ifndef __MINIZINC_NL_SOLVER_INSTANCE_HH__
 #define __MINIZINC_NL_SOLVER_INSTANCE_HH__
 
+#include <minizinc/ast.hh>
 #include <minizinc/flattener.hh>
 #include <minizinc/solver.hh>
-#include <minizinc/ast.hh>
-
 #include <minizinc/solvers/nl/nl_file.hh>
 
 #ifdef _WIN32
@@ -19,74 +18,68 @@
 
 namespace MiniZinc {
 
-  class NLSolverOptions : public SolverInstanceBase::Options {
-  public:
-    std::string nl_solver;
-    std::vector<std::string> nl_flags;
-    std::vector<MZNFZNSolverFlag> nl_solver_flags;
-    bool do_hexafloat = false;
-    bool do_keepfile = false;
+class NLSolverOptions : public SolverInstanceBase::Options {
+public:
+  std::string nl_solver;
+  std::vector<std::string> nl_flags;
+  std::vector<MZNFZNSolverFlag> nl_solver_flags;
+  bool do_hexafloat = false;
+  bool do_keepfile = false;
+};
+
+class NLSolverInstance : public SolverInstanceBase {
+private:
+  std::string _fzn_solver;
+
+protected:
+  Model* _fzn;
+  Model* _ozn;
+
+  NLFile nl_file;
+
+public:
+  NLSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
+
+  ~NLSolverInstance(void);
+
+  Status next(void) override { return SolverInstance::Status::ERROR; }
+
+  Status solve(void) override;
+
+  void processFlatZinc(void) override;
+
+  void resetSolver(void) override;
+
+  // TODO: implement
+  void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override {
+    assert(false);
   };
+  void addVariable(Variable* var, bool isOutput) override { assert(false); };
+  Val getSolutionValue(Variable* var) override { return Val(); };
 
-  class NLSolverInstance : public SolverInstanceBase {
-    private:
-      std::string _fzn_solver;
-    protected:
-      Model* _fzn;
-      Model* _ozn;
+protected:
+  Expression* getSolutionValue(Id* id);
 
-      NLFile nl_file;
+  void analyse(const Item* i);
+};
 
-    public:
-      NLSolverInstance(std::ostream& log, SolverInstanceBase::Options* opt);
+class NL_SolverFactory : public SolverFactory {
+protected:
+  virtual SolverInstanceBase* doCreateSI(std::ostream&, SolverInstanceBase::Options* opt);
 
-      ~NLSolverInstance(void);
+public:
+  NL_SolverFactory(void);
+  virtual SolverInstanceBase::Options* createOptions(void);
+  virtual std::string getDescription(SolverInstanceBase::Options* opt = NULL);
+  virtual std::string getVersion(SolverInstanceBase::Options* opt = NULL);
+  virtual std::string getId(void);
+  virtual bool processOption(SolverInstanceBase::Options* opt, int& i,
+                             std::vector<std::string>& argv);
+  virtual void printHelp(std::ostream& os);
+  // void setAcceptedFlags(SolverInstanceBase::Options* opt, const std::vector<MZNFZNSolverFlag>&
+  // flags);
+};
 
-      Status next(void) override {return SolverInstance::Status::ERROR;}
-
-      Status solve(void) override;
-
-      void processFlatZinc(void) override;
-
-      void resetSolver(void) override;
-
-      // TODO: implement
-      void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override { assert(false); };
-      void addVariable(Variable* var, bool isOutput) override { assert(false); };
-      Val getSolutionValue(Variable* var) override { return Val(); };
-
-    protected:
-      Expression* getSolutionValue(Id* id);
-
-      void analyse(const Item* i);
-
-  };
-
-
-
-
-
-
-
-
-
-
-
-
-  class NL_SolverFactory: public SolverFactory {
-  protected:
-    virtual SolverInstanceBase* doCreateSI(std::ostream&, SolverInstanceBase::Options* opt);
-  public:
-    NL_SolverFactory(void);
-    virtual SolverInstanceBase::Options* createOptions(void);
-    virtual std::string getDescription(SolverInstanceBase::Options* opt=NULL);
-    virtual std::string getVersion(SolverInstanceBase::Options* opt=NULL);
-    virtual std::string getId(void);
-    virtual bool processOption(SolverInstanceBase::Options* opt, int& i, std::vector<std::string>& argv);
-    virtual void printHelp(std::ostream& os);
-    //void setAcceptedFlags(SolverInstanceBase::Options* opt, const std::vector<MZNFZNSolverFlag>& flags);
-  };
-
-}
+}  // namespace MiniZinc
 
 #endif

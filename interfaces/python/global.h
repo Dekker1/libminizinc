@@ -6,45 +6,44 @@
  */
 
 // This header must be included above all other files
- 
+
 #ifndef __GLOBAL_H
 #define __GLOBAL_H
 
 #include <Python.h>
 
 #if PY_MAJOR_VERSION < 3
-	#define PyUnicode_Check PyString_Check
-	#define PyUnicode_AsUTF8 PyString_AS_STRING	
- 	#define PyUnicode_FromString PyString_FromString
- 	#define PyUnicode_Type PyString_Type
+#define PyUnicode_Check PyString_Check
+#define PyUnicode_AsUTF8 PyString_AS_STRING
+#define PyUnicode_FromString PyString_FromString
+#define PyUnicode_Type PyString_Type
 #endif
- 
+
+#include <minizinc/builtins.hh>
+#include <minizinc/copy.hh>
+#include <minizinc/eval_par.hh>
+#include <minizinc/file_utils.hh>
+#include <minizinc/flatten.hh>
+#include <minizinc/model.hh>
+#include <minizinc/optimize.hh>
+#include <minizinc/parser.hh>
+#include <minizinc/prettyprinter.hh>
+#include <minizinc/solvers/gecode_solverinstance.hh>
+#include <minizinc/typecheck.hh>
+
 #include "structmember.h"
 
-#include <iostream>
-#include <cstdio>
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
+#include <limits.h>
 #include <list>
+#include <stdexcept>
+#include <stdlib.h>
 #include <string.h>
 #include <typeinfo>
-#include <cstdlib>
-#include <stdlib.h>
 #include <unistd.h>
-#include <stdexcept>
-#include <limits.h>
-
-#include <minizinc/model.hh>
-#include <minizinc/parser.hh>
-#include <minizinc/model.hh>
-#include <minizinc/eval_par.hh>
-#include <minizinc/typecheck.hh>
-#include <minizinc/flatten.hh>
-#include <minizinc/optimize.hh>
-#include <minizinc/builtins.hh>
-#include <minizinc/file_utils.hh>
-#include <minizinc/solvers/gecode_solverinstance.hh>
-#include <minizinc/prettyprinter.hh>
-#include <minizinc/copy.hh>
 
 // These two files are included at the end of the header
 //#include "Object.h"
@@ -62,25 +61,22 @@ static PyObject* MznModel_solve_warning;
 static PyObject* MznVariable_init_error;
 static PyObject* MznSet_error;
 
-
-
 // Macro that combines snprintf and PyErr_SetString into one.
 // First argument is PyExc_*Error, Second argument is like ordinary printf function
-#define MZN_PYERR_SET_STRING(py_type_error, ...)	\
-do {											\
-	char buffer[150];						\
-	snprintf(buffer, 150, __VA_ARGS__);		\
-	PyErr_SetString(py_type_error, buffer);	\
-} while (0)
+#define MZN_PYERR_SET_STRING(py_type_error, ...) \
+  do {                                           \
+    char buffer[150];                            \
+    snprintf(buffer, 150, __VA_ARGS__);          \
+    PyErr_SetString(py_type_error, buffer);      \
+  } while (0)
 
 // Converts C++ long long to appropriate Python integer type
 inline PyObject* c_to_py_number(long long);
 // Converts Python integer type to C++ value, returns -1 if error occurred
 inline long long py_to_c_number(PyObject*);
-// Converts Python integer type to C++ value, set int* to -1 or 1 if overflown, returns -1 if other errors occurred
+// Converts Python integer type to C++ value, set int* to -1 or 1 if overflown, returns -1 if other
+// errors occurred
 inline long long py_to_c_number(PyObject*, int*);
-
-
 
 // Nicely presenting the type, for example: set of int or array of [int, int]
 string typePresentation(const Type& type);
@@ -88,19 +84,13 @@ string typePresentation(const Type& type);
 // For internal use, only compare TypeInst, BaseType, SetType
 bool compareType(const Type& type1, const Type& type2);
 
-
-
 // Converts a minizinc expression of dim()==0 to python value.
 // Note 1: e = vd->e(), type = vd->type()
 // Note 2: e must be not NULL
 inline PyObject* one_dim_minizinc_to_python(Expression* e, const Type& type);
 
-//Convert minizinc expression to python value, return a Python list if vd is an array
+// Convert minizinc expression to python value, return a Python list if vd is an array
 PyObject* minizinc_to_python(VarDecl* vd);
-
-
-
-
 
 /*
  * Description: Helper function for python_to_minizinc
@@ -109,7 +99,7 @@ PyObject* minizinc_to_python(VarDecl* vd);
  * Parameters: A python value - pvalue
  *             A minizinc BaseType code
  * Note:  If code == Type::BT_UNKNOWN, it will be changed to the corresponding type of pvalue
- *        If code is initialized to specific type, an error will be thrown if type mismatched 
+ *        If code is initialized to specific type, an error will be thrown if type mismatched
  * Accepted code type:
  *      - Type::BT_UNKNOWN: Unknown type, will be changed later
  *      - Type::BT_INT
@@ -120,21 +110,20 @@ PyObject* minizinc_to_python(VarDecl* vd);
  */
 inline Expression* one_dim_python_to_minizinc(PyObject* pvalue, Type::BaseType& code);
 
-/* 
+/*
  * Description: Converts a python value to minizinc expression
  *              also returns the type of python value
  *              and the dimension list if it is an array
  * Return:  MiniZinc expression, NULL if error occurred
  *
- * Note 1: If you parse a list of MiniZinc Object, remember to parse the object only, not its wrapper class
- *         For current implementation, the python wrapper class must be replaced with a call to
- *         minizinc_internal.Id(wrapper.name)   (remember to wrap this function with lock and unlock())
- * Note 2: Need an outer GCLock for this to work
- * Note 3: if dimList is empty, any array created by this function will have its index start from 0
- *		  else, the array created will have the dimension correspondingly to dimList, 
- *		  and it will complain if dimension sizes mismatched
+ * Note 1: If you parse a list of MiniZinc Object, remember to parse the object only, not its
+ *wrapper class For current implementation, the python wrapper class must be replaced with a call to
+ *         minizinc_internal.Id(wrapper.name)   (remember to wrap this function with lock and
+ *unlock()) Note 2: Need an outer GCLock for this to work Note 3: if dimList is empty, any array
+ *created by this function will have its index start from 0 else, the array created will have the
+ *dimension correspondingly to dimList, and it will complain if dimension sizes mismatched
  */
- Expression* python_to_minizinc(PyObject* pvalue, Type& type, vector<pair<int, int> >& dimList);
+Expression* python_to_minizinc(PyObject* pvalue, Type& type, vector<pair<int, int> >& dimList);
 
 /*
  * Used only when importing model from MiniZinc file
@@ -143,11 +132,7 @@ inline Expression* one_dim_python_to_minizinc(PyObject* pvalue, Type::BaseType& 
  */
 Expression* python_to_minizinc(PyObject* pvalue, const ASTExprVec<TypeInst>& ranges);
 
-
-
-
-
-/* 
+/*
  * A Python dimension list is like this
  *      [ [1,5],  [2,5],  [3,5] ]
  *   (1st dimension)
@@ -161,7 +146,6 @@ Expression* python_to_minizinc(PyObject* pvalue, const ASTExprVec<TypeInst>& ran
  *          Else, return a vector of MiniZinc dimension range
  */
 vector<TypeInst*> pydim_to_minizinc_ranges(PyObject* pydim);
-
 
 // Helper functions
 // XXX: change the function name to a more meaningful name later
@@ -177,14 +161,14 @@ vector<TypeInst*> pydim_to_minizinc_ranges(PyObject* pydim);
           X X X X X X
         )
 */
-int getList(PyObject* value, vector<Py_ssize_t>& dimensions, vector<PyObject*>& simpleArray, const int layer);
+int getList(PyObject* value, vector<Py_ssize_t>& dimensions, vector<PyObject*>& simpleArray,
+            const int layer);
 
 inline bool PyObject_ExactTypeCheck(PyObject* ob, PyTypeObject* type) {
-	return Py_TYPE(ob) == type;
+  return Py_TYPE(ob) == type;
 }
 
 #include "Object.h"
 #include "Set.h"
-
 
 #endif

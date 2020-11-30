@@ -18,21 +18,20 @@
  * Need to get more flexible for multi-pass & multi-solving stuff  TODO
  */
 
-#include <iostream>
-#include <fstream>
-#include <iomanip>
-#include <cstdlib>
-#include <ctime>
-#include <chrono>
-#include <ratio>
-
 #include <minizinc/astexception.hh>
-#include <minizinc/timer.hh>
+#include <minizinc/codegen.hh>
 #include <minizinc/prettyprinter.hh>
+#include <minizinc/reader.hh>
+#include <minizinc/timer.hh>
 #include <minizinc/typecheck.hh>
 
-#include <minizinc/reader.hh>
-#include <minizinc/codegen.hh>
+#include <chrono>
+#include <cstdlib>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <ratio>
 
 using namespace std;
 using namespace MiniZinc;
@@ -41,7 +40,7 @@ int main(int argc, const char** argv) {
   Timer starttime;
   GCLock lock;
   try {
-    MznReader r(std::cout,std::cerr);
+    MznReader r(std::cout, std::cerr);
     Model* m(nullptr);
     try {
       /*
@@ -50,50 +49,44 @@ int main(int argc, const char** argv) {
         args[i-1] = argv[i];
       fSuccess = (slv.run(args,"",argv[0]) != SolverInstance::ERROR);
       */
-      std::vector<std::string> args(argc-1);
-      for (int i=1; i<argc; i++)
-        args[i-1] = argv[i];
-      switch(r.processOptions(args)) {
+      std::vector<std::string> args(argc - 1);
+      for (int i = 1; i < argc; i++) args[i - 1] = argv[i];
+      switch (r.processOptions(args)) {
         case MznReader::OPTION_FINISH:
           return 0;
         case MznReader::OPTION_ERROR:
           return 1;
         default:
-          break; 
+          break;
       }
 
       Model* m(r.read());
 
       Env env(m, std::cout, std::cerr);
       std::vector<TypeError> typeErrors;
-      typecheck(env, m, typeErrors, true /* ignoreUndefinedParameters */ , false /* allowMultiAssignment */, false /* isFlatZinc */);
+      typecheck(env, m, typeErrors, true /* ignoreUndefinedParameters */,
+                false /* allowMultiAssignment */, false /* isFlatZinc */);
       // debugprint(m);
       m = env.envi().model;
 
       CodeGen cg;
       CG::run(cg, m);
     } catch (const LocationException& e) {
-      if (r.get_flag_verbose())
-        std::cerr << std::endl;
+      if (r.get_flag_verbose()) std::cerr << std::endl;
       std::cerr << e.loc() << ":" << std::endl;
       std::cerr << e.what() << ": " << e.msg() << std::endl;
     } catch (const Exception& e) {
-      if (r.get_flag_verbose())
-        std::cerr << std::endl;
+      if (r.get_flag_verbose()) std::cerr << std::endl;
       std::string what = e.what();
       std::cerr << what << (what.empty() ? "" : ": ") << e.msg() << std::endl;
-    }
-    catch (const exception& e) {
-      if (r.get_flag_verbose())
-        std::cerr << std::endl;
+    } catch (const exception& e) {
+      if (r.get_flag_verbose()) std::cerr << std::endl;
       std::cerr << e.what() << std::endl;
-    }
-    catch (...) {
-      if (r.get_flag_verbose())
-        std::cerr << std::endl;
+    } catch (...) {
+      if (r.get_flag_verbose()) std::cerr << std::endl;
       std::cerr << "  UNKNOWN EXCEPTION." << std::endl;
     }
-    
+
     if (r.get_flag_verbose()) {
       std::cerr << "   Done (";
       cerr << "overall time " << starttime.stoptime() << ")." << std::endl;
@@ -104,4 +97,4 @@ int main(int argc, const char** argv) {
     std::exit(EXIT_FAILURE);
   }
   return 0;
-}   // int main()
+}  // int main()

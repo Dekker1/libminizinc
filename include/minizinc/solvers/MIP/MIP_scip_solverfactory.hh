@@ -13,13 +13,10 @@
 #define __MINIZINC_MIP_SCIP_SOLVERFACTORY_HH__
 
 namespace MiniZinc {
-  class SCIP_SolverFactoryInitialiser {
-  public:
-    SCIP_SolverFactoryInitialiser(void);
-  };
-}
+class SCIP_SolverFactoryInitialiser {
+public:
+  SCIP_SolverFactoryInitialiser(void);
+};
+}  // namespace MiniZinc
 
 #endif
-
-
-

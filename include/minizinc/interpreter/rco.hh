@@ -14,32 +14,36 @@
 
 namespace MiniZinc {
 
-  class Interpreter;
+class Interpreter;
 
-  class RefCountedObject {
-  public:
-    enum RCOType { VEC, VAR };
-  protected:
-    unsigned int _model_ref_count;
-    unsigned int _memory_ref_count : 31;
-    unsigned int _rco_type : 1;
-    int _timestamp;
-    RefCountedObject(const RCOType& t, int timestamp) : _model_ref_count(0), _memory_ref_count(0), _rco_type(t == VEC ? 1 : 0), _timestamp(timestamp) {}
-  public:
-    RCOType rcoType(void) const { return _rco_type==1 ? VEC : VAR; }
-    const int timestamp() const { return _timestamp; }
+class RefCountedObject {
+public:
+  enum RCOType { VEC, VAR };
 
-    bool exists() const { return _model_ref_count > 0; }
-    bool alive() const { return _model_ref_count + _memory_ref_count > 0; }
-    bool unique() const { return _model_ref_count == 1; }
+protected:
+  unsigned int _model_ref_count;
+  unsigned int _memory_ref_count : 31;
+  unsigned int _rco_type : 1;
+  int _timestamp;
+  RefCountedObject(const RCOType& t, int timestamp)
+      : _model_ref_count(0),
+        _memory_ref_count(0),
+        _rco_type(t == VEC ? 1 : 0),
+        _timestamp(timestamp) {}
 
-    void addRef(Interpreter* interpreter) { _model_ref_count++; }
-    void addMemRef(Interpreter* interpreter) {
-      _memory_ref_count++;
-    }
+public:
+  RCOType rcoType(void) const { return _rco_type == 1 ? VEC : VAR; }
+  const int timestamp() const { return _timestamp; }
 
-    static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
-    static void rmMemRef(Interpreter* interpreter, RefCountedObject* rco);
-  };
+  bool exists() const { return _model_ref_count > 0; }
+  bool alive() const { return _model_ref_count + _memory_ref_count > 0; }
+  bool unique() const { return _model_ref_count == 1; }
 
-}
+  void addRef(Interpreter* interpreter) { _model_ref_count++; }
+  void addMemRef(Interpreter* interpreter) { _memory_ref_count++; }
+
+  static void rmRef(Interpreter* interpreter, RefCountedObject* rco);
+  static void rmMemRef(Interpreter* interpreter, RefCountedObject* rco);
+};
+
+}  // namespace MiniZinc

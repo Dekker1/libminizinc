@@ -15,34 +15,43 @@
 #include <minizinc/flatten.hh>
 #include <minizinc/hash.hh>
 #include <minizinc/utils.hh>
+
 #include <array>
 #include <set>
 
-#ifdef _MSC_VER 
+#ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
-#undef ERROR    // MICROsoft.
+#undef ERROR  // MICROsoft.
 #undef min
 #undef max
 #endif
 
-#define MZN_MIPD__assert_soft( c, e ) \
-  do { static int nn=0; \
- if ( !(c) ) if ( ++nn<=1 ) std::cerr << e << std::endl; } while (0)
-#define MZN_MIPD__assert_hard( c ) MZN_ASSERT_HARD(	c )
-#define MZN_MIPD__assert_hard_msg( c, e ) MZN_ASSERT_HARD_MSG( c, e )
+#define MZN_MIPD__assert_soft(c, e)               \
+  do {                                            \
+    static int nn = 0;                            \
+    if (!(c))                                     \
+      if (++nn <= 1) std::cerr << e << std::endl; \
+  } while (0)
+#define MZN_MIPD__assert_hard(c) MZN_ASSERT_HARD(c)
+#define MZN_MIPD__assert_hard_msg(c, e) MZN_ASSERT_HARD_MSG(c, e)
 struct MIPD_Infeasibility_Exception {
   std::string msg;
-  MIPD_Infeasibility_Exception(const std::string& s) : msg(s) { }
+  MIPD_Infeasibility_Exception(const std::string& s) : msg(s) {}
 };
-#define MZN_MIPD__assert_for_feas( c, e ) \
-   do { if ( !(c) ) { std::ostringstream oss; oss << e; throw MIPD_Infeasibility_Exception(oss.str()); } } while (0)
-
+#define MZN_MIPD__assert_for_feas(c, e)              \
+  do {                                               \
+    if (!(c)) {                                      \
+      std::ostringstream oss;                        \
+      oss << e;                                      \
+      throw MIPD_Infeasibility_Exception(oss.str()); \
+    }                                                \
+  } while (0)
 
 namespace MiniZinc {
 
-  /// Linearize domain constraints in \a env
-  void MIPdomains(Env& env, bool fVerbose = false, int=0, double=3.0);
-  
-}
+/// Linearize domain constraints in \a env
+void MIPdomains(Env& env, bool fVerbose = false, int = 0, double = 3.0);
+
+}  // namespace MiniZinc
 
 #endif

@@ -15,17 +15,18 @@ namespace MiniZinc {
 
 #ifdef _WIN32
 
-  void TimeOut(HANDLE hProcess, bool* doneStdout, bool* doneStderr, int timeout, std::timed_mutex* mtx) {
-    if (timeout > 0) {
-      if (!mtx->try_lock_for(std::chrono::milliseconds(timeout))) {
-        if ( (!*doneStdout) || (!*doneStderr) ) {
-          *doneStdout = true;
-          *doneStderr = true;
-          TerminateProcess(hProcess,0);
-        }
+void TimeOut(HANDLE hProcess, bool* doneStdout, bool* doneStderr, int timeout,
+             std::timed_mutex* mtx) {
+  if (timeout > 0) {
+    if (!mtx->try_lock_for(std::chrono::milliseconds(timeout))) {
+      if ((!*doneStdout) || (!*doneStderr)) {
+        *doneStdout = true;
+        *doneStderr = true;
+        TerminateProcess(hProcess, 0);
       }
     }
   }
+}
 #endif
 
-}
+}  // namespace MiniZinc

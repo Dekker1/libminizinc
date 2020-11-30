@@ -13,12 +13,10 @@
 #define __MINIZINC_MIP_CPLEX_SOLVERFACTORY_HH__
 
 namespace MiniZinc {
-  class Cplex_SolverFactoryInitialiser {
-  public:
-    Cplex_SolverFactoryInitialiser(void);
-  };
-}
+class Cplex_SolverFactoryInitialiser {
+public:
+  Cplex_SolverFactoryInitialiser(void);
+};
+}  // namespace MiniZinc
 
 #endif
-
-

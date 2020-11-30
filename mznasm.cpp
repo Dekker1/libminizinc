@@ -17,15 +17,14 @@
  * Need to get more flexible for multi-pass & multi-solving stuff  TODO
  */
 
-#include <iostream>
-
 #include <minizinc/solver.hh>
+
+#include <iostream>
 
 using namespace std;
 using namespace MiniZinc;
 
 int main(int argc, const char** argv) {
-  
   std::vector<std::string> args;
   for (int i = 1; i < argc; ++i) {
     args.emplace_back(argv[i]);
@@ -45,5 +44,4 @@ int main(int argc, const char** argv) {
     std::cerr << what << (what.empty() ? "" : ": ") << e.msg() << std::endl;
   }
   return 0;
-  
 }

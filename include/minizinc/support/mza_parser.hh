@@ -13,9 +13,9 @@
 #define __MINIZINC_MZA_PARSER_HH__
 
 // Assembly Parser Requirements
-#include <list>
-
 #include <minizinc/interpreter.hh>
+
+#include <list>
 
 // This is a workaround for a bug in flex that only shows up
 // with the Microsoft C++ compiler
@@ -33,7 +33,7 @@ extern "C" int isatty(int);
 #define fileno _fileno
 #endif
 
-//Anonymous struct for when yyparse is exported
+// Anonymous struct for when yyparse is exported
 typedef struct MZAContext MZAContext;
 // Parser generated header
 #include <minizinc/support/mza_parser.tab.hh>
@@ -43,4 +43,4 @@ using namespace MiniZinc;
 // Parsing function
 std::vector<BytecodeProc> parse_mza(const std::string& assembly_str);
 
-#endif //__MINIZINC_MZA_PARSER_HH__
+#endif  //__MINIZINC_MZA_PARSER_HH__

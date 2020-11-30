@@ -18,15 +18,15 @@
  * Need to get more flexible for multi-pass & multi-solving stuff  TODO
  */
 
-#include <iostream>
-#include <fstream>
-#include <iomanip>
+#include <minizinc/solver.hh>
+
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
-#include <chrono>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <ratio>
-
-#include <minizinc/solver.hh>
 
 using namespace std;
 using namespace MiniZinc;
@@ -36,34 +36,27 @@ int main(int argc, const char** argv) {
   bool fSuccess = false;
 
   try {
-    MznSolver slv(std::cout,std::cerr);
+    MznSolver slv(std::cout, std::cerr);
     try {
-      std::vector<std::string> args(argc-1);
-      for (int i=1; i<argc; i++)
-        args[i-1] = argv[i];
-      fSuccess = (slv.run(args,"",argv[0]) != SolverInstance::ERROR);
+      std::vector<std::string> args(argc - 1);
+      for (int i = 1; i < argc; i++) args[i - 1] = argv[i];
+      fSuccess = (slv.run(args, "", argv[0]) != SolverInstance::ERROR);
     } catch (const LocationException& e) {
-      if (slv.get_flag_verbose())
-        std::cerr << std::endl;
+      if (slv.get_flag_verbose()) std::cerr << std::endl;
       std::cerr << e.loc() << ":" << std::endl;
       std::cerr << e.what() << ": " << e.msg() << std::endl;
     } catch (const Exception& e) {
-      if (slv.get_flag_verbose())
-        std::cerr << std::endl;
+      if (slv.get_flag_verbose()) std::cerr << std::endl;
       std::string what = e.what();
       std::cerr << what << (what.empty() ? "" : ": ") << e.msg() << std::endl;
-    }
-    catch (const exception& e) {
-      if (slv.get_flag_verbose())
-        std::cerr << std::endl;
+    } catch (const exception& e) {
+      if (slv.get_flag_verbose()) std::cerr << std::endl;
       std::cerr << e.what() << std::endl;
-    }
-    catch (...) {
-      if (slv.get_flag_verbose())
-        std::cerr << std::endl;
+    } catch (...) {
+      if (slv.get_flag_verbose()) std::cerr << std::endl;
       std::cerr << "  UNKNOWN EXCEPTION." << std::endl;
     }
-    
+
     if (slv.get_flag_verbose()) {
       std::cerr << "   Done (";
       cerr << "overall time " << starttime.stoptime() << ")." << std::endl;
@@ -74,4 +67,4 @@ int main(int argc, const char** argv) {
     std::cerr << what << (what.empty() ? "" : ": ") << e.msg() << std::endl;
     std::exit(EXIT_FAILURE);
   }
-}   // int main()
+}  // int main()

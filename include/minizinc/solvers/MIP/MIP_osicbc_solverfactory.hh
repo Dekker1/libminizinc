@@ -13,13 +13,10 @@
 #define __MINIZINC_MIP_OSICBC_SOLVERFACTORY_HH__
 
 namespace MiniZinc {
-  class OSICBC_SolverFactoryInitialiser {
-  public:
-    OSICBC_SolverFactoryInitialiser(void);
-  };
-}
+class OSICBC_SolverFactoryInitialiser {
+public:
+  OSICBC_SolverFactoryInitialiser(void);
+};
+}  // namespace MiniZinc
 
 #endif
-
-
-

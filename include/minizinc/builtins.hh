@@ -15,10 +15,10 @@
 #include <minizinc/model.hh>
 
 namespace MiniZinc {
-  
-  /// Add builtins to the functions defined in \a env.model()
-  void registerBuiltins(Env& env);
-  
-}
+
+/// Add builtins to the functions defined in \a env.model()
+void registerBuiltins(Env& env);
+
+}  // namespace MiniZinc
 
 #endif

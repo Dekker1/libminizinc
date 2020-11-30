@@ -14,11 +14,13 @@
 #ifdef HAS_GECODE
 
 // Regex Parser Requirements
+#include <minizinc/values.hh>
+
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+
 #include <gecode/minimodel.hh>
-#include <minizinc/values.hh>
 
 // This is a workaround for a bug in flex that only shows up
 // with the Microsoft C++ compiler
@@ -36,7 +38,7 @@ extern "C" int isatty(int);
 #define fileno _fileno
 #endif
 
-//Anonymous struct for when yyparse is exported
+// Anonymous struct for when yyparse is exported
 typedef struct REContext REContext;
 // Parser generated header
 #include <minizinc/support/regex_parser.tab.hh>
@@ -45,7 +47,8 @@ using namespace Gecode;
 using namespace MiniZinc;
 
 // Parsing function
-std::unique_ptr<REG> regex_from_string(const std::string& expression, const IntSetVal& domain, const std::unordered_map<std::string, int>& identifiers);
+std::unique_ptr<REG> regex_from_string(const std::string& expression, const IntSetVal& domain,
+                                       const std::unordered_map<std::string, int>& identifiers);
 
-#endif //HAS_GECODE
-#endif //__MINIZINC_REGEX_HH__
+#endif  // HAS_GECODE
+#endif  //__MINIZINC_REGEX_HH__

@@ -13,65 +13,66 @@
 #ifndef __MINIZINC_PRETTYPRINTER_HH__
 #define __MINIZINC_PRETTYPRINTER_HH__
 
-#include <iostream>
-
 #include <minizinc/ast.hh>
+
+#include <iostream>
 
 namespace MiniZinc {
 
-  class Document;
-  class ItemDocumentMapper;
-  class PrettyPrinter;
+class Document;
+class ItemDocumentMapper;
+class PrettyPrinter;
 
-  class Printer {
-  private:
-    EnvI* env;
-    ItemDocumentMapper* ism;
-    PrettyPrinter* printer;
-    std::ostream& _os;
-    int _width;
-    bool _flatZinc;
-    
-    void init(void);
-    void p(Document* d);
-    void p(const Item* i);
-  public:
-    Printer(std::ostream& os, int width=80, bool flatZinc=true, EnvI* env=NULL);
-    ~Printer(void);
-    
-    void print(const Expression* e);
-    void print(const Item* i);
-    void print(const Model* m);
-    
-    static std::string escapeStringLit(const ASTString& s);
+class Printer {
+private:
+  EnvI* env;
+  ItemDocumentMapper* ism;
+  PrettyPrinter* printer;
+  std::ostream& _os;
+  int _width;
+  bool _flatZinc;
 
-  };
+  void init(void);
+  void p(Document* d);
+  void p(const Item* i);
 
-  /// Output operator for expressions
-  template<class Char, class Traits>
-  std::basic_ostream<Char,Traits>&
-  operator <<(std::basic_ostream<Char,Traits>& os, const Expression& e) {
-    std::basic_ostringstream<Char,Traits> s;
-    s.copyfmt(os); s.width(0);
-    Printer p(s,0);
-    p.print(&e);
-    return os << s.str();
-  }
+public:
+  Printer(std::ostream& os, int width = 80, bool flatZinc = true, EnvI* env = NULL);
+  ~Printer(void);
 
-  /// Output operator for items
-  template<class Char, class Traits>
-  std::basic_ostream<Char,Traits>&
-  operator <<(std::basic_ostream<Char,Traits>& os, const Item& i) {
-    std::basic_ostringstream<Char,Traits> s;
-    s.copyfmt(os); s.width(0);
-    Printer p(s);
-    p.print(&i);
-    return os << s.str();
-  }
+  void print(const Expression* e);
+  void print(const Item* i);
+  void print(const Model* m);
 
-  void ppFloatVal(std::ostream& os, const FloatVal& fv, bool hexFloat=false);
-  
+  static std::string escapeStringLit(const ASTString& s);
+};
+
+/// Output operator for expressions
+template <class Char, class Traits>
+std::basic_ostream<Char, Traits>& operator<<(std::basic_ostream<Char, Traits>& os,
+                                             const Expression& e) {
+  std::basic_ostringstream<Char, Traits> s;
+  s.copyfmt(os);
+  s.width(0);
+  Printer p(s, 0);
+  p.print(&e);
+  return os << s.str();
 }
+
+/// Output operator for items
+template <class Char, class Traits>
+std::basic_ostream<Char, Traits>& operator<<(std::basic_ostream<Char, Traits>& os, const Item& i) {
+  std::basic_ostringstream<Char, Traits> s;
+  s.copyfmt(os);
+  s.width(0);
+  Printer p(s);
+  p.print(&i);
+  return os << s.str();
+}
+
+void ppFloatVal(std::ostream& os, const FloatVal& fv, bool hexFloat = false);
+
+}  // namespace MiniZinc
 
 void debugprint(MiniZinc::Expression* e);
 void debugprint(MiniZinc::Item* i);

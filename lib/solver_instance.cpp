@@ -11,6 +11,4 @@
 
 #include <minizinc/solver_instance.hh>
 
-namespace MiniZinc {
-  
-}
+namespace MiniZinc {}

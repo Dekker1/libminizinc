@@ -12,18 +12,19 @@
 #ifndef __MINIZINC_CODEGEN_SUPPORT_HH__
 #define __MINIZINC_CODEGEN_SUPPORT_HH__
 
-#include <vector>
-#include <set>
-#include <iostream>
-
+#include <minizinc/ast.hh>
 #include <minizinc/interpreter/bytecode.hh>
+
+#include <iostream>
+#include <set>
+#include <vector>
 
 #ifdef _MSC_VER
 // Include header for _BitScanForward intrinsic.
 #include <intrin.h>
 #pragma intrinsic(_BitScanForward)
 #endif
- 
+
 // Support data structures for code generation.
 // Maps/tables/etc.
 namespace MiniZinc {
@@ -32,23 +33,20 @@ namespace MiniZinc {
 // the lines of fast-mergeable maps.
 struct cmp_ASTString {
   bool operator()(const ASTString& s, const ASTString& t) const {
-    if(s.size() != t.size())
-      return s.size() < t.size();
+    if (s.size() != t.size()) return s.size() < t.size();
     return s.size() > 0 && strncmp(s.c_str(), t.c_str(), s.size()) < 0;
   }
 };
 typedef std::set<ASTString, cmp_ASTString> ASTStSet;
 
 struct eq_Expression {
-  bool operator()(Expression* e, Expression* f) const {
-    return Expression::equal(e, f);
-  }
+  bool operator()(Expression* e, Expression* f) const { return Expression::equal(e, f); }
 };
 struct hash_Expression {
   bool operator()(Expression* e) const { return Expression::hash(e); }
 };
 
-template<class T>
+template <class T>
 struct ExprMap {
   typedef std::unordered_map<Expression*, T, hash_Expression, eq_Expression> t;
 };
@@ -64,6 +62,6 @@ inline unsigned int find_lsb(unsigned int x) {
 inline unsigned int find_lsb(unsigned int x) { return __builtin_ctz(x); }
 #endif
 
-};
+};  // namespace MiniZinc
 
 #endif

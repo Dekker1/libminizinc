@@ -13,14 +13,10 @@
 #define __MINIZINC_FZN_SOLVERFACTORY_HH__
 
 namespace MiniZinc {
-  class FZN_SolverFactoryInitialiser {
-  public:
-    FZN_SolverFactoryInitialiser(void);
-  };
-}
+class FZN_SolverFactoryInitialiser {
+public:
+  FZN_SolverFactoryInitialiser(void);
+};
+}  // namespace MiniZinc
 
 #endif
-
-
-
-

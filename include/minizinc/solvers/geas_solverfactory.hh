@@ -13,10 +13,10 @@
 #define __MINIZINC_GEAS_SOLVERFACTORY_HH__
 
 namespace MiniZinc {
-  class Geas_SolverFactoryInitialiser {
-  public:
-    Geas_SolverFactoryInitialiser();
-  };
-}
+class Geas_SolverFactoryInitialiser {
+public:
+  Geas_SolverFactoryInitialiser();
+};
+}  // namespace MiniZinc
 
-#endif // __MINIZINC_GEAS_SOLVERFACTORY_HH__
+#endif  // __MINIZINC_GEAS_SOLVERFACTORY_HH__

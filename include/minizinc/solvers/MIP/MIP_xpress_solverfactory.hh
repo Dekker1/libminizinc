@@ -13,12 +13,10 @@
 #define __MINIZINC_MIP_XPRESS_SOLVERFACTORY_HH__
 
 namespace MiniZinc {
-  class Xpress_SolverFactoryInitialiser {
-  public:
-    Xpress_SolverFactoryInitialiser(void);
-  };
-}
+class Xpress_SolverFactoryInitialiser {
+public:
+  Xpress_SolverFactoryInitialiser(void);
+};
+}  // namespace MiniZinc
 
 #endif
-
-

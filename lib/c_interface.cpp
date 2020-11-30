@@ -10,19 +10,19 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include <minizinc/c_interface.h>
-#include <minizinc/solver.hh>
 #include <minizinc/interpreter.hh>
 #include <minizinc/interpreter/primitives.hh>
-
-#include <iostream>
-#include <cstdarg>
+#include <minizinc/solver.hh>
 #include <minizinc/solvers/gecode_solverinstance.hh>
+
+#include <cstdarg>
+#include <iostream>
 
 using namespace MiniZinc;
 
-class Instance{
+class Instance {
 public:
-  Instance(std::string file, std::string solver) : slv({"--solver", solver, file}) {};
+  Instance(std::string file, std::string solver) : slv({"--solver", solver, file}){};
 
   MznSolver slv;
   std::string result;
@@ -32,7 +32,7 @@ void set_rnd_seed(int seed) {
   dynamic_cast<BytecodePrimitives::Uniform*>(primitiveMap()[PrimitiveMap::UNIFORM])->setSeed(seed);
 }
 
-MZNInstance minizinc_instance_init(const char* mza_file, const char* solver){
+MZNInstance minizinc_instance_init(const char* mza_file, const char* solver) {
   auto inst = new Instance(mza_file, solver);
   return reinterpret_cast<MZNInstance>(inst);
 }
@@ -117,8 +117,9 @@ const char* minizinc_solve(MZNInstance _inst) {
 
   std::stringstream ss;
   ss << "{";
-  ss <<"\"status\": \"" << status_to_string(result.first) << "\",";
-  if (result.first == MiniZinc::SolverInstance::SAT || result.first == MiniZinc::SolverInstance::OPT) {
+  ss << "\"status\": \"" << status_to_string(result.first) << "\",";
+  if (result.first == MiniZinc::SolverInstance::SAT ||
+      result.first == MiniZinc::SolverInstance::OPT) {
     ss << "\"solution\": " << result.second;
   } else {
     ss << R"("solution": "")";

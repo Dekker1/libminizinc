@@ -18,24 +18,23 @@
  * Need to get more flexible for multi-pass & multi-solving stuff  TODO
  */
 
-
-#ifdef _MSC_VER 
+#ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include <iostream>
-#include <fstream>
-#include <iomanip>
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
-#include <chrono>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <ratio>
 
 using namespace std;
 
+#include <minizinc/flat_exp.hh>
 #include <minizinc/solver.hh>
 #include <minizinc/support/mza_parser.hh>
-#include <minizinc/flat_exp.hh>
 
 using namespace MiniZinc;
 
@@ -68,90 +67,88 @@ using namespace MiniZinc;
 #include <minizinc/solvers/nl/nl_solverinstance.hh>
 
 SolverInitialiser::SolverInitialiser(void) {
-  #ifdef HAS_GUROBI
+#ifdef HAS_GUROBI
   Gurobi_SolverFactoryInitialiser _gurobi_init;
-  #endif
-  #ifdef HAS_CPLEX
+#endif
+#ifdef HAS_CPLEX
   static Cplex_SolverFactoryInitialiser _cplex_init;
-  #endif
-  #ifdef HAS_OSICBC
+#endif
+#ifdef HAS_OSICBC
   static OSICBC_SolverFactoryInitialiser _osicbc_init;
-  #endif
-  #ifdef HAS_XPRESS
+#endif
+#ifdef HAS_XPRESS
   static Xpress_SolverFactoryInitialiser _xpress_init;
-  #endif
-  #ifdef HAS_GECODE
+#endif
+#ifdef HAS_GECODE
   static Gecode_SolverFactoryInitialiser _gecode_init;
-  #endif
-  #ifdef HAS_GEAS
+#endif
+#ifdef HAS_GEAS
   static Geas_SolverFactoryInitialiser _geas_init;
-  #endif
-  #ifdef HAS_SCIP
+#endif
+#ifdef HAS_SCIP
   static SCIP_SolverFactoryInitialiser _scip_init;
-  #endif
+#endif
   static FZN_SolverFactoryInitialiser _fzn_init;
   static MZN_SolverFactoryInitialiser _mzn_init;
   static NL_SolverFactoryInitialiser _nl_init;
 }
-  
+
 MZNFZNSolverFlag MZNFZNSolverFlag::std(const std::string& n0) {
   const std::string argFlags("-I -n -p -r");
-  if (argFlags.find(n0) != std::string::npos)
-    return MZNFZNSolverFlag(FT_ARG,n0);
-  return MZNFZNSolverFlag(FT_NOARG,n0);
+  if (argFlags.find(n0) != std::string::npos) return MZNFZNSolverFlag(FT_ARG, n0);
+  return MZNFZNSolverFlag(FT_NOARG, n0);
 }
 
 MZNFZNSolverFlag MZNFZNSolverFlag::extra(const std::string& n0, const std::string& t0) {
-  return MZNFZNSolverFlag(t0=="bool" ? FT_NOARG : FT_ARG, n0);
+  return MZNFZNSolverFlag(t0 == "bool" ? FT_NOARG : FT_ARG, n0);
 }
 
 // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-SolverRegistry* MiniZinc::getGlobalSolverRegistry()
-{
+SolverRegistry* MiniZinc::getGlobalSolverRegistry() {
   static SolverRegistry sr;
   return &sr;
 }
 
-void SolverRegistry::addSolverFactory(SolverFactory* pSF)
-{
+void SolverRegistry::addSolverFactory(SolverFactory* pSF) {
   assert(pSF);
   sfstorage.push_back(pSF);
 }
 
-void SolverRegistry::removeSolverFactory(SolverFactory* pSF)
-{
+void SolverRegistry::removeSolverFactory(SolverFactory* pSF) {
   auto it = find(sfstorage.begin(), sfstorage.end(), pSF);
   assert(pSF);
   sfstorage.erase(it);
 }
 
 /// Function createSI also adds each SI to the local storage
-SolverInstanceBase * SolverFactory::createSI(std::ostream& log, SolverInstanceBase::Options* opt) {
-  SolverInstanceBase *pSI = doCreateSI(log,opt);
+SolverInstanceBase* SolverFactory::createSI(std::ostream& log, SolverInstanceBase::Options* opt) {
+  SolverInstanceBase* pSI = doCreateSI(log, opt);
   if (!pSI) {
-    throw InternalError("SolverFactory: failed to initialize solver "+getDescription());
+    throw InternalError("SolverFactory: failed to initialize solver " + getDescription());
   }
-  sistorage.resize(sistorage.size()+1);
+  sistorage.resize(sistorage.size() + 1);
   sistorage.back().reset(pSI);
   return pSI;
 }
 
 /// also providing a destroy function for a DLL or just special allocator etc.
-void SolverFactory::destroySI(SolverInstanceBase * pSI) {
+void SolverFactory::destroySI(SolverInstanceBase* pSI) {
   auto it = sistorage.begin();
-  for ( ; it != sistorage.end(); ++ it)
-    if (it->get() == pSI)
-      break;
+  for (; it != sistorage.end(); ++it)
+    if (it->get() == pSI) break;
   if (sistorage.end() == it) {
-    cerr << "  SolverFactory: failed to remove solver at "
-      << pSI << endl;
+    cerr << "  SolverFactory: failed to remove solver at " << pSI << endl;
     throw InternalError("  SolverFactory: failed to remove solver");
   }
   sistorage.erase(it);
 }
 
 MznSolver::MznSolver(std::vector<std::string> args0)
-  : solver_configs(std::cerr), executable_name("minizinc"), os(std::cout), log(std::cerr), s2out(std::cout,std::cerr,solver_configs.mznlibDir()) {
+    : solver_configs(std::cerr),
+      executable_name("minizinc"),
+      os(std::cout),
+      log(std::cerr),
+      s2out(std::cout, std::cerr, solver_configs.mznlibDir()) {
   std::vector<std::string> args = {executable_name};
   args.insert(args.end(), args0.begin(), args0.end());
   switch (processOptions(args)) {
@@ -166,37 +163,31 @@ MznSolver::MznSolver(std::vector<std::string> args0)
   }
 
   flatten(file, file);
-//  Definition* head = interpreter->_agg[0].def_stack;
-//  def_ptr = head;
+  //  Definition* head = interpreter->_agg[0].def_stack;
+  //  def_ptr = head;
 }
 
-MznSolver::~MznSolver()
-{
-//   if (si)                         // first the solver
-//     CleanupSolverInterface(si);
+MznSolver::~MznSolver() {
+  //   if (si)                         // first the solver
+  //     CleanupSolverInterface(si);
   // TODO cleanup the used solver interfaces
   delete interpreter;
-  si=0;
-  si_opt=nullptr;
+  si = 0;
+  si_opt = nullptr;
   GC::trigger();
 }
 
-bool MznSolver::ifMzn2Fzn() {
-  return is_mzn2fzn;
-}
+bool MznSolver::ifMzn2Fzn() { return is_mzn2fzn; }
 
-bool MznSolver::ifSolns2out() {
-  return s2out._opt.flag_standaloneSolns2Out;
-}
+bool MznSolver::ifSolns2out() { return s2out._opt.flag_standaloneSolns2Out; }
 
-void MznSolver::addSolverInterface(SolverFactory* sf)
-{
+void MznSolver::addSolverInterface(SolverFactory* sf) {
   si = sf->createSI(log, si_opt);
   assert(si);
   Model* m = in_out_defs.model();
   if (m) {
     for (FunctionIterator it = m->begin_functions(); it != m->end_functions(); ++it) {
-      if(!it->removed()) {
+      if (!it->removed()) {
         FunctionI& fi = *it;
         if (fi.from_stdlib() || fi.ti()->type().isann() || fi.e()) {
           continue;
@@ -211,90 +202,88 @@ void MznSolver::addSolverInterface(SolverFactory* sf)
   // si->setSolns2Out( &s2out );
   if (flag_compiler_verbose)
     log
-    //     << "  ---------------------------------------------------------------------------\n"
-    << "      % SOLVING PHASE\n"
-    << sf->getDescription(si_opt) << endl;
+        //     << "  ---------------------------------------------------------------------------\n"
+        << "      % SOLVING PHASE\n"
+        << sf->getDescription(si_opt) << endl;
 }
 
-void MznSolver::addSolverInterface()
-{
+void MznSolver::addSolverInterface() {
   GCLock lock;
-  if (sf==NULL) {
-    if ( getGlobalSolverRegistry()->getSolverFactories().empty() ) {
+  if (sf == NULL) {
+    if (getGlobalSolverRegistry()->getSolverFactories().empty()) {
       log << " MznSolver: NO SOLVER FACTORIES LINKED." << endl;
-      assert( 0 );
+      assert(0);
     }
     sf = getGlobalSolverRegistry()->getSolverFactories().back();
   }
   addSolverInterface(sf);
 }
 
-void MznSolver::printUsage()
-{
+void MznSolver::printUsage() {
   os << executable_name << ": ";
-  if ( ifMzn2Fzn() ) {
-    os
-      << "MiniZinc to FlatZinc converter.\n"
-      << "Usage: "  << executable_name
-      << "  [<options>] [-I <include path>] <model>.mzn [<data>.dzn ...]" << std::endl;
+  if (ifMzn2Fzn()) {
+    os << "MiniZinc to FlatZinc converter.\n"
+       << "Usage: " << executable_name
+       << "  [<options>] [-I <include path>] <model>.mzn [<data>.dzn ...]" << std::endl;
   } else if (ifSolns2out()) {
-    os
-      << "Solutions to output translator.\n"
-      << "Usage: "  << executable_name
-      << "  [<options>] <model>.ozn" << std::endl;
+    os << "Solutions to output translator.\n"
+       << "Usage: " << executable_name << "  [<options>] <model>.ozn" << std::endl;
   } else {
-    os
-      << "MiniZinc driver.\n"
-      << "Usage: "  << executable_name
-      << "  [<options>] [-I <include path>] <model>.mzn [<data>.dzn ...] or just <flat>.fzn" << std::endl;
+    os << "MiniZinc driver.\n"
+       << "Usage: " << executable_name
+       << "  [<options>] [-I <include path>] <model>.mzn [<data>.dzn ...] or just <flat>.fzn"
+       << std::endl;
   }
 }
 
-void MznSolver::printHelp(const std::string& selectedSolver)
-{
+void MznSolver::printHelp(const std::string& selectedSolver) {
   printUsage();
-  os
-    << "General options:" << std::endl
-    << "  --help, -h\n    Print this help message." << std::endl
-    << "  --version\n    Print version information." << std::endl
-    << "  --solvers\n    Print list of available solvers." << std::endl
-    << "  --time-limit <ms>\n    Stop after <ms> milliseconds (includes compilation and solving)." << std::endl
-    << "  --solver <solver id>, --solver <solver config file>.msc\n    Select solver to use." << std::endl
-    << "  --help <solver id>\n    Print help for a particular solver." << std::endl
-    << "  -v, -l, --verbose\n    Print progress/log statements. Note that some solvers may log to stdout." << std::endl
-    << "  --verbose-compilation\n    Print progress/log statements for compilation." << std::endl
-    << "  -s, --statistics\n    Print statistics." << std::endl
-    << "  --compiler-statistics\n    Print statistics for compilation." << std::endl
-    << "  -c, --compile\n    Compile only (do not run solver)." << std::endl
-    << "  --config-dirs\n    Output configuration directories." << std::endl;
+  os << "General options:" << std::endl
+     << "  --help, -h\n    Print this help message." << std::endl
+     << "  --version\n    Print version information." << std::endl
+     << "  --solvers\n    Print list of available solvers." << std::endl
+     << "  --time-limit <ms>\n    Stop after <ms> milliseconds (includes compilation and solving)."
+     << std::endl
+     << "  --solver <solver id>, --solver <solver config file>.msc\n    Select solver to use."
+     << std::endl
+     << "  --help <solver id>\n    Print help for a particular solver." << std::endl
+     << "  -v, -l, --verbose\n    Print progress/log statements. Note that some solvers may log to "
+        "stdout."
+     << std::endl
+     << "  --verbose-compilation\n    Print progress/log statements for compilation." << std::endl
+     << "  -s, --statistics\n    Print statistics." << std::endl
+     << "  --compiler-statistics\n    Print statistics for compilation." << std::endl
+     << "  -c, --compile\n    Compile only (do not run solver)." << std::endl
+     << "  --config-dirs\n    Output configuration directories." << std::endl;
 
   if (selectedSolver.empty()) {
     // flt.printHelp(os);
     os << endl;
-    if ( !ifMzn2Fzn() ) {
+    if (!ifMzn2Fzn()) {
       s2out.printHelp(os);
       os << endl;
     }
     os << "Available solvers (get help using --help <solver id>):" << endl;
     std::vector<std::string> solvers = solver_configs.solvers();
-    if (solvers.size()==0)
-      cout << "  none.\n";
-    for (unsigned int i=0; i<solvers.size(); i++) {
+    if (solvers.size() == 0) cout << "  none.\n";
+    for (unsigned int i = 0; i < solvers.size(); i++) {
       cout << "  " << solvers[i] << endl;
     }
   } else {
     const SolverConfig& sc = solver_configs.config(selectedSolver);
-    string solverId = sc.executable().empty() ? sc.id() : (sc.supportsMzn() ?  string("org.minizinc.mzn-mzn") : string("org.minizinc.mzn-fzn"));
+    string solverId = sc.executable().empty() ? sc.id()
+                                              : (sc.supportsMzn() ? string("org.minizinc.mzn-mzn")
+                                                                  : string("org.minizinc.mzn-fzn"));
     bool found = false;
     for (auto it = getGlobalSolverRegistry()->getSolverFactories().rbegin();
          it != getGlobalSolverRegistry()->getSolverFactories().rend(); ++it) {
-      if ((*it)->getId()==solverId) {
+      if ((*it)->getId() == solverId) {
         os << endl;
         (*it)->printHelp(os);
         if (!sc.executable().empty() && !sc.extraFlags().empty()) {
           os << "Extra solver flags (use with ";
           os << (sc.supportsMzn() ? "--mzn-flags" : "--fzn-flags") << ")" << endl;
-          for (const SolverConfig::ExtraFlag& ef: sc.extraFlags()) {
+          for (const SolverConfig::ExtraFlag& ef : sc.extraFlags()) {
             os << "  " << ef.flag << endl << "    " << ef.description << endl;
           }
         }
@@ -307,17 +296,15 @@ void MznSolver::printHelp(const std::string& selectedSolver)
   }
 }
 
-void addFlags(const std::string& sep,
-              const std::vector<std::string>& in_args,
+void addFlags(const std::string& sep, const std::vector<std::string>& in_args,
               std::vector<std::string>& out_args) {
-  for(const std::string& arg : in_args) {
+  for (const std::string& arg : in_args) {
     out_args.push_back(sep);
     out_args.push_back(arg);
   }
 }
 
-MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv)
-{
+MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv) {
   executable_name = argv[0];
   executable_name = executable_name.substr(executable_name.find_last_of("/\\") + 1);
   size_t lastdot = executable_name.find_last_of('.');
@@ -325,37 +312,35 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
     executable_name = executable_name.substr(0, lastdot);
   }
   string solver;
-  bool mzn2fzn_exe = (executable_name=="mzn2fzn");
+  bool mzn2fzn_exe = (executable_name == "mzn2fzn");
   if (mzn2fzn_exe) {
-    is_mzn2fzn=true;
-  } else if (executable_name=="solns2out") {
-    s2out._opt.flag_standaloneSolns2Out=true;
-    flag_is_solns2out=true;
+    is_mzn2fzn = true;
+  } else if (executable_name == "solns2out") {
+    s2out._opt.flag_standaloneSolns2Out = true;
+    flag_is_solns2out = true;
   }
   bool compileSolutionChecker = false;
-  int i=1, j=1;
+  int i = 1, j = 1;
   int argc = static_cast<int>(argv.size());
-  if (argc < 2)
-    return OPTION_ERROR;
-  for (i=1; i<argc; ++i) {
-    if (argv[i]=="-h" || argv[i]=="--help") {
-      if (argc > i+1) {
-        printHelp(argv[i+1]);
+  if (argc < 2) return OPTION_ERROR;
+  for (i = 1; i < argc; ++i) {
+    if (argv[i] == "-h" || argv[i] == "--help") {
+      if (argc > i + 1) {
+        printHelp(argv[i + 1]);
       } else {
         printHelp();
       }
       return OPTION_FINISH;
     }
-    if (argv[i]=="--version") {
+    if (argv[i] == "--version") {
       // flt.printVersion(cout);
       return OPTION_FINISH;
     }
-    if (argv[i]=="--solvers") {
+    if (argv[i] == "--solvers") {
       cout << "MiniZinc driver.\nAvailable solver configurations:\n";
       std::vector<std::string> solvers = solver_configs.solvers();
-      if (solvers.size()==0)
-        cout << "  none.\n";
-      for (unsigned int i=0; i<solvers.size(); i++) {
+      if (solvers.size() == 0) cout << "  none.\n";
+      for (unsigned int i = 0; i < solvers.size(); i++) {
         cout << "  " << solvers[i] << endl;
       }
       cout << "Search path for solver configurations:\n";
@@ -364,60 +349,64 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
       }
       return OPTION_FINISH;
     }
-    if (argv[i]=="--solvers-json") {
+    if (argv[i] == "--solvers-json") {
       cout << solver_configs.solverConfigsJSON();
       return OPTION_FINISH;
     }
-    if (argv[i]=="--config-dirs") {
+    if (argv[i] == "--config-dirs") {
       GCLock lock;
       cout << "{\n";
-      cout << "  \"globalConfigFile\" : \"" << Printer::escapeStringLit(FileUtils::global_config_file()) << "\",\n";
-      cout << "  \"userConfigFile\" : \"" << Printer::escapeStringLit(FileUtils::user_config_file()) << "\",\n";
-      cout << "  \"userSolverConfigDir\" : \"" << Printer::escapeStringLit(FileUtils::user_config_dir()) << "/solvers\",\n";
-      cout << "  \"mznStdlibDir\" : \"" << Printer::escapeStringLit(solver_configs.mznlibDir()) << "\"\n";
+      cout << "  \"globalConfigFile\" : \""
+           << Printer::escapeStringLit(FileUtils::global_config_file()) << "\",\n";
+      cout << "  \"userConfigFile\" : \"" << Printer::escapeStringLit(FileUtils::user_config_file())
+           << "\",\n";
+      cout << "  \"userSolverConfigDir\" : \""
+           << Printer::escapeStringLit(FileUtils::user_config_dir()) << "/solvers\",\n";
+      cout << "  \"mznStdlibDir\" : \"" << Printer::escapeStringLit(solver_configs.mznlibDir())
+           << "\"\n";
       cout << "}\n";
       return OPTION_FINISH;
     }
-    if (argv[i]=="--time-limit") {
+    if (argv[i] == "--time-limit") {
       ++i;
-      if (i==argc) {
+      if (i == argc) {
         log << "Argument required for --time-limit" << endl;
         return OPTION_ERROR;
       }
       flag_overall_time_limit = atoi(argv[i].c_str());
-    } else if (argv[i]=="--solver") {
+    } else if (argv[i] == "--solver") {
       ++i;
-      if (i==argc) {
+      if (i == argc) {
         log << "Argument required for --solver" << endl;
         return OPTION_ERROR;
       }
-      if (solver.size()>0 && solver != argv[i]) {
+      if (solver.size() > 0 && solver != argv[i]) {
         log << "Only one --solver option allowed" << endl;
         return OPTION_ERROR;
       }
       solver = argv[i];
-    } else if (argv[i]=="--output-dict") {
+    } else if (argv[i] == "--output-dict") {
       output_dict = true;
-    } else if (argv[i]=="-c" || argv[i]=="--compile") {
+    } else if (argv[i] == "-c" || argv[i] == "--compile") {
       is_mzn2fzn = true;
-    } else if (argv[i]=="-v" || argv[i]=="--verbose" || argv[i]=="-l") {
+    } else if (argv[i] == "-v" || argv[i] == "--verbose" || argv[i] == "-l") {
       flag_verbose = true;
       flag_compiler_verbose = true;
-    } else if (argv[i]=="--verbose-compilation") {
+    } else if (argv[i] == "--verbose-compilation") {
       flag_compiler_verbose = true;
-    } else if (argv[i]=="-s" || argv[i]=="--statistics") {
+    } else if (argv[i] == "-s" || argv[i] == "--statistics") {
       flag_statistics = true;
       flag_compiler_statistics = true;
-    } else if (argv[i]=="--compiler-statistics") {
+    } else if (argv[i] == "--compiler-statistics") {
       flag_compiler_statistics = true;
     } else {
-      if ((argv[i]=="--fzn-cmd" || argv[i]=="--flatzinc-cmd") && solver.empty()) {
+      if ((argv[i] == "--fzn-cmd" || argv[i] == "--flatzinc-cmd") && solver.empty()) {
         solver = "org.minizinc.mzn-fzn";
       }
-      if (argv[i]=="--compile-solution-checker") {
+      if (argv[i] == "--compile-solution-checker") {
         compileSolutionChecker = true;
       }
-      if (argv[i]=="--ozn-file") {
+      if (argv[i] == "--ozn-file") {
         flag_is_solns2out = true;
       }
       argv[j++] = argv[i];
@@ -426,23 +415,23 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
   argv.resize(j);
   argc = j;
 
-  if ( (mzn2fzn_exe || compileSolutionChecker) && solver.empty()) {
+  if ((mzn2fzn_exe || compileSolutionChecker) && solver.empty()) {
     solver = "org.minizinc.mzn-fzn";
   }
-  
-//  if (flag_verbose) {
-//    argv.push_back("--verbose-solving");
-//    argc++;
-//  }
+
+  //  if (flag_verbose) {
+  //    argv.push_back("--verbose-solving");
+  //    argc++;
+  //  }
   if (flag_statistics) {
     argv.push_back("--solver-statistics");
     argc++;
   }
-  
+
   // flt.set_flag_output_by_default(ifMzn2Fzn());
 
   bool isMznMzn = false;
-  
+
   if (!flag_is_solns2out) {
     try {
       const SolverConfig& sc = solver_configs.config(solver);
@@ -465,18 +454,19 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
       }
       for (auto it = getGlobalSolverRegistry()->getSolverFactories().begin();
            it != getGlobalSolverRegistry()->getSolverFactories().end(); ++it) {
-        if ((*it)->getId()==solverId) { /// TODO: also check version (currently assumes all ids are unique)
+        if ((*it)->getId() ==
+            solverId) {  /// TODO: also check version (currently assumes all ids are unique)
           sf = *it;
           if (si_opt) {
             delete si_opt;
           }
           si_opt = sf->createOptions();
-          if (!sc.executable().empty() || solverId=="org.minizinc.mzn-fzn" || solverId=="org.minizinc.mzn-nl") {
+          if (!sc.executable().empty() || solverId == "org.minizinc.mzn-fzn" ||
+              solverId == "org.minizinc.mzn-nl") {
             std::vector<MZNFZNSolverFlag> acceptedFlags;
-            for (auto& sf : sc.stdFlags())
-              acceptedFlags.push_back(MZNFZNSolverFlag::std(sf));
+            for (auto& sf : sc.stdFlags()) acceptedFlags.push_back(MZNFZNSolverFlag::std(sf));
             for (auto& ef : sc.extraFlags())
-              acceptedFlags.push_back(MZNFZNSolverFlag::extra(ef.flag,ef.flag_type));
+              acceptedFlags.push_back(MZNFZNSolverFlag::extra(ef.flag, ef.flag_type));
 
             // Collect arguments required for underlying exe
             vector<string> fzn_mzn_flags;
@@ -500,7 +490,7 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
                 additionalArgs_s.push_back(sc.executable());
               }
 
-              if(!fzn_mzn_flags.empty()) {
+              if (!fzn_mzn_flags.empty()) {
                 addFlags("--mzn-flag", fzn_mzn_flags, additionalArgs_s);
               }
 
@@ -508,7 +498,7 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
               // --find-muses is implemented (these arguments will be passed
               // through to the subsolver of findMUS)
               if (!sc.mznlib().empty()) {
-                if (sc.mznlib().substr(0,2)=="-G") {
+                if (sc.mznlib().substr(0, 2) == "-G") {
                   additionalArgs_s.push_back("--mzn-flag");
                   additionalArgs_s.push_back(sc.mznlib());
                 } else {
@@ -525,10 +515,11 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
                 }
               }
 
-              for (i=0; i<additionalArgs_s.size(); ++i) {
+              for (i = 0; i < additionalArgs_s.size(); ++i) {
                 bool success = sf->processOption(si_opt, i, additionalArgs_s);
                 if (!success) {
-                  log << "Solver backend " << solverId << " does not recognise option " << additionalArgs_s[i]  << "." << endl;
+                  log << "Solver backend " << solverId << " does not recognise option "
+                      << additionalArgs_s[i] << "." << endl;
                   return OPTION_ERROR;
                 }
               }
@@ -547,7 +538,7 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
               } else {
                 additionalArgs.push_back(sc.executable());
               }
-              if(!fzn_mzn_flags.empty()) {
+              if (!fzn_mzn_flags.empty()) {
                 if (sc.supportsFzn()) {
                   addFlags("--fzn-flag", fzn_mzn_flags, additionalArgs);
                 } else {
@@ -556,8 +547,8 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
               }
               if (sc.needsPathsFile()) {
                 // Instruct flattener to hold onto paths
-                int i=0;
-                vector<string> args {"--keep-paths"};
+                int i = 0;
+                vector<string> args{"--keep-paths"};
                 // flt.processOption(i, args);
 
                 // Instruct FznSolverInstance to write a path file
@@ -567,33 +558,34 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
               if (!sc.needsSolns2Out()) {
                 additionalArgs.push_back("--fzn-output-passthrough");
               }
-              int i=0;
-              for (i=0; i<additionalArgs.size(); ++i) {
+              int i = 0;
+              for (i = 0; i < additionalArgs.size(); ++i) {
                 bool success = sf->processOption(si_opt, i, additionalArgs);
                 if (!success) {
-                  log << "Solver backend " << solverId << " does not recognise option " << additionalArgs[i]  << "." << endl;
+                  log << "Solver backend " << solverId << " does not recognise option "
+                      << additionalArgs[i] << "." << endl;
                   return OPTION_ERROR;
                 }
               }
             }
           }
           if (!sc.mznlib().empty()) {
-            if (sc.mznlib().substr(0,2)=="-G") {
+            if (sc.mznlib().substr(0, 2) == "-G") {
               std::vector<std::string> additionalArgs({sc.mznlib()});
-              int i=0;
+              int i = 0;
               // if (!flt.processOption(i, additionalArgs)) {
               //   log << "Flattener does not recognise option " << sc.mznlib() << endl;
               //   return OPTION_ERROR;
               // }
             } else {
-              std::vector<std::string>  additionalArgs(2);
+              std::vector<std::string> additionalArgs(2);
               additionalArgs[0] = "-I";
               if (sc.mznlib_resolved().size()) {
                 additionalArgs[1] = sc.mznlib_resolved();
               } else {
                 additionalArgs[1] = sc.mznlib();
               }
-              int i=0;
+              int i = 0;
               // if (!flt.processOption(i, additionalArgs)) {
               //   log << "Flattener does not recognise option -I." << endl;
               //   return OPTION_ERROR;
@@ -602,11 +594,11 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
           }
           if (!sc.defaultFlags().empty()) {
             std::vector<std::string> addedArgs;
-            addedArgs.push_back(argv[0]); // excutable name
+            addedArgs.push_back(argv[0]);  // excutable name
             for (auto& df : sc.defaultFlags()) {
               addedArgs.push_back(df);
             }
-            for (int i=1; i<argv.size(); i++) {
+            for (int i = 1; i < argv.size(); i++) {
               addedArgs.push_back(argv[i]);
             }
             argv = addedArgs;
@@ -615,25 +607,25 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
           break;
         }
       }
-      
+
     } catch (ConfigException& e) {
       log << "Config exception: " << e.msg() << endl;
       return OPTION_ERROR;
     }
 
-    if (sf==NULL) {
+    if (sf == NULL) {
       log << "Solver " << solver << " not found." << endl;
       return OPTION_ERROR;
     }
-    
-    for (i=1; i<argc; ++i) {
-      if ( !ifMzn2Fzn() ? s2out.processOption( i, argv ) : false ) {
-      // } else if ((!isMznMzn || is_mzn2fzn) && flt.processOption(i, argv)) {
+
+    for (i = 1; i < argc; ++i) {
+      if (!ifMzn2Fzn() ? s2out.processOption(i, argv) : false) {
+        // } else if ((!isMznMzn || is_mzn2fzn) && flt.processOption(i, argv)) {
       } else if (sf != NULL && sf->processOption(si_opt, i, argv)) {
       } else {
         size_t last_dot = argv[i].find_last_of('.');
         if (last_dot != string::npos) {
-          std::string extension = argv[i].substr(last_dot,string::npos);
+          std::string extension = argv[i].substr(last_dot, string::npos);
           if (extension == ".uzn" || extension == ".mza") {
             assert(file == "");
             file = argv[i];
@@ -643,7 +635,8 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
         } else {
           std::string executable_name(argv[0]);
           executable_name = executable_name.substr(executable_name.find_last_of("/\\") + 1);
-          log << executable_name << ": Unrecognized option or bad format `" << argv[i] << "'" << endl;
+          log << executable_name << ": Unrecognized option or bad format `" << argv[i] << "'"
+              << endl;
           return OPTION_ERROR;
         }
       }
@@ -651,8 +644,8 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
     return OPTION_OK;
 
   } else {
-    for (i=1; i<argc; ++i) {
-      if ( s2out.processOption( i, argv ) ) {
+    for (i = 1; i < argc; ++i) {
+      if (s2out.processOption(i, argv)) {
       } else {
         std::string executable_name(argv[0]);
         executable_name = executable_name.substr(executable_name.find_last_of("/\\") + 1);
@@ -661,25 +654,24 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
       }
     }
     return OPTION_OK;
-
   }
-  
 }
 
 Val MznSolver::eval_val(EnvI& env, Expression* e) {
   if (e->type().dim() > 0) {
     ArrayLit* al = eval_array_lit(env, e);
-    std:vector<Val> content(al->size());
+  std:
+    vector<Val> content(al->size());
     for (size_t i = 0; i < al->size(); ++i) {
       content[i] = eval_val(env, (*al)[i]);
     }
     Val ret = Val(Vec::a(interpreter, interpreter->newIdent(), content));
 
     if (al->dims() > 1 || al->min(0) != 1) {
-      std::vector<Val> idxs(al->dims()*2);
+      std::vector<Val> idxs(al->dims() * 2);
       for (size_t i = 0; i < al->dims(); ++i) {
-        idxs[i*2] = Val(al->min(i));
-        idxs[i*2+1] = Val(al->max(i));
+        idxs[i * 2] = Val(al->min(i));
+        idxs[i * 2 + 1] = Val(al->max(i));
       }
       Vec* ranges = Vec::a(interpreter, interpreter->newIdent(), idxs);
       ret = Val(Vec::a(interpreter, interpreter->newIdent(), {ret, Val(ranges)}, true));
@@ -688,12 +680,12 @@ Val MznSolver::eval_val(EnvI& env, Expression* e) {
     return ret;
   }
   if (e->type().is_set()) {
-    //TODO: Might not be int
-    IntSetVal* sl = eval_intset(env, e); 
-    std::vector<Val> vranges(sl->size()*2);
+    // TODO: Might not be int
+    IntSetVal* sl = eval_intset(env, e);
+    std::vector<Val> vranges(sl->size() * 2);
     for (size_t i = 0; i < sl->size(); ++i) {
-      vranges[i*2] = Val::fromIntVal(sl->min(i));
-      vranges[i*2+1] = Val::fromIntVal(sl->max(i));
+      vranges[i * 2] = Val::fromIntVal(sl->min(i));
+      vranges[i * 2 + 1] = Val::fromIntVal(sl->max(i));
     }
     return Val(Vec::a(interpreter, interpreter->newIdent(), vranges));
   }
@@ -708,8 +700,7 @@ Val MznSolver::eval_val(EnvI& env, Expression* e) {
   return Val::fromIntVal(iv);
 }
 
-void MznSolver::flatten(const std::string& filename, const std::string& modelName)
-{
+void MznSolver::flatten(const std::string& filename, const std::string& modelName) {
   if (!FileUtils::file_exists(filename)) {
     std::cerr << "Error: cannot open assembly file '" << filename << "'." << std::endl;
     return;
@@ -718,14 +709,14 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   std::ifstream t(filename, std::ifstream::in);
   std::string line;
   std::string mzn_defs;
-  while (std::getline(t,line)) {
+  while (std::getline(t, line)) {
     if (line == "@@@@@@@@@@") {
       break;
     }
     mzn_defs += line + "\n";
   }
   std::string assembly;
-  while (std::getline(t,line)) {
+  while (std::getline(t, line)) {
     assembly += line + "\n";
   }
   if (assembly.empty()) {
@@ -735,11 +726,12 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   bs = parse_mza(assembly);
   if (verbose) {
     std::cerr << "Disassembled code:\n";
-    int b_count=0;
+    int b_count = 0;
     for (auto& b : bs) {
-      for (int i=0; i<BytecodeProc::MAX_MODE; i++) {
-        if (b.mode[i].size()>0) {
-          std::cerr << ":" << b.name << ":" << BytecodeProc::mode_to_string[i] << " %% " << b_count << "\n";
+      for (int i = 0; i < BytecodeProc::MAX_MODE; i++) {
+        if (b.mode[i].size() > 0) {
+          std::cerr << ":" << b.name << ":" << BytecodeProc::mode_to_string[i] << " %% " << b_count
+                    << "\n";
           std::cerr << b.mode[i].toString(bs);
         }
       }
@@ -751,13 +743,14 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     resolve_call.insert({bs[i].name, {i, bs[i].nargs}});
   }
   // The main procedure is the last one in the file
-  BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT],bs.size()-1,BytecodeProc::ROOT);
+  BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT], bs.size() - 1, BytecodeProc::ROOT);
   interpreter = new Interpreter(bs, frame);
   // Parse and add data
   if (!mzn_defs.empty()) {
     GCLock lock;
     std::vector<SyntaxError> syntaxErrors;
-    Model* m = parse(in_out_defs, {}, data_files, mzn_defs, file, {solver_configs.mznlibDir() + "/std"}, false, false, verbose, std::cerr);
+    Model* m = parse(in_out_defs, {}, data_files, mzn_defs, file,
+                     {solver_configs.mznlibDir() + "/std"}, false, false, verbose, std::cerr);
     if (!m) {
       throw Error("Unable to parse MiniZinc Declarations");
     }
@@ -768,9 +761,8 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     typecheck(in_out_defs, in_out_defs.model(), typeErrors, false, true, false);
     registerBuiltins(in_out_defs);
     if (typeErrors.size() > 0) {
-      for (unsigned int i=0; i<typeErrors.size(); i++) {
-        if (flag_verbose)
-          log << std::endl;
+      for (unsigned int i = 0; i < typeErrors.size(); i++) {
+        if (flag_verbose) log << std::endl;
         log << typeErrors[i].loc() << ":" << std::endl;
         log << typeErrors[i].what() << ": " << typeErrors[i].msg() << std::endl;
       }
@@ -779,7 +771,8 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     if (verbose) {
       std::cerr << "Input Data:\n";
     }
-    for (VarDeclIterator it = in_out_defs.model()->begin_vardecls(); it != in_out_defs.model()->end_vardecls(); ++it) {
+    for (VarDeclIterator it = in_out_defs.model()->begin_vardecls();
+         it != in_out_defs.model()->end_vardecls(); ++it) {
       if (it->removed()) {
         continue;
       }
@@ -788,7 +781,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
       Model* m = in_out_defs.model();
 
       VarDecl* vd = it->e();
-      if(vd->type().isann()) {
+      if (vd->type().isann()) {
         continue;
       }
       assert(vd->e());
@@ -806,7 +799,8 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
 
       interpreter->globals.assign(interpreter, global.toInt(), v);
       if (verbose) {
-        std::cerr << " - R" << global  << "("<< vd->id()->str() << ") = " << v.toString() << std::endl;
+        std::cerr << " - R" << global << "(" << vd->id()->str() << ") = " << v.toString()
+                  << std::endl;
       }
     }
   }
@@ -844,30 +838,24 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   }
 }
 
-std::pair<SolverInstance::Status, std::string> MznSolver::solve()
-{
+std::pair<SolverInstance::Status, std::string> MznSolver::solve() {
   SolverInstance::Status status = getSI()->solve();
   std::string sol = printSolution(status);
-  if (si_opt->printStatistics)
-      getSI()->printStatistics();
+  if (si_opt->printStatistics) getSI()->printStatistics();
   /* if (flag_statistics) */
   /*   getSI()->getSolns2Out()->printStatistics(log); */
   return {status, sol};
 }
 
-void MznSolver::printStatistics()
-{ // from flattener too?   TODO
-  if (si)
-    getSI()->printStatistics();
+void MznSolver::printStatistics() {  // from flattener too?   TODO
+  if (si) getSI()->printStatistics();
 }
 
-std::string MznSolver::printSolution(SolverInstance::Status s)
-{
+std::string MznSolver::printSolution(SolverInstance::Status s) {
   std::stringstream ss;
-  switch(s) {
-  case SolverInstance::SAT:
-  case SolverInstance::OPT:
-    {
+  switch (s) {
+    case SolverInstance::SAT:
+    case SolverInstance::OPT: {
       if (output) {
         Val vec = output->arg(0)[0];
         ss << (output_dict ? '{' : '[');
@@ -878,7 +866,8 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
           }
           if (v.isVar()) {
             if (output_dict) {
-              ss << "\"" << v.timestamp() << "\"" << ": ";
+              ss << "\"" << v.timestamp() << "\""
+                 << ": ";
             }
             ss << si->getSolutionValue(v.toVar()).toString();
           } else {
@@ -909,7 +898,8 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
               if (!first) {
                 ss << "," << std::endl;
               }
-              ss << "    \"" << timestamp << "\"" << ": ";
+              ss << "    \"" << timestamp << "\""
+                 << ": ";
               Val sv = si->getSolutionValue(va.toVar());
               ss << sv.toString();
               first = false;
@@ -920,18 +910,17 @@ std::string MznSolver::printSolution(SolverInstance::Status s)
         }
         ss << std::endl << "}" << std::endl;
       }
-    }
-    break;
-  case SolverInstance::UNSAT:
-    ss << "=====UNSATISFIABLE=====" << std::endl;
-    break;
-  case SolverInstance::UNKNOWN:
-    ss << "=====UNKNOWN=====" << std::endl;
-    break;
-  case SolverInstance::ERROR:
-  default:
-    ss << "=====ERROR=====" << std::endl;
-    break;
+    } break;
+    case SolverInstance::UNSAT:
+      ss << "=====UNSATISFIABLE=====" << std::endl;
+      break;
+    case SolverInstance::UNKNOWN:
+      ss << "=====UNKNOWN=====" << std::endl;
+      break;
+    case SolverInstance::ERROR:
+    default:
+      ss << "=====ERROR=====" << std::endl;
+      break;
   }
   return ss.str();
 }
@@ -940,22 +929,21 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   using namespace std::chrono;
   steady_clock::time_point startTime = steady_clock::now();
 
-
   if (!ifMzn2Fzn() && flag_overall_time_limit != 0) {
     steady_clock::time_point afterFlattening = steady_clock::now();
-    milliseconds passed = duration_cast<milliseconds>(afterFlattening-startTime);
+    milliseconds passed = duration_cast<milliseconds>(afterFlattening - startTime);
     milliseconds time_limit(flag_overall_time_limit);
     if (passed > time_limit) {
-      s2out.evalStatus( getFltStatus() );
+      s2out.evalStatus(getFltStatus());
       return {SolverInstance::UNKNOWN, ""};
     }
-    int time_left = (time_limit-passed).count();
+    int time_left = (time_limit - passed).count();
     std::vector<std::string> timeoutArgs(2);
     timeoutArgs[0] = "--solver-time-limit";
     std::ostringstream oss;
     oss << time_left;
     timeoutArgs[1] = oss.str();
-    int i=0;
+    int i = 0;
     sf->processOption(si_opt, i, timeoutArgs);
   }
 
@@ -966,9 +954,10 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   if (getFltStatus() != SolverInstance::UNKNOWN) {
     if (ifMzn2Fzn()) {
       GCLock lock;
-      std::ofstream os(file.substr(0, file.size()-4) + std::string(".fzn"));
+      std::ofstream os(file.substr(0, file.size() - 4) + std::string(".fzn"));
       Printer p(os, 0, true);
-      auto c = new Call(Location().introduce(), constants().ids.bool_eq, {constants().lit_true, constants().lit_false});
+      auto c = new Call(Location().introduce(), constants().ids.bool_eq,
+                        {constants().lit_true, constants().lit_false});
       auto ci = new ConstraintI(Location().introduce(), c);
       p.print(ci);
       p.print(SolveI::sat(Location().introduce()));
@@ -976,7 +965,7 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
     return {getFltStatus(), printSolution(getFltStatus())};
   }
 
-  if (!si) {          // only then
+  if (!si) {  // only then
     // GCLock lock;                  // better locally, to enable cleanup after ProcessFlt()
     addSolverInterface();
   }
@@ -984,8 +973,10 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
   if (ifMzn2Fzn()) {
     assert(dynamic_cast<FZNSolverInstance*>(si));
     // Print flatzinc to file
-    static_cast<FZNSolverInstance*>(si)->printFlatZincToFile(file.substr(0, file.size()-4) + std::string(".fzn"));
-    static_cast<FZNSolverInstance*>(si)->printOutputToFile(file.substr(0, file.size()-4) + std::string(".ozn"));
+    static_cast<FZNSolverInstance*>(si)->printFlatZincToFile(file.substr(0, file.size() - 4) +
+                                                             std::string(".fzn"));
+    static_cast<FZNSolverInstance*>(si)->printOutputToFile(file.substr(0, file.size() - 4) +
+                                                           std::string(".ozn"));
 
     if (flag_statistics) {
       si->printStatistics();
@@ -1004,8 +995,8 @@ void MznSolver::addDefinitions() {
       assert(c->size() == 1);
       Val arg = c->arg(0);
       assert(arg.isVec());
-      for(int i = 0; i < arg.size(); ++i) {
-        Val real =  Val::follow_alias(Val(arg[i]));
+      for (int i = 0; i < arg.size(); ++i) {
+        Val real = Val::follow_alias(Val(arg[i]));
         if (real.isVar()) {
           output.insert(real.toVar()->timestamp());
         }
@@ -1044,7 +1035,7 @@ void MznSolver::addDefinitions() {
 void MznSolver::pushToSolver() {
   assert(interpreter->trail.len() > 0);
 
-  if(auto tsi = dynamic_cast<TrailableSolverInstance*>(si)) {
+  if (auto tsi = dynamic_cast<TrailableSolverInstance*>(si)) {
     assert(interpreter->trail.len() == tsi->states() + 1);
     tsi->restart();
     addDefinitions();
@@ -1052,7 +1043,6 @@ void MznSolver::pushToSolver() {
   } else {
     assert(false);
   }
-
 }
 
 void MznSolver::popFromSolver() {
@@ -1061,8 +1051,8 @@ void MznSolver::popFromSolver() {
     tsi->restart();
     tsi->popState();
 
-//    Definition* head = interpreter->_agg[0].def_stack;
-//    def_ptr = head->prev();
+    //    Definition* head = interpreter->_agg[0].def_stack;
+    //    def_ptr = head->prev();
   } else {
     assert(false);
     delete si;

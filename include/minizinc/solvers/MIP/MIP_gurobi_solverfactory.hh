@@ -13,12 +13,10 @@
 #define __MINIZINC_MIP_GUROBI_SOLVERFACTORY_HH__
 
 namespace MiniZinc {
-  class Gurobi_SolverFactoryInitialiser {
-  public:
-    Gurobi_SolverFactoryInitialiser(void);
-  };
-}
+class Gurobi_SolverFactoryInitialiser {
+public:
+  Gurobi_SolverFactoryInitialiser(void);
+};
+}  // namespace MiniZinc
 
 #endif
-
-

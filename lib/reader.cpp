@@ -1,4 +1,4 @@
- 
+
 /* -*- mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 
 /*
@@ -19,40 +19,35 @@
  * Need to get more flexible for multi-pass & multi-solving stuff  TODO
  */
 
-
-#ifdef _MSC_VER 
+#ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include <iostream>
-#include <fstream>
-#include <iomanip>
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
-#include <chrono>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <ratio>
 
 using namespace std;
 
-#include <minizinc/reader.hh>
-#include <minizinc/utils.hh>
-#include <minizinc/prettyprinter.hh>
 #include <minizinc/file_utils.hh>
 #include <minizinc/model.hh>
 #include <minizinc/parser.hh>
+#include <minizinc/prettyprinter.hh>
+#include <minizinc/reader.hh>
+#include <minizinc/utils.hh>
 
 namespace MiniZinc {
 
 MznReader::MznReader(std::ostream& os0, std::ostream& log0)
-  : solver_configs(log0), /*flt(os0,log0,solver_configs.mznlibDir()), */  os(os0), log(log0) {}
+    : solver_configs(log0), /*flt(os0,log0,solver_configs.mznlibDir()), */ os(os0), log(log0) {}
 
-MznReader::~MznReader()
-{
-  GC::trigger();
-}
+MznReader::~MznReader() { GC::trigger(); }
 
-void MznReader::printUsage()
-{
+void MznReader::printUsage() {
   os << "TODO: print usage" << std::endl;
   /*
   os << executable_name << ": ";
@@ -70,13 +65,13 @@ void MznReader::printUsage()
     os
       << "MiniZinc driver.\n"
       << "Usage: "  << executable_name
-      << "  [<options>] [-I <include path>] <model>.mzn [<data>.dzn ...] or just <flat>.fzn" << std::endl;
+      << "  [<options>] [-I <include path>] <model>.mzn [<data>.dzn ...] or just <flat>.fzn" <<
+  std::endl;
   }
   */
 }
 
-void MznReader::printHelp(const std::string& selectedSolver)
-{
+void MznReader::printHelp(const std::string& selectedSolver) {
   printUsage();
   os << "TODO: print help" << std::endl;
   /*
@@ -85,10 +80,13 @@ void MznReader::printHelp(const std::string& selectedSolver)
     << "  --help, -h\n    Print this help message." << std::endl
     << "  --version\n    Print version information." << std::endl
     << "  --solvers\n    Print list of available solvers." << std::endl
-    << "  --time-limit <ms>\n    Stop after <ms> milliseconds (includes compilation and solving)." << std::endl
-    << "  --solver <solver id>, --solver <solver config file>.msc\n    Select solver to use." << std::endl
+    << "  --time-limit <ms>\n    Stop after <ms> milliseconds (includes compilation and solving)."
+  << std::endl
+    << "  --solver <solver id>, --solver <solver config file>.msc\n    Select solver to use." <<
+  std::endl
     << "  --help <solver id>\n    Print help for a particular solver." << std::endl
-    << "  -v, -l, --verbose\n    Print progress/log statements. Note that some solvers may log to stdout." << std::endl
+    << "  -v, -l, --verbose\n    Print progress/log statements. Note that some solvers may log to
+  stdout." << std::endl
     << "  --verbose-compilation\n    Print progress/log statements for compilation." << std::endl
     << "  -s, --statistics\n    Print statistics." << std::endl
     << "  --compiler-statistics\n    Print statistics for compilation." << std::endl
@@ -111,12 +109,11 @@ void MznReader::printHelp(const std::string& selectedSolver)
     }
   } else {
     const SolverConfig& sc = solver_configs.config(selectedSolver);
-    string solverId = sc.executable().empty() ? sc.id() : (sc.supportsMzn() ?  string("org.minizinc.mzn-mzn") : string("org.minizinc.mzn-fzn"));
-    bool found = false;
-    for (auto it = getGlobalSolverRegistry()->getSolverFactories().rbegin();
-         it != getGlobalSolverRegistry()->getSolverFactories().rend(); ++it) {
-      if ((*it)->getId()==solverId) {
-        os << endl;
+    string solverId = sc.executable().empty() ? sc.id() : (sc.supportsMzn() ?
+  string("org.minizinc.mzn-mzn") : string("org.minizinc.mzn-fzn")); bool found = false; for (auto it
+  = getGlobalSolverRegistry()->getSolverFactories().rbegin(); it !=
+  getGlobalSolverRegistry()->getSolverFactories().rend(); ++it) { if ((*it)->getId()==solverId) { os
+  << endl;
         (*it)->printHelp(os);
         if (!sc.executable().empty() && !sc.extraFlags().empty()) {
           os << "Extra solver flags (use with ";
@@ -135,26 +132,25 @@ void MznReader::printHelp(const std::string& selectedSolver)
   */
 }
 
-bool MznReader::processOption(int& i, std::vector<std::string>& argv)
-{
-  CLOParser cop( i, argv );
+bool MznReader::processOption(int& i, std::vector<std::string>& argv) {
+  CLOParser cop(i, argv);
   string buffer;
-  
-  if ( cop.getOption( "-I --search-dir", &buffer ) ) {
-    includePaths.push_back(buffer+string("/"));
-  } else if ( cop.getOption( "--ignore-stdlib" ) ) {
+
+  if (cop.getOption("-I --search-dir", &buffer)) {
+    includePaths.push_back(buffer + string("/"));
+  } else if (cop.getOption("--ignore-stdlib")) {
     flag_ignoreStdlib = true;
-  /*
-  } else if ( cop.getOption( "--instance-check-only") ) {
-    flag_instance_check_only = true;
-  } else if ( cop.getOption( "-e --model-check-only") ) {
-    flag_model_check_only = true;
-  } else if ( cop.getOption( "--model-interface-only") ) {
-    flag_model_interface_only = true;
-  } else if ( cop.getOption( "--model-types-only") ) {
-    flag_model_types_only = true;
-    */
-  } else if ( cop.getOption( "-v --verbose") ) {
+    /*
+    } else if ( cop.getOption( "--instance-check-only") ) {
+      flag_instance_check_only = true;
+    } else if ( cop.getOption( "-e --model-check-only") ) {
+      flag_model_check_only = true;
+    } else if ( cop.getOption( "--model-interface-only") ) {
+      flag_model_interface_only = true;
+    } else if ( cop.getOption( "--model-types-only") ) {
+      flag_model_types_only = true;
+      */
+  } else if (cop.getOption("-v --verbose")) {
     flag_verbose = true;
     /*
   } else if ( cop.getOption( "--no-optimize --no-optimise") ) {
@@ -194,18 +190,17 @@ bool MznReader::processOption(int& i, std::vector<std::string>& argv)
   } else if ( cop.getOption( "- --input-from-stdin" ) ) {
       flag_stdinInput = true;
     */
-  } else if ( cop.getOption( "-d --data", &buffer ) ) {
-    if ( buffer.length()<=4 ||
-         buffer.substr(buffer.length()-4,string::npos) != ".dzn")
+  } else if (cop.getOption("-d --data", &buffer)) {
+    if (buffer.length() <= 4 || buffer.substr(buffer.length() - 4, string::npos) != ".dzn")
       return false;
     datafiles.push_back(buffer);
-  } else if ( cop.getOption( "--stdlib-dir", &std_lib_dir ) ) {
-  } else if ( cop.getOption( "-G --globals-dir --mzn-globals-dir", &globals_dir ) ) {
-  } else if ( cop.getOption( "-D --cmdline-data", &buffer)) {
-    datafiles.push_back("cmd:/"+buffer);
-  } else if ( cop.getOption( "--allow-unbounded-vars" ) ) {
+  } else if (cop.getOption("--stdlib-dir", &std_lib_dir)) {
+  } else if (cop.getOption("-G --globals-dir --mzn-globals-dir", &globals_dir)) {
+  } else if (cop.getOption("-D --cmdline-data", &buffer)) {
+    datafiles.push_back("cmd:/" + buffer);
+  } else if (cop.getOption("--allow-unbounded-vars")) {
     flag_allow_unbounded_vars = true;
-  } else if ( cop.getOption( "--only-range-domains" ) ) {
+  } else if (cop.getOption("--only-range-domains")) {
     flag_only_range_domains = true;
     /*
   } else if ( cop.getOption( "--no-MIPdomains" ) ) {   // internal
@@ -213,7 +208,7 @@ bool MznReader::processOption(int& i, std::vector<std::string>& argv)
   } else if ( cop.getOption( "--MIPDMaxIntvEE", &opt_MIPDmaxIntvEE ) ) {
   } else if ( cop.getOption( "--MIPDMaxDensEE", &opt_MIPDmaxDensEE ) ) {
     */
-  } else if ( cop.getOption( "-Werror" ) ) {
+  } else if (cop.getOption("-Werror")) {
     flag_werror = true;
     /*
   } else if (string(argv[i])=="--use-gecode") {
@@ -304,18 +299,20 @@ bool MznReader::processOption(int& i, std::vector<std::string>& argv)
     */
   } else {
     std::string input_file(argv[i]);
-    if (input_file.length()<=4) {
+    if (input_file.length() <= 4) {
       return false;
     }
     size_t last_dot = input_file.find_last_of('.');
     if (last_dot == string::npos) {
       return false;
     }
-    std::string extension = input_file.substr(last_dot,string::npos);
+    std::string extension = input_file.substr(last_dot, string::npos);
     /*
-    if ( extension == ".mzc" || (input_file.length()>=8 && input_file.substr(input_file.length()-8,string::npos) == ".mzc.mzn") ) {
+    if ( extension == ".mzc" || (input_file.length()>=8 &&
+    input_file.substr(input_file.length()-8,string::npos) == ".mzc.mzn") ) {
       flag_solution_check_model = input_file;
-    } else */ if (extension == ".mzn" || extension == ".fzn") {
+    } else */
+    if (extension == ".mzn" || extension == ".fzn") {
       /*
       if ( extension == ".fzn" ) {
         is_flatzinc = true;
@@ -328,39 +325,37 @@ bool MznReader::processOption(int& i, std::vector<std::string>& argv)
       datafiles.push_back(input_file);
     } else {
       // if ( fOutputByDefault )
-        log << "Error: cannot handle file extension " << extension << "." << std::endl;
+      log << "Error: cannot handle file extension " << extension << "." << std::endl;
       return false;
     }
   }
   return true;
 }
 
-
 MznReader::OptionStatus MznReader::processOptions(std::vector<std::string>& argv) {
   std_lib_dir = solver_configs.mznlibDir();
 
-  int i(0); 
+  int i(0);
   int argc(argv.size());
-  for(; i < argv.size(); ++i) {
-    if (argv[i]=="-h" || argv[i]=="--help") {
-      if (argc > i+1) {
-        printHelp(argv[i+1]);
+  for (; i < argv.size(); ++i) {
+    if (argv[i] == "-h" || argv[i] == "--help") {
+      if (argc > i + 1) {
+        printHelp(argv[i + 1]);
       } else {
         printHelp();
       }
       return OPTION_FINISH;
     }
-    if (argv[i]=="--version") {
+    if (argv[i] == "--version") {
       // flt.printVersion(cout);
       cout << "MiniZinc model reader. Version EXTREMELY-ALPHA." << endl;
       return OPTION_FINISH;
     }
-    if (argv[i]=="--solvers") {
+    if (argv[i] == "--solvers") {
       cout << "MiniZinc driver.\nAvailable solver configurations:\n";
       std::vector<std::string> solvers = solver_configs.solvers();
-      if (solvers.size()==0)
-        cout << "  none.\n";
-      for (unsigned int i=0; i<solvers.size(); i++) {
+      if (solvers.size() == 0) cout << "  none.\n";
+      for (unsigned int i = 0; i < solvers.size(); i++) {
         cout << "  " << solvers[i] << endl;
       }
       cout << "Search path for solver configurations:\n";
@@ -375,18 +370,21 @@ MznReader::OptionStatus MznReader::processOptions(std::vector<std::string>& argv
       return OPTION_FINISH;
     }
     */
-    if (argv[i]=="--config-dirs") {
+    if (argv[i] == "--config-dirs") {
       GCLock lock;
       cout << "{\n";
-      cout << "  \"globalConfigFile\" : \"" << Printer::escapeStringLit(FileUtils::global_config_file()) << "\",\n";
-      cout << "  \"userConfigFile\" : \"" << Printer::escapeStringLit(FileUtils::user_config_file()) << "\",\n";
-      cout << "  \"userSolverConfigDir\" : \"" << Printer::escapeStringLit(FileUtils::user_config_dir()) << "/solvers\",\n";
-      cout << "  \"mznStdlibDir\" : \"" << Printer::escapeStringLit(solver_configs.mznlibDir()) << "\"\n";
+      cout << "  \"globalConfigFile\" : \""
+           << Printer::escapeStringLit(FileUtils::global_config_file()) << "\",\n";
+      cout << "  \"userConfigFile\" : \"" << Printer::escapeStringLit(FileUtils::user_config_file())
+           << "\",\n";
+      cout << "  \"userSolverConfigDir\" : \""
+           << Printer::escapeStringLit(FileUtils::user_config_dir()) << "/solvers\",\n";
+      cout << "  \"mznStdlibDir\" : \"" << Printer::escapeStringLit(solver_configs.mznlibDir())
+           << "\"\n";
       cout << "}\n";
       return OPTION_FINISH;
     }
-    if(!processOption(i, argv))
-      return OPTION_ERROR;
+    if (!processOption(i, argv)) return OPTION_ERROR;
   }
   return OPTION_OK;
 }
@@ -394,17 +392,18 @@ MznReader::OptionStatus MznReader::processOptions(std::vector<std::string>& argv
 Model* MznReader::read(const std::string& modelString, const std::string& modelName) {
   Env env(NULL, os, log);
 
-  if (std_lib_dir=="") {
-    throw Error("Error: unknown minizinc standard library directory.\n"
-      "Specify --stdlib-dir on the command line or set the\n"
-      "MZN_STDLIB_DIR environment variable.");
+  if (std_lib_dir == "") {
+    throw Error(
+        "Error: unknown minizinc standard library directory.\n"
+        "Specify --stdlib-dir on the command line or set the\n"
+        "MZN_STDLIB_DIR environment variable.");
   }
   if (globals_dir != "") {
-    includePaths.insert(includePaths.begin(), std_lib_dir+"/"+globals_dir+"/");
+    includePaths.insert(includePaths.begin(), std_lib_dir + "/" + globals_dir + "/");
   }
-  includePaths.push_back(std_lib_dir+"/std/");
+  includePaths.push_back(std_lib_dir + "/std/");
 
-  for (unsigned int i=0; i<includePaths.size(); i++) {
+  for (unsigned int i = 0; i < includePaths.size(); i++) {
     if (!FileUtils::directory_exists(includePaths[i])) {
       throw Error("Cannot access include directory " + includePaths[i]);
     }
@@ -412,7 +411,8 @@ Model* MznReader::read(const std::string& modelString, const std::string& modelN
 
   Model* m(nullptr);
 
-  m = parse(env, filenames, datafiles, modelString, modelName.empty() ? "stdin" : modelName, includePaths, flag_ignoreStdlib, false, flag_verbose, log);
+  m = parse(env, filenames, datafiles, modelString, modelName.empty() ? "stdin" : modelName,
+            includePaths, flag_ignoreStdlib, false, flag_verbose, log);
   return m;
 }
 
@@ -853,4 +853,4 @@ SolverInstance::Status MznSolver::run(const std::vector<std::string>& args0, con
 }
 #endif
 
-};
+};  // namespace MiniZinc
