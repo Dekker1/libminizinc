@@ -102,8 +102,12 @@ predicate int_ne_imp(var int: x, int: y, var bool: b) =
 %% lin_expr, const
 predicate int_lin_le_imp(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
-  if length(c) == 1 then
-    int_le_imp(c[1]*x[1], d, b)
+  if length(c) == 1 /\ (d mod c[1] = 0)  then
+    if c[1] > 0 then
+      int_le_imp(x[1], d div c[1], b)
+    else
+      int_le_imp(d div c[1], x[1], b)
+    endif
   elseif (d = 0) /\ (length(c) = 2) /\ (abs(c[1]) = 1) /\ (c[1] = -1 * c[2]) then
     if (c[1] < 0) then
       int_le_imp(x[2], x[1], b)
@@ -130,7 +134,11 @@ predicate int_lin_lt_imp(array[int] of int: c, array[int] of var int: x,
 predicate int_lin_eq_imp(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
   if length(c) == 1 then
-    int_eq_imp(c[1]*x[1], d, b)
+    if d mod c[1] != 0 then
+      not b
+    else
+      int_eq_imp(x[1], d div c[1], b)
+    endif
   elseif (d = 0) /\ (length(c) = 2) /\ (abs(c[1]) = 1) /\ (c[1] = -1 * c[2]) then
     int_ne_imp(x[1], x[2], b)
   elseif fPostprocessDomains /\ fPostproDom_DIFF then
@@ -145,7 +153,11 @@ predicate int_lin_eq_imp(array[int] of int: c, array[int] of var int: x,
 predicate int_lin_ne_imp(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
   if length(c) == 1 then
-    int_ne_imp(c[1]*x[1], d, b)
+    if d mod c[1] != 0 then
+      true
+    else
+      int_ne_imp(x[1], d div c[1], b)
+    endif
   elseif (d = 0) /\ (length(c) = 2) /\ (abs(c[1]) = 1) /\ (c[1] = -1 * c[2]) then
       int_ne_imp(x[1], x[2], b)
   elseif fPostprocessDomains /\ fPostproDom_DIFF then

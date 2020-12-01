@@ -202,8 +202,12 @@ function var float: sum2float( array[int] of int: c, array[int] of var int: x ) 
 %% lin_expr, const
 predicate int_lin_le_reif(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
-  if length(c) == 1 then
-    int_le_reif(c[1]*x[1], d, b)
+  if length(c) == 1 /\ (d mod c[1] = 0) then % TODO: modulus not required when floating point calculations are possible
+    if c[1] > 0 then
+      int_le_reif(x[1], d div c[1], b)
+    else
+      int_le_reif(d div c[1], x[1], b)
+    endif
   elseif fPostprocessDomains /\ fPostproDom_DIFF then
     int_le_reif(sum(i in index_set(x))( c[i] * x[i] ), d, b)
   elseif fAvoidNI then
@@ -226,7 +230,11 @@ predicate int_lin_lt_reif(array[int] of int: c, array[int] of var int: x,
 predicate int_lin_eq_reif(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
     if length(c) == 1 then
-      int_eq_reif(c[1]*x[1], d, b)
+      if d mod c[1] != 0 then
+        not b
+      else
+        int_eq_reif(x[1], d div c[1], b)
+      endif
     elseif fPostprocessDomains /\ fPostproDom_DIFF then
       int_eq_reif(sum(i in index_set(x))( c[i]*x[i] ), d, b)
     elseif fAvoidNI /\ fAuxIntEqOLD00 then
@@ -238,7 +246,7 @@ predicate int_lin_eq_reif(array[int] of int: c, array[int] of var int: x,
 %% lin_expr, const
 predicate int_lin_ne(array[int] of int: c, array[int] of var int: x, int: d) =
   if length(c) == 1 then
-    int_ne(c[1]*x[1], d)
+    (d mod c[1] = 0) -> int_ne(x[1], d div c[1])
   elseif fPostprocessDomains /\ fPostproDom_DIFF then
     int_ne(sum(i in index_set(x))( c[i]*x[i] ),d)
   elseif fAvoidNI then
@@ -251,7 +259,11 @@ predicate int_lin_ne(array[int] of int: c, array[int] of var int: x, int: d) =
 predicate int_lin_ne_reif(array[int] of int: c, array[int] of var int: x,
                           int: d, var bool: b) =
     if length(c) == 1 then
-      int_ne_reif(c[1]*x[1], d, b)
+      if d mod c[1] != 0 then
+        b
+      else
+        int_ne_reif(x[1], d div c[1], b)
+      endif
     elseif fPostprocessDomains /\ fPostproDom_DIFF then
       int_ne_reif(sum(i in index_set(x))( c[i]*x[i] ), d, b)
     else
