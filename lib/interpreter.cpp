@@ -654,8 +654,8 @@ void Interpreter::run(void) {
         for (size_t i = 0; i < _stack.size() - 1; ++i) {
           DBG_CALLTRACE("--");
         }
-        DBG_CALLTRACE(" " << (_cse_stack.back().mode == BytecodeProc::ROOT ||
-                                      _cse_stack.back().mode == BytecodeProc::ROOT_NEG
+        DBG_CALLTRACE(" " << (_stack.back()._mode == BytecodeProc::ROOT ||
+                                      _stack.back()._mode == BytecodeProc::ROOT_NEG
                                   ? "POSTED"
                                   : (_cse_stack.back().stack_size == _agg.back().size() - 1
                                          ? _agg[_agg.size() - 1].back().toString(DBG_TRIM_OUTPUT)
