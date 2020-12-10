@@ -2485,6 +2485,15 @@ public:
           bounds.emplace_back(0, std::max(-b0.first, b0.second));
         }
       }
+    } else if (c.id() == "int_uniform") {
+      Bounds b0 = bounds.back();
+      bounds.pop_back();
+      Bounds b1 = bounds.back();
+      bounds.pop_back();
+      assert(b0.first == b0.second && b1.first == b1.second);
+      bounds.emplace_back(b0.first, b1.first);
+    } else if (c.id() == "int_sol" || c.id() == "int_lastval") {
+      // Take bounds of the argument
     } else if ((c.decl() != nullptr) && (c.decl()->ti()->domain() != nullptr) &&
                !c.decl()->ti()->domain()->isa<TIId>()) {
       for (int i = 0; i < c.argCount(); i++) {
@@ -2893,6 +2902,8 @@ public:
           bounds.emplace_back(0.0, std::max(-b0.first, b0.second));
         }
       }
+    } else if (c.id() == "float_sol" || c.id() == "float_lastval") {
+      // Take bounds of the argument
     } else if ((c.decl() != nullptr) && (c.decl()->ti()->domain() != nullptr) &&
                !c.decl()->ti()->domain()->isa<TIId>()) {
       for (int i = 0; i < c.argCount(); i++) {

@@ -1644,6 +1644,8 @@ Constants::Constants() {
   ann.mzn_was_undefined->type(Type::ann());
   ann.array_check_form = new Id(Location(), ASTString("array_check_form"), nullptr);
   ann.array_check_form->type(Type::ann());
+  ann.impure = ASTString("impure");
+  ann.on_restart = ASTString("on_restart");
 
   cli.cmdlineData_short_str = ASTString("-D");
   cli.cmdlineData_str = ASTString("--cmdline-data");
@@ -1865,6 +1867,8 @@ void Constants::mark(MINIZINC_GC_STAT_ARGS) {
   ann.mzn_deprecated.mark();
   Expression::mark(ann.mzn_was_undefined);
   Expression::mark(ann.array_check_form);
+  ann.impure.mark();
+  ann.on_restart.mark();
 
   cli.cmdlineData_short_str.mark();
   cli.cmdlineData_str.mark();

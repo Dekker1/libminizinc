@@ -89,6 +89,10 @@ annotation mzn_rhs_from_assignment;
 /** @group stdlib.annotations.general Marks a constraint as a recorded domain changing constraint (when mzn2fzn
   called with -g flag */
 annotation domain_change_constraint;
+/** @group annotations.general Declare function as impure, i.e. it is not required to have the
+  same result for the same input arguments. This annotation will prevent the function to be added
+  the the Common Subexpression Elimination map. */
+annotation impure;
 
 /***
  @groupdef stdlib.annotations.prop Propagation strength annotations

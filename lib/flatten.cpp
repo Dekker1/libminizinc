@@ -739,6 +739,10 @@ void EnvI::cseMapInsert(Expression* e, const EE& ee) {
   KeepAlive ka(e);
   _cseMap.insert(ka, WW(ee.r(), ee.b()));
   Call* c = e->dynamicCast<Call>();
+  if (c != nullptr && c->decl() != nullptr &&
+      get_annotation(c->decl()->ann(), constants().ann.impure) != nullptr) {
+    return;
+  }
   if ((c != nullptr) && c->id() == constants().ids.bool_not && c->arg(0)->isa<Id>() &&
       ee.r()->isa<Id>() && ee.b() == constants().boollit(true)) {
     Call* neg_c = new Call(Location().introduce(), c->id(), {ee.r()});
@@ -2961,7 +2965,24 @@ void flatten(Env& e, FlatteningOptions opt) {
           } break;
         }
         for (ExpressionSetIter it = si->ann().begin(); it != si->ann().end(); ++it) {
-          nsi->ann().add(flat_exp(env, Ctx(), *it, nullptr, constants().varTrue).r());
+          auto* c = (*it)->dynamicCast<Call>();
+          if (c != nullptr && c->id() == "on_restart") {
+            assert(c->argCount() == 1);
+            auto* pred = c->arg(0)->cast<StringLit>();
+            Call* nc = new Call(c->loc().introduce(), pred->v(), std::vector<Expression*>());
+            nc->type(Type::varbool());
+            FunctionI* decl = env.model->matchFn(env, nc, false);
+            if (decl == nullptr) {
+              std::ostringstream ss;
+              ss << "Unknown predicate `" << pred->v()
+                 << "' found while evaluating on_restart annotation";
+              throw FlatteningError(env, pred->loc(), ss.str());
+            }
+            nc->decl(decl);
+            env.flatAddItem(new ConstraintI(c->loc().introduce(), nc));
+          } else {
+            nsi->ann().add(flat_exp(env, Ctx(), *it, nullptr, constants().varTrue).r());
+          }
         }
         env.flatAddItem(nsi);
       }
