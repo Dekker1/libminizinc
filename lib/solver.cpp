@@ -989,10 +989,12 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
 void MznSolver::addDefinitions() {
   /// TODO: currently this will always add all variables and constraints
   Variable* v = interpreter->root();
+  bool has_output = false;
   std::set<int> output;
   for (Constraint* c : v->definitions()) {
     if (interpreter->_procs[c->pred()].name == "output_this") {
       assert(c->size() == 1);
+      has_output = true;
       Val arg = c->arg(0);
       assert(arg.isVec());
       for (int i = 0; i < arg.size(); ++i) {
@@ -1001,14 +1003,13 @@ void MznSolver::addDefinitions() {
           output.insert(real.toVar()->timestamp());
         }
       }
-
       break;
     }
   }
   for (Variable* v = interpreter->root()->next(); v != interpreter->root(); v = v->next()) {
     // Only add variables that are not aliased
     if (Val(v) == Val::follow_alias(Val(v))) {
-      si->addVariable(v, output.empty() || output.find(v->timestamp()) != output.end());
+      si->addVariable(v, !has_output || output.find(v->timestamp()) != output.end());
     }
   }
   auto fzn = dynamic_cast<FZNSolverInstance*>(si);
@@ -1026,7 +1027,7 @@ void MznSolver::addDefinitions() {
     }
     v = v->next();
   } while (v != interpreter->root());
-  if (output.empty() && fzn != nullptr) {
+  if (!has_output && fzn != nullptr) {
     fzn->outputDict(interpreter->root());
   }
   // TODO: Domain Changes

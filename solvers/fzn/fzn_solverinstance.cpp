@@ -503,7 +503,7 @@ void FZNSolverInstance::outputDict(Variable* start) {
   content.push_back(open);
   Variable* v = start->next();  // Skip root node
   bool first = true;
-  do {
+  while (v != start) {
     if (!first) {
       content.push_back(comma);
     }
@@ -516,7 +516,7 @@ void FZNSolverInstance::outputDict(Variable* start) {
                                {val_to_expr(Type::parint(), real)}));
     v = v->next();
     first = false;
-  } while (v != start);
+  };
   content.push_back(close);
   auto* al = new ArrayLit(Location().introduce(), content);
   env.output()->addItem(new OutputI(Location().introduce(), al));
