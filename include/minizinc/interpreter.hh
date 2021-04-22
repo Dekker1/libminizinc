@@ -37,62 +37,46 @@ class Interpreter;
 class RegisterFile {
 protected:
   std::vector<Val> _r;
+  size_t _size;
+  // Note: It seems that the standard library sometimes tries to be smart when
+  // using resize(n) when n < capacity. We therefore use _r.size() as capacity
+  // and _size as the actual size.
 
-  // TODO: This will resize the vector when assigning to a value higher than
-  // currently known. This should not happen for registers, but is currently
-  // required for globals
+  // FIXME: The RegisterFile is said to always have a given size, but it is
+  // currently unknown how many globals are used. This can trigger an assertion.
 public:
-  RegisterFile(int n = 0) { _r.reserve(n); }
+  RegisterFile(int n = 0) : _r(n), _size(n) {}
   const Val& operator[](int r) {
     assert(r < _r.size());
     return _r[r];
   }
-  size_t size() { return _r.size(); }
-  void resize(size_t n) { _r.resize(n, Val()); }
+  size_t size() { return _size; }
+  void resize(Interpreter* interpreter, size_t n) {
+    if (n >= _r.size()) {
+      _r.resize(_r.size() * 2);
+    }
+    if (n < _size) {
+      for (int i = n; i < _size; ++i) {
+        _r[i].rmRef(interpreter);
+      }
+    }
+    _size = n;
+  }
   std::vector<Val>::const_iterator cbegin() { return _r.cbegin(); }
   std::vector<Val>::const_iterator cend() { return _r.cend(); }
   std::vector<Val>::const_iterator iter_n(size_t n) { return this->cbegin() + n; }
   void assign(Interpreter* interpreter, int r, const Val& v) {
-    if (r >= _r.capacity()) {
-      _r.reserve(_r.capacity() * 1.5);
-    }
-    assert(r < _r.size());
-    if (r >= _r.size()) {
-      _r.resize(r + 1);
-      assert(_r.size() == r + 1);
-    }
+    assert(r < size());
     _r[r].assign(interpreter, v);
   }
 
   void cp(Interpreter* interpreter, int r1, int r2) {
-    assert(r1 < _r.size());
-    if (r2 >= _r.capacity()) {
-      _r.reserve(_r.capacity() * 1.5);
-    }
-    if (r2 >= _r.size()) _r.resize(r2 + 1);
+    assert(r1 < size());
     _r[r2].assign(interpreter, _r[r1]);
   }
   void cp(Interpreter* interpreter, int r1, RegisterFile& rf, int r2) {
-    assert(r1 < _r.size());
-    if (r2 >= _r.capacity()) {
-      _r.reserve(_r.capacity() * 1.5);
-    }
-    if (r2 >= rf._r.size()) rf._r.resize(r2 + 1);
+    assert(r1 < size());
     rf._r[r2].assign(interpreter, _r[r1]);
-  }
-  void mov(Interpreter* interpreter, int r1, RegisterFile& rf, int r2) {
-    assert(r1 < _r.size());
-    if (r2 >= rf._r.capacity()) {
-      rf._r.reserve(rf._r.capacity() * 1.5);
-    }
-    if (r2 >= rf._r.size()) rf._r.resize(r2 + 1);
-    rf._r[r2].assign(interpreter, std::move(_r[r1]));
-  }
-  void mov(Interpreter* interpreter, std::vector<Val>& args) {
-    for (auto& v : args) {
-      v.addRef(interpreter);
-    }
-    _r = std::move(args);
   }
   /// Destroy this register file
   void destroy(Interpreter* interpreter) {
@@ -105,7 +89,7 @@ public:
     _r.clear();
   }
   void dump(std::ostream& os) {
-    for (unsigned int i = 0; i < _r.size(); i++) {
+    for (unsigned int i = 0; i < size(); i++) {
       os << "  R" << i << " = " << _r[i].toString() << "\n";
     }
   }
@@ -427,7 +411,7 @@ public:
     _stack.reserve(32);
     _cse_stack.reserve(32);
     _stack.emplace_back(f);
-    _registers.resize(f.bs->maxRegister() + 1);
+    _registers.resize(this, f.bs->maxRegister() + 1);
 
     infinite_dom = Vec::a(this, newIdent(), {-Val::infinity(), Val::infinity()});
     infinite_dom->addRef(this);
@@ -488,14 +472,6 @@ public:
   const Val& reg(const BytecodeFrame& bf, int r) { return _registers[bf.reg_offset + r]; }
   void assign(const BytecodeFrame& bf, int r, const Val& v) {
     _registers.assign(this, bf.reg_offset + r, v);
-  }
-  void popFrame() {
-    const BytecodeFrame& frame = _stack.back();
-    for (int i = frame.reg_offset; i < _registers.size(); i++) {
-      _registers.assign(this, i, 0);
-    }
-    _registers.resize(frame.reg_offset);
-    _stack.pop_back();
   }
 
   Val infinite_domain() { return Val(infinite_dom); }

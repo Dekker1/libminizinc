@@ -678,7 +678,8 @@ void Interpreter::run(void) {
           _cse_stack.pop_back();
         }
 
-        popFrame();
+        _registers.resize(this, frame->reg_offset);
+        _stack.pop_back();
         frame = &_stack.back();
       } break;
       case BytecodeStream::CALL: {
@@ -702,7 +703,7 @@ void Interpreter::run(void) {
         _stack.emplace_back(_procs[code].mode[mode], code, mode);
         BytecodeFrame& newFrame = _stack.back();
         newFrame.reg_offset = _registers.size();
-        _registers.resize(newFrame.reg_offset + newFrame.bs->maxRegister() + 1);
+        _registers.resize(this, newFrame.reg_offset + newFrame.bs->maxRegister() + 1);
         for (int i = 0; i < n; i++) {
           int r = frame->bs->reg(frame->pc);
           assign(newFrame, i, reg(*frame, r));
@@ -715,7 +716,7 @@ void Interpreter::run(void) {
           for (size_t i = 0; i < n; i++) {
             assign(_stack.back(), i, 0);
           }
-          _registers.resize(_stack.back().reg_offset);
+          _registers.resize(this, _stack.back().reg_offset);
           _stack.pop_back();
         };
 
@@ -850,7 +851,8 @@ void Interpreter::run(void) {
               cse_insert(entry.proc, entry.getKey(), entry.mode, ret);
               _cse_stack.pop_back();
             }
-            popFrame();
+            _registers.resize(this, frame->reg_offset);
+            _stack.pop_back();
             frame = &_stack.back();
             break;
           }
@@ -968,10 +970,8 @@ void Interpreter::run(void) {
       case BytecodeStream::ABORT: {
         DBG_INTERPRETER("ABORT\n");
 
-        while (_stack.size() > 1) {
-          popFrame();
-          _stack.pop_back();
-        }
+        _registers.resize(this, 0);
+        _stack.clear();
         // TODO: Should the Aggregation stack be emptied?
 
         if (_status == ROGER) {
@@ -1259,10 +1259,8 @@ void Interpreter::dumpState() { dumpState(std::cerr); }
 
 Interpreter::~Interpreter(void) {
   globals.destroy(this);
-  while (_stack.size() > 1) {
-    popFrame();
-    _stack.pop_back();
-  }
+  _registers.resize(this, 0);
+  _stack.clear();
   for (auto& a : _agg) {
     a.destroyStack(this);
     //      a.destroyDef(this); /// TODO: replace with what? Just delete all constraints?
@@ -1367,7 +1365,7 @@ void Interpreter::call(int code, std::vector<Val>&& args) {
   _stack.emplace_back(_procs[code].mode[mode], code, mode);
   BytecodeFrame& newFrame = _stack.back();
   newFrame.reg_offset = _registers.size();
-  _registers.resize(newFrame.reg_offset + newFrame.bs->maxRegister() + 1);
+  _registers.resize(this, newFrame.reg_offset + newFrame.bs->maxRegister() + 1);
   for (int i = 0; i < args.size(); i++) {
     assign(newFrame, i, args[i]);
   }
