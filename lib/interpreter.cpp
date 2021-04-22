@@ -111,76 +111,76 @@ void Interpreter::run(void) {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("ADDI R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                 << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        frame->reg.assign(this, r3, frame->reg[r1] + frame->reg[r2]);
-        DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("ADDI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                 << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assign(*frame, r3, reg(*frame, r1) + reg(*frame, r2));
+        DBG_INTERPRETER(" R" << r3 << "(" << reg(*frame, r3).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::SUBI: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("SUBI R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                 << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        frame->reg.assign(this, r3, frame->reg[r1] - frame->reg[r2]);
-        DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("SUBI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                 << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assign(*frame, r3, reg(*frame, r1) - reg(*frame, r2));
+        DBG_INTERPRETER(" R" << r3 << "(" << reg(*frame, r3).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::MULI: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("MULI R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                 << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        frame->reg.assign(this, r3, frame->reg[r1] * frame->reg[r2]);
-        DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("MULI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                 << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assign(*frame, r3, reg(*frame, r1) * reg(*frame, r2));
+        DBG_INTERPRETER(" R" << r3 << "(" << reg(*frame, r3).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::DIVI: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        if (frame->reg[r2] == 0)
+        if (reg(*frame, r2) == 0)
           frame->pc = frame->bs->size() - 1;
         else
-          frame->reg.assign(this, r3, frame->reg[r1] / frame->reg[r2]);
-        frame->reg.assign(this, r3, frame->reg[r1] / frame->reg[r2]);
-        DBG_INTERPRETER("DIVI R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                 << " R" << r2 << "(" << frame->reg[r2].toString() << ")"
-                                 << " " << r3 << "(" << frame->reg[r3].toString() << ")"
+          assign(*frame, r3, reg(*frame, r1) / reg(*frame, r2));
+        assign(*frame, r3, reg(*frame, r1) / reg(*frame, r2));
+        DBG_INTERPRETER("DIVI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                 << " R" << r2 << "(" << reg(*frame, r2).toString() << ")"
+                                 << " " << r3 << "(" << reg(*frame, r3).toString() << ")"
                                  << "\n");
       } break;
       case BytecodeStream::MODI: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        if (frame->reg[r2] == 0)
+        if (reg(*frame, r2) == 0)
           frame->pc = frame->bs->size() - 1;
         else
-          frame->reg.assign(this, r3, frame->reg[r1] % frame->reg[r2]);
-        DBG_INTERPRETER("MODI R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                 << " R" << r2 << "(" << frame->reg[r2].toString() << ")"
-                                 << " " << r3 << "(" << frame->reg[r3].toString() << ")"
+          assign(*frame, r3, reg(*frame, r1) % reg(*frame, r2));
+        DBG_INTERPRETER("MODI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                 << " R" << r2 << "(" << reg(*frame, r2).toString() << ")"
+                                 << " " << r3 << "(" << reg(*frame, r3).toString() << ")"
                                  << "\n");
       } break;
       case BytecodeStream::INCI: {
         int r1 = frame->bs->reg(frame->pc);
-        frame->reg.assign(this, r1, frame->reg[r1] + 1);
-        DBG_INTERPRETER("INCI R" << r1 << "(" << frame->reg[r1].toString() << ")"
+        assign(*frame, r1, reg(*frame, r1) + 1);
+        DBG_INTERPRETER("INCI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
                                  << "\n");
       } break;
       case BytecodeStream::DECI: {
         int r1 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("DECI R" << r1 << "(" << frame->reg[r1].toString() << ")"
+        DBG_INTERPRETER("DECI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
                                  << "\n");
-        frame->reg.assign(this, r1, frame->reg[r1] - 1);
+        assign(*frame, r1, reg(*frame, r1) - 1);
       } break;
       case BytecodeStream::IMMI: {
         Val i = frame->bs->intval(frame->pc);
         int r1 = frame->bs->reg(frame->pc);
-        frame->reg.assign(this, r1, i);
-        DBG_INTERPRETER("IMMI " << i.toString() << " R" << r1 << "(" << frame->reg[r1].toString()
+        assign(*frame, r1, i);
+        DBG_INTERPRETER("IMMI " << i.toString() << " R" << r1 << "(" << reg(*frame, r1).toString()
                                 << ")"
                                 << "\n");
       } break;
@@ -189,7 +189,7 @@ void Interpreter::run(void) {
         int r2 = frame->bs->reg(frame->pc);
         assert(r1 <= r2);
         for (int i = r1; i <= r2; i++) {
-          frame->reg.assign(this, i, 0);
+          assign(*frame, i, 0);
         }
         DBG_INTERPRETER("CLEAR "
                         << " R" << r1 << " " << r2 << "\n");
@@ -197,25 +197,25 @@ void Interpreter::run(void) {
       case BytecodeStream::LOAD_GLOBAL: {
         int i = frame->bs->reg(frame->pc);
         int r1 = frame->bs->reg(frame->pc);
-        globals.cp(this, i, frame->reg, r1);
+        globals.cp(this, i, _registers, frame->reg_offset + r1);
         DBG_INTERPRETER("LOAD_GLOBAL " << i << " R" << r1 << "("
-                                       << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")"
+                                       << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")"
                                        << "\n");
       } break;
       case BytecodeStream::STORE_GLOBAL: {
         int r1 = frame->bs->reg(frame->pc);
         int i = frame->bs->reg(frame->pc);
-        frame->reg.cp(this, r1, globals, i);
-        DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT)
+        _registers.cp(this, frame->reg_offset + r1, globals, i);
+        DBG_INTERPRETER("STORE_GLOBAL R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT)
                                          << ")"
                                          << " " << i << "\n");
       } break;
       case BytecodeStream::MOV: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("MOV R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-        frame->reg.cp(this, r1, r2);
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")"
+        DBG_INTERPRETER("MOV R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")");
+        _registers.cp(this, frame->reg_offset + r1, frame->reg_offset + r2);
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
       case BytecodeStream::JMP: {
@@ -226,18 +226,18 @@ void Interpreter::run(void) {
       case BytecodeStream::JMPIF: {
         int r0 = frame->bs->reg(frame->pc);
         int i = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("JMPIF R" << r0 << "(" << frame->reg[r0].toString() << ")"
+        DBG_INTERPRETER("JMPIF R" << r0 << "(" << reg(*frame, r0).toString() << ")"
                                   << " " << i << "\n");
-        if (frame->reg[r0] != 0) {
+        if (reg(*frame, r0) != 0) {
           frame->pc = i;
         }
       } break;
       case BytecodeStream::JMPIFNOT: {
         int r0 = frame->bs->reg(frame->pc);
         int i = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("JMPIFNOT R" << r0 << "(" << frame->reg[r0].toString() << ")"
+        DBG_INTERPRETER("JMPIFNOT R" << r0 << "(" << reg(*frame, r0).toString() << ")"
                                      << " " << i << "\n");
-        if (frame->reg[r0] == 0) {
+        if (reg(*frame, r0) == 0) {
           frame->pc = i;
         }
       } break;
@@ -245,123 +245,124 @@ void Interpreter::run(void) {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("EQI R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        assert(frame->reg[r1] == frame->reg[r2] ||
-               frame->reg[r1].toInt() != frame->reg[r2].toInt());
-        frame->reg.assign(this, r3, frame->reg[r1] == frame->reg[r2]);
-        DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("EQI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assert(reg(*frame, r1) == reg(*frame, r2) ||
+               reg(*frame, r1).toInt() != reg(*frame, r2).toInt());
+        assign(*frame, r3, reg(*frame, r1) == reg(*frame, r2));
+        DBG_INTERPRETER(" R" << r3 << "(" << reg(*frame, r3).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::LTI: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("LTI R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        frame->reg.assign(this, r3, (frame->reg[r1] < frame->reg[r2]));
-        DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("LTI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assign(*frame, r3, (reg(*frame, r1) < reg(*frame, r2)));
+        DBG_INTERPRETER(" R" << r3 << "(" << reg(*frame, r3).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::LEI: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("LEI R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        frame->reg.assign(this, r3, (frame->reg[r1] <= frame->reg[r2]));
-        DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("LEI R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assign(*frame, r3, (reg(*frame, r1) <= reg(*frame, r2)));
+        DBG_INTERPRETER(" R" << r3 << "(" << reg(*frame, r3).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::AND: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("AND R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        frame->reg.assign(this, r3, (frame->reg[r1] != 0 && frame->reg[r2] != 0));
-        DBG_INTERPRETER(" " << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("AND R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assign(*frame, r3, (reg(*frame, r1) != 0 && reg(*frame, r2) != 0));
+        DBG_INTERPRETER(" " << r3 << "(" << reg(*frame, r3).toString() << ")"
                             << "\n");
       } break;
       case BytecodeStream::OR: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("OR R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                               << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        frame->reg.assign(this, r3, (frame->reg[r1] != 0 || frame->reg[r2] != 0));
-        DBG_INTERPRETER(" " << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("OR R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                               << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assign(*frame, r3, (reg(*frame, r1) != 0 || reg(*frame, r2) != 0));
+        DBG_INTERPRETER(" " << r3 << "(" << reg(*frame, r3).toString() << ")"
                             << "\n");
       } break;
       case BytecodeStream::NOT: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         DBG_INTERPRETER("NOT R" << r1);
-        frame->reg.assign(this, r2, (frame->reg[r1] == 0));
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString() << ")"
+        assign(*frame, r2, (reg(*frame, r1) == 0));
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::XOR: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("XOR R" << r1 << "(" << frame->reg[r1].toString() << ")"
-                                << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        frame->reg.assign(this, r3, ((frame->reg[r1] != 0) ^ (frame->reg[r2] != 0)));
-        DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString() << ")"
+        DBG_INTERPRETER("XOR R" << r1 << "(" << reg(*frame, r1).toString() << ")"
+                                << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assign(*frame, r3, ((reg(*frame, r1) != 0) ^ (reg(*frame, r2) != 0)));
+        DBG_INTERPRETER(" R" << r3 << "(" << reg(*frame, r3).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::ISPAR: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("ISPAR R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-        Val v = Val::follow_alias(frame->reg[r1], this);
+        DBG_INTERPRETER("ISPAR R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")");
+        Val v = Val::follow_alias(reg(*frame, r1), this);
         if (v.isInt()) {
-          frame->reg.assign(this, r2, 1);
+          assign(*frame, r2, 1);
         } else if (v.isVar()) {
-          frame->reg.assign(this, r2, 0);
+          assign(*frame, r2, 0);
         } else {
           assert(v.isVec());
           Val ret = v.toVec()->isPar();
-          frame->reg.assign(this, r2, ret);
+          assign(*frame, r2, ret);
         }
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString() << ")"
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::ISEMPTY: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("ISEMPTY R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT)
+        DBG_INTERPRETER("ISEMPTY R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT)
                                     << ")");
-        assert(frame->reg[r1].isInt() || frame->reg[r1].isVec());
-        frame->reg.assign(this, r2, (frame->reg[r1].isInt() || frame->reg[r1].size() == 0));
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString() << ")"
+        assert(reg(*frame, r1).isInt() || reg(*frame, r1).isVec());
+        assign(*frame, r2, (reg(*frame, r1).isInt() || reg(*frame, r1).size() == 0));
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::LENGTH: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("LENGTH R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-        assert(frame->reg[r1].isVec());
-        if (!frame->reg[r1].toVec()->hasIndexSet()) {
-          frame->reg.assign(this, r2, frame->reg[r1].size());
+        DBG_INTERPRETER("LENGTH R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT)
+                                   << ")");
+        assert(reg(*frame, r1).isVec());
+        if (!reg(*frame, r1).toVec()->hasIndexSet()) {
+          assign(*frame, r2, reg(*frame, r1).size());
         } else {
-          frame->reg.assign(this, r2, frame->reg[r1][0].size());
+          assign(*frame, r2, reg(*frame, r1)[0].size());
         }
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString() << ")"
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString() << ")"
                              << "\n");
       } break;
       case BytecodeStream::GET_VEC: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("GET_VEC R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")"
-                                    << " R" << r2 << "(" << frame->reg[r2].toString() << ")");
-        assert(frame->reg[r1].isVec());
-        assert(frame->reg[r2].isInt());
-        assert(frame->reg[r2] > 0 && frame->reg[r2] <= frame->reg[r1].size());
-        Val v = Val::follow_alias(frame->reg[r1][frame->reg[r2].toInt() - 1], this);
-        frame->reg.assign(this, r3, v);
+        DBG_INTERPRETER("GET_VEC R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")"
+                                    << " R" << r2 << "(" << reg(*frame, r2).toString() << ")");
+        assert(reg(*frame, r1).isVec());
+        assert(reg(*frame, r2).isInt());
+        assert(reg(*frame, r2) > 0 && reg(*frame, r2) <= reg(*frame, r1).size());
+        Val v = Val::follow_alias(reg(*frame, r1)[reg(*frame, r2).toInt() - 1], this);
+        assign(*frame, r3, v);
         DBG_INTERPRETER(" R" << r3 << "(" << v.toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
@@ -369,24 +370,24 @@ void Interpreter::run(void) {
         Val n = frame->bs->intval(frame->pc);
         int r1 = frame->bs->reg(frame->pc);
         DBG_INTERPRETER("GET_ARRAY " << n.toString() << " R" << r1 << "("
-                                     << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
+                                     << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")");
         std::vector<Val> idx(n.toInt());
         for (int i = 0; i < n; i++) {
           int rr = frame->bs->reg(frame->pc);
-          DBG_INTERPRETER(" R" << rr << "(" << frame->reg[rr].toString(DBG_TRIM_OUTPUT) << ")");
-          idx[i] = frame->reg[rr];
+          DBG_INTERPRETER(" R" << rr << "(" << reg(*frame, rr).toString(DBG_TRIM_OUTPUT) << ")");
+          idx[i] = reg(*frame, rr);
         }
         int r_res = frame->bs->reg(frame->pc);
         int r_cond = frame->bs->reg(frame->pc);
-        assert(frame->reg[r1].isVec());
+        assert(reg(*frame, r1).isVec());
 
         bool success = true;
         Val v = Val(-2000);
 
-        Val content = frame->reg[r1].toVec()->raw_data();
-        if (frame->reg[r1].toVec()->hasIndexSet()) {
+        Val content = reg(*frame, r1).toVec()->raw_data();
+        if (reg(*frame, r1).toVec()->hasIndexSet()) {
           // N-Dimensional array representation
-          Val index_set = frame->reg[r1].toVec()->index_set();
+          Val index_set = reg(*frame, r1).toVec()->index_set();
           std::vector<std::pair<Val, Val>> dimensions;
           Val realdim = 1;
           for (int i = 0; i < index_set.size(); i += 2) {
@@ -413,14 +414,14 @@ void Interpreter::run(void) {
           }
         } else {
           // Compact array representation (index set 1..n)
-          success = 1 <= idx[0] && idx[0] <= frame->reg[r1].size();
+          success = 1 <= idx[0] && idx[0] <= reg(*frame, r1).size();
           if (success) {
             v = Val::follow_alias(content[idx[0].toInt() - 1], this);
           }
         }
 
-        frame->reg.assign(this, r_res, v);
-        frame->reg.assign(this, r_cond, Val(success));
+        assign(*frame, r_res, v);
+        assign(*frame, r_cond, Val(success));
         DBG_INTERPRETER(" R" << r_res << "(" << v.toString(DBG_TRIM_OUTPUT) << ") R" << r_cond
                              << "(" << Val(success).toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
@@ -428,44 +429,44 @@ void Interpreter::run(void) {
       case BytecodeStream::LB: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("LB R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-        Val v = Val::follow_alias(frame->reg[r1], this);
-        frame->reg.assign(this, r2, v.lb());
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")"
+        DBG_INTERPRETER("LB R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")");
+        Val v = Val::follow_alias(reg(*frame, r1), this);
+        assign(*frame, r2, v.lb());
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
       case BytecodeStream::UB: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("UB R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-        Val v = Val::follow_alias(frame->reg[r1], this);
-        frame->reg.assign(this, r2, v.ub());
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")"
+        DBG_INTERPRETER("UB R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")");
+        Val v = Val::follow_alias(reg(*frame, r1), this);
+        assign(*frame, r2, v.ub());
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
       case BytecodeStream::DOM: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("DOM R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
-        Val v = Val::follow_alias(frame->reg[r1], this);
+        DBG_INTERPRETER("DOM R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")");
+        Val v = Val::follow_alias(reg(*frame, r1), this);
         if (v.isInt()) {
-          frame->reg.assign(this, r2, Val(Vec::a(this, newIdent(), {v, v})));
+          assign(*frame, r2, Val(Vec::a(this, newIdent(), {v, v})));
         } else if (v.isVar()) {
           Variable* var = v.toVar();
-          frame->reg.assign(this, r2, Val(var->domain()));
+          assign(*frame, r2, Val(var->domain()));
         } else {
           throw Error("Error: dom on invalid type");
         }
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")"
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
       case BytecodeStream::MAKE_SET: {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("MAKE_SET R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT)
+        DBG_INTERPRETER("MAKE_SET R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT)
                                      << ")");
-        Val v1 = Val::follow_alias(frame->reg[r1], this);
-        assert(frame->reg[r1].isVec());
+        Val v1 = Val::follow_alias(reg(*frame, r1), this);
+        assert(reg(*frame, r1).isVec());
         Vec* a1 = v1.toVec();
 
         std::vector<Val> result;
@@ -488,7 +489,7 @@ void Interpreter::run(void) {
           result.emplace_back(u);
         }
         Val result_val(Vec::a(this, newIdent(), result));
-        frame->reg.assign(this, r2, result_val);
+        assign(*frame, r2, result_val);
         DBG_INTERPRETER(" R" << r2 << "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
@@ -496,11 +497,11 @@ void Interpreter::run(void) {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("INTERSECTION R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT)
+        DBG_INTERPRETER("INTERSECTION R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT)
                                          << ") R" << r2 << "("
-                                         << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
-        Val v1 = Val::follow_alias(frame->reg[r1], this);
-        Val v2 = Val::follow_alias(frame->reg[r2], this);
+                                         << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")");
+        Val v1 = Val::follow_alias(reg(*frame, r1), this);
+        Val v2 = Val::follow_alias(reg(*frame, r2), this);
         Val result_val;
         if (v1.isInt()) {
           result_val = v2;
@@ -519,7 +520,7 @@ void Interpreter::run(void) {
           }
           result_val = Val(Vec::a(this, newIdent(), result));
         }
-        frame->reg.assign(this, r3, result_val);
+        assign(*frame, r3, result_val);
         DBG_INTERPRETER(" R" << r3 << "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
@@ -527,10 +528,10 @@ void Interpreter::run(void) {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("UNION R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ") R"
-                                  << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
-        Val v1 = Val::follow_alias(frame->reg[r1], this);
-        Val v2 = Val::follow_alias(frame->reg[r2], this);
+        DBG_INTERPRETER("UNION R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ") R"
+                                  << r2 << "(" << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")");
+        Val v1 = Val::follow_alias(reg(*frame, r1), this);
+        Val v2 = Val::follow_alias(reg(*frame, r2), this);
         Val result_val;
         if (v1.isInt()) {
           result_val = v1;
@@ -549,7 +550,7 @@ void Interpreter::run(void) {
           }
           result_val = Val(Vec::a(this, newIdent(), result));
         }
-        frame->reg.assign(this, r3, result_val);
+        assign(*frame, r3, result_val);
         DBG_INTERPRETER(" R" << r3 << "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
@@ -557,10 +558,10 @@ void Interpreter::run(void) {
         int r1 = frame->bs->reg(frame->pc);
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("DIFF R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ") R"
-                                 << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
-        Val v1 = Val::follow_alias(frame->reg[r1], this);
-        Val v2 = Val::follow_alias(frame->reg[r2], this);
+        DBG_INTERPRETER("DIFF R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ") R"
+                                 << r2 << "(" << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")");
+        Val v1 = Val::follow_alias(reg(*frame, r1), this);
+        Val v2 = Val::follow_alias(reg(*frame, r2), this);
         Val result_val;
         Vec* s1 = v1.toVec();
         Vec* s2 = v2.toVec();
@@ -573,7 +574,7 @@ void Interpreter::run(void) {
           result.emplace_back(diff_r.max());
         }
         result_val = Val(Vec::a(this, newIdent(), result));
-        frame->reg.assign(this, r3, result_val);
+        assign(*frame, r3, result_val);
         DBG_INTERPRETER(" R" << r3 << "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
@@ -582,10 +583,10 @@ void Interpreter::run(void) {
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
         DBG_INTERPRETER("INTERSECT_DOMAIN R"
-                        << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ") R" << r2
-                        << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
-        Val v1 = Val::follow_alias(frame->reg[r1], this);
-        Val v2 = frame->reg[r2];
+                        << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ") R" << r2
+                        << "(" << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")");
+        Val v1 = Val::follow_alias(reg(*frame, r1), this);
+        Val v2 = reg(*frame, r2);
         assert(v2.isVec());
 
         Val result_val;
@@ -625,7 +626,7 @@ void Interpreter::run(void) {
             break;
           }
         }
-        frame->reg.assign(this, r3, result_val);
+        assign(*frame, r3, result_val);
         DBG_INTERPRETER(" R" << r3 << "(" << result_val.toString(DBG_TRIM_OUTPUT) << ")"
                              << "\n");
       } break;
@@ -677,8 +678,7 @@ void Interpreter::run(void) {
           _cse_stack.pop_back();
         }
 
-        _stack.back().destroy(this);
-        _stack.pop_back();
+        popFrame();
         frame = &_stack.back();
       } break;
       case BytecodeStream::CALL: {
@@ -701,7 +701,7 @@ void Interpreter::run(void) {
         std::vector<Val> args(n);
         for (int i = 0; i < n; i++) {
           int r = frame->bs->reg(frame->pc);
-          args[i] = frame->reg[r];
+          args[i] = reg(*frame, r);
           DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
           DBG_CALLTRACE(args[i].toString(DBG_TRIM_OUTPUT) << ((i + 1 < n) ? ", " : ")\n"));
         }
@@ -769,10 +769,14 @@ void Interpreter::run(void) {
           }
         } else {
           _stack.emplace_back(_procs[code].mode[mode], code, mode);
-          BytecodeFrame* newFrame = &_stack.back();
-          newFrame->cse_frame_depth = cse_depth;
-          newFrame->reg.mov(this, args);
-          frame = newFrame;
+          BytecodeFrame& newFrame = _stack.back();
+          newFrame.reg_offset = _registers.size();
+          _registers.resize(newFrame.reg_offset + newFrame.bs->maxRegister() + 1);
+          for (int i = 0; i < args.size(); i++) {
+            assign(newFrame, i, args[i]);
+          }
+          newFrame.cse_frame_depth = cse_depth;
+          frame = &newFrame;
         }
       } break;
       case BytecodeStream::BUILTIN: {
@@ -787,7 +791,7 @@ void Interpreter::run(void) {
           int r = frame->bs->reg(frame->pc);
           // Do not increase the reference count. Vector is destroyed after
           // BUILTIN execution without cleanup
-          args[i] = frame->reg[r];
+          args[i] = reg(*frame, r);
           DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
         }
         DBG_INTERPRETER("\n");
@@ -812,7 +816,7 @@ void Interpreter::run(void) {
         int nargs = _procs[code].nargs;
         std::vector<Val> args(nargs);
         for (int i = 0; i < args.size(); ++i) {
-          args[i] = frame->reg[i];
+          args[i] = reg(*frame, i);
           DBG_CALLTRACE(args[i].toString(DBG_TRIM_OUTPUT)
                         << ((i + 1 < args.size()) ? ", " : ")\n"));
         }
@@ -843,8 +847,7 @@ void Interpreter::run(void) {
               cse_insert(entry.proc, entry.getKey(), entry.mode, ret);
               _cse_stack.pop_back();
             }
-            _stack.back().destroy(this);
-            _stack.pop_back();
+            popFrame();
             frame = &_stack.back();
             break;
           }
@@ -886,16 +889,16 @@ void Interpreter::run(void) {
         int r1 = frame->bs->reg(frame->pc);
         int l = frame->bs->reg(frame->pc);
         DBG_INTERPRETER("ITER_ARRAY " << r1 << " " << l << "\n");
-        assert(frame->reg[r1].isVec());
-        if (frame->reg[r1].toVec()->hasIndexSet()) {
-          assert(frame->reg[r1].size() == 2);
-          assert(frame->reg[r1][0].isVec());
+        assert(reg(*frame, r1).isVec());
+        if (reg(*frame, r1).toVec()->hasIndexSet()) {
+          assert(reg(*frame, r1).size() == 2);
+          assert(reg(*frame, r1)[0].isVec());
 
-          Vec* v(frame->reg[r1][0].toVec());
+          Vec* v(reg(*frame, r1)[0].toVec());
           _loops.push_back(LoopState(v, l));
         } else {
           // Compact array representation (index set 1..n)
-          Vec* v(frame->reg[r1].toVec());
+          Vec* v(reg(*frame, r1).toVec());
           _loops.push_back(LoopState(v, l));
         }
       } break;
@@ -903,8 +906,8 @@ void Interpreter::run(void) {
         int r1 = frame->bs->reg(frame->pc);
         int l = frame->bs->reg(frame->pc);
         DBG_INTERPRETER("ITER_VEC " << r1 << " " << l << "\n");
-        assert(frame->reg[r1].isVec());
-        Vec* v(frame->reg[r1].toVec());
+        assert(reg(*frame, r1).isVec());
+        Vec* v(reg(*frame, r1).toVec());
         _loops.push_back(LoopState(v, l));
       } break;
       case BytecodeStream::ITER_RANGE: {
@@ -912,8 +915,8 @@ void Interpreter::run(void) {
         int r2 = frame->bs->reg(frame->pc);
         int lbl = frame->bs->reg(frame->pc);
 
-        Val lb = Val::follow_alias(frame->reg[r1], this);
-        Val ub = Val::follow_alias(frame->reg[r2], this);
+        Val lb = Val::follow_alias(reg(*frame, r1), this);
+        Val ub = Val::follow_alias(reg(*frame, r2), this);
         assert(lb.isInt());
         assert(ub.isInt());
         DBG_INTERPRETER("ITER_RANGE " << r1 << " " << r2 << " " << lbl << "\n");
@@ -934,7 +937,7 @@ void Interpreter::run(void) {
             v = Val::follow_alias(*ptr);
             outer.pos += sizeof(Val*);
           }
-          frame->reg.assign(this, r1, v);
+          assign(*frame, r1, v);
           DBG_INTERPRETER(" R" << r1 << "(" << v.toString(DBG_TRIM_OUTPUT) << ")"
                                << "\n");
         } else {
@@ -954,7 +957,7 @@ void Interpreter::run(void) {
       case BytecodeStream::TRACE: {
         int r = frame->bs->reg(frame->pc);
         DBG_INTERPRETER("TRACE " << r << "\n");
-        std::cerr << frame->reg[r].toString() << "\n";
+        std::cerr << reg(*frame, r).toString() << "\n";
         //            std::cerr << frame->reg.e(r)->cast<StringLit>();
         //            std::cerr << *frame->reg.e(r) << "\n";
       } break;
@@ -962,7 +965,7 @@ void Interpreter::run(void) {
         DBG_INTERPRETER("ABORT\n");
 
         while (_stack.size() > 1) {
-          _stack.back().destroy(this);
+          popFrame();
           _stack.pop_back();
         }
         // TODO: Should the Aggregation stack be emptied?
@@ -974,22 +977,22 @@ void Interpreter::run(void) {
       }
       case BytecodeStream::PUSH: {
         int r = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("PUSH R" << r << " (" << frame->reg[r].toString(DBG_TRIM_OUTPUT) << ")\n");
+        DBG_INTERPRETER("PUSH R" << r << " (" << reg(*frame, r).toString(DBG_TRIM_OUTPUT) << ")\n");
         assert(!_agg.empty());
-        _agg.back().push(this, frame->reg[r]);
+        _agg.back().push(this, reg(*frame, r));
       } break;
       case BytecodeStream::POP: {
         int r = frame->bs->reg(frame->pc);
         assert(!_agg.empty());
         assert(!_agg.back().empty());
-        frame->reg.assign(this, r, _agg.back().back());
-        DBG_INTERPRETER("POP R" << r << " (" << frame->reg[r].toString(DBG_TRIM_OUTPUT) << ")\n");
+        assign(*frame, r, _agg.back().back());
+        DBG_INTERPRETER("POP R" << r << " (" << reg(*frame, r).toString(DBG_TRIM_OUTPUT) << ")\n");
         _agg.back().pop(this);
       } break;
       case BytecodeStream::POST: {
         int r = frame->bs->reg(frame->pc);
-        DBG_INTERPRETER("POST R" << r << " (" << frame->reg[r].toString(DBG_TRIM_OUTPUT) << ")\n");
-        Val v1 = Val::follow_alias(frame->reg[r], this);
+        DBG_INTERPRETER("POST R" << r << " (" << reg(*frame, r).toString(DBG_TRIM_OUTPUT) << ")\n");
+        Val v1 = Val::follow_alias(reg(*frame, r), this);
         if (v1.isInt()) {
           if (v1 == 0) {
             _status = INCONSISTENT;
@@ -1028,27 +1031,27 @@ void Interpreter::run(void) {
         int r0 = frame->bs->reg(frame->pc);
         int r1 = frame->bs->reg(frame->pc);
         Val i = frame->bs->intval(frame->pc);
-        DBG_INTERPRETER(" R" << r0 << "(" << frame->reg[r0].toString(DBG_TRIM_OUTPUT) << ")");
-        DBG_INTERPRETER(" R" << r1 << "(" << frame->reg[r1].toString(DBG_TRIM_OUTPUT) << ")");
+        DBG_INTERPRETER(" R" << r0 << "(" << reg(*frame, r0).toString(DBG_TRIM_OUTPUT) << ")");
+        DBG_INTERPRETER(" R" << r1 << "(" << reg(*frame, r1).toString(DBG_TRIM_OUTPUT) << ")");
         DBG_INTERPRETER(" " << i.toString());
         int r2 = frame->bs->reg(frame->pc);
         int r3 = frame->bs->reg(frame->pc);
         int r4 = frame->bs->reg(frame->pc);
 
         std::vector<Val> coeffs({1, -1});
-        std::vector<Val> vars({frame->reg[r0], frame->reg[r1]});
+        std::vector<Val> vars({reg(*frame, r0), reg(*frame, r1)});
         Val d = i;
 
         simplify_linexp(coeffs, vars, d);
 
         Val coeffs_v = Val(Vec::a(this, newIdent(), coeffs));
         Val vars_v = Val(Vec::a(this, newIdent(), vars));
-        frame->reg.assign(this, r2, coeffs_v);
-        frame->reg.assign(this, r3, vars_v);
-        frame->reg.assign(this, r4, -d);
-        DBG_INTERPRETER(" R" << r2 << "(" << frame->reg[r2].toString(DBG_TRIM_OUTPUT) << ")");
-        DBG_INTERPRETER(" R" << r3 << "(" << frame->reg[r3].toString(DBG_TRIM_OUTPUT) << ")\n");
-        DBG_INTERPRETER(" R" << r4 << "(" << frame->reg[r4].toString(DBG_TRIM_OUTPUT) << ")\n");
+        assign(*frame, r2, coeffs_v);
+        assign(*frame, r3, vars_v);
+        assign(*frame, r4, -d);
+        DBG_INTERPRETER(" R" << r2 << "(" << reg(*frame, r2).toString(DBG_TRIM_OUTPUT) << ")");
+        DBG_INTERPRETER(" R" << r3 << "(" << reg(*frame, r3).toString(DBG_TRIM_OUTPUT) << ")\n");
+        DBG_INTERPRETER(" R" << r4 << "(" << reg(*frame, r4).toString(DBG_TRIM_OUTPUT) << ")\n");
       } break;
       case BytecodeStream::CLOSE_AGGREGATION: {
         DBG_INTERPRETER("CLOSE_AGGREGATION ("
@@ -1209,7 +1212,7 @@ void Interpreter::run(void) {
               }
               _agg.back().constraints.clear();
               // INVARIANT: The result of aggregation is not referenced by any of the registers.
-              assert(std::none_of(frame->reg.cbegin(), frame->reg.cend(),
+              assert(std::none_of(_registers.cbegin() + frame->reg_offset, _registers.cend(),
                                   [result](Val v) { return v.contains(Val(result)); }));
               result->binding(this, false);
             }
@@ -1242,12 +1245,19 @@ void Interpreter::dumpState(std::ostream& os) {
   //      Definition::dump(_agg.back().def_stack, _procs, os, true);
   //    }
 }
+void Interpreter::dumpState(const BytecodeFrame& bf, std::ostream& os) {
+  for (unsigned int i = bf.reg_offset; i < bf.reg_offset + bf.bs->maxRegister(); i++) {
+    os << "  R" << i << " = " << _registers[i].toString() << "\n";
+  }
+}
+
 void Interpreter::dumpState() { dumpState(std::cerr); }
 
 Interpreter::~Interpreter(void) {
   globals.destroy(this);
-  for (auto& f : _stack) {
-    f.destroy(this);
+  while (_stack.size() > 1) {
+    popFrame();
+    _stack.pop_back();
   }
   for (auto& a : _agg) {
     a.destroyStack(this);
@@ -1353,8 +1363,12 @@ void Interpreter::call(int code, std::vector<Val>&& args) {
   _stack.back().pc--;
   _stack.emplace_back(_procs[code].mode[mode], code, mode);
   BytecodeFrame& newFrame = _stack.back();
+  newFrame.reg_offset = _registers.size();
+  _registers.resize(newFrame.reg_offset + newFrame.bs->maxRegister() + 1);
+  for (int i = 0; i < args.size(); i++) {
+    assign(newFrame, i, args[i]);
+  }
   newFrame.cse_frame_depth = cse_depth;
-  newFrame.reg.mov(this, args);
 
   return run();
 }

@@ -38,15 +38,24 @@ class RegisterFile {
 protected:
   std::vector<Val> _r;
 
+  // TODO: This will resize the vector when assigning to a value higher than
+  // currently known. This should not happen for registers, but is currently
+  // required for globals
 public:
-  RegisterFile(int n = 0) : _r(n) {}
+  RegisterFile(int n = 0) { _r.reserve(n); }
   const Val& operator[](int r) {
     assert(r < _r.size());
     return _r[r];
   }
+  size_t size() { return _r.size(); }
+  void resize(size_t n) { _r.resize(n, Val()); }
   std::vector<Val>::const_iterator cbegin() { return _r.cbegin(); }
   std::vector<Val>::const_iterator cend() { return _r.cend(); }
   void assign(Interpreter* interpreter, int r, const Val& v) {
+    if (r >= _r.capacity()) {
+      _r.reserve(_r.capacity() * 1.5);
+    }
+    assert(r < _r.size());
     if (r >= _r.size()) {
       _r.resize(r + 1);
       assert(_r.size() == r + 1);
@@ -56,16 +65,25 @@ public:
 
   void cp(Interpreter* interpreter, int r1, int r2) {
     assert(r1 < _r.size());
+    if (r2 >= _r.capacity()) {
+      _r.reserve(_r.capacity() * 1.5);
+    }
     if (r2 >= _r.size()) _r.resize(r2 + 1);
     _r[r2].assign(interpreter, _r[r1]);
   }
   void cp(Interpreter* interpreter, int r1, RegisterFile& rf, int r2) {
     assert(r1 < _r.size());
+    if (r2 >= _r.capacity()) {
+      _r.reserve(_r.capacity() * 1.5);
+    }
     if (r2 >= rf._r.size()) rf._r.resize(r2 + 1);
     rf._r[r2].assign(interpreter, _r[r1]);
   }
   void mov(Interpreter* interpreter, int r1, RegisterFile& rf, int r2) {
     assert(r1 < _r.size());
+    if (r2 >= rf._r.capacity()) {
+      rf._r.reserve(rf._r.capacity() * 1.5);
+    }
     if (r2 >= rf._r.size()) rf._r.resize(r2 + 1);
     rf._r[r2].assign(interpreter, std::move(_r[r1]));
   }
@@ -253,7 +271,7 @@ public:
 
 class BytecodeFrame {
 public:
-  RegisterFile reg;
+  size_t reg_offset;
   const BytecodeStream* bs;
   int pc;
   int _pred;
@@ -261,11 +279,7 @@ public:
   size_t cse_frame_depth = 0;
 
   BytecodeFrame(const BytecodeStream& bs0, int pred, char mode)
-      : reg(bs0.maxRegister()), bs(&bs0), pc(0), _pred(pred), _mode(mode) {}
-
-  void destroyRegisters(Interpreter* interpreter) { reg.destroy(interpreter); }
-  void destroy(Interpreter* interpreter) { destroyRegisters(interpreter); }
-  void dump(std::ostream& os) { reg.dump(os); }
+      : reg_offset(0), bs(&bs0), pc(0), _pred(pred), _mode(mode) {}
 };
 
 class Trail {
@@ -381,6 +395,7 @@ public:
   static const std::string status_to_string[MAX_STATUS + 1];
 
 protected:
+  RegisterFile _registers;
   std::vector<BytecodeFrame> _stack;
   std::vector<CSEFrame> _cse_stack;
   std::vector<AggregationCtx> _agg;
@@ -407,10 +422,11 @@ public:
   std::unordered_map<int, Val> solutions;
 
   Interpreter(std::vector<BytecodeProc>& procs, const BytecodeFrame& f)
-      : _procs(procs), _identCount(0), cse(procs.size()) {
+      : _registers(4096), _procs(procs), _identCount(0), cse(procs.size()) {
     _stack.reserve(32);
     _cse_stack.reserve(32);
     _stack.emplace_back(f);
+    _registers.resize(f.bs->maxRegister() + 1);
 
     infinite_dom = Vec::a(this, newIdent(), {-Val::infinity(), Val::infinity()});
     infinite_dom->addRef(this);
@@ -461,11 +477,25 @@ public:
   int newIdent(void) { return _identCount++; }
   int currentIdent(void) const { return _identCount; }
   void dumpState(std::ostream& os);
+  void dumpState(const BytecodeFrame& bf, std::ostream& os);
   void dumpState();
   void schedule(Constraint* d, const Variable::SubscriptionEvent& ev);
   void deschedule(Constraint* d);
   void propagate(void);
   void call(int code, std::vector<Val>&& args);
+
+  const Val& reg(const BytecodeFrame& bf, int r) { return _registers[bf.reg_offset + r]; }
+  void assign(const BytecodeFrame& bf, int r, const Val& v) {
+    _registers.assign(this, bf.reg_offset + r, v);
+  }
+  void popFrame() {
+    const BytecodeFrame& frame = _stack.back();
+    for (int i = frame.reg_offset; i < _registers.size(); i++) {
+      _registers.assign(this, i, 0);
+    }
+    _registers.resize(frame.reg_offset);
+    _stack.pop_back();
+  }
 
   Val infinite_domain() { return Val(infinite_dom); }
   Val boolean_domain() { return Val(boolean_dom); }
