@@ -51,6 +51,7 @@ public:
   void resize(size_t n) { _r.resize(n, Val()); }
   std::vector<Val>::const_iterator cbegin() { return _r.cbegin(); }
   std::vector<Val>::const_iterator cend() { return _r.cend(); }
+  std::vector<Val>::const_iterator iter_n(size_t n) { return this->cbegin() + n; }
   void assign(Interpreter* interpreter, int r, const Val& v) {
     if (r >= _r.capacity()) {
       _r.reserve(_r.capacity() * 1.5);
@@ -170,28 +171,28 @@ public:
   } key;
   size_t stack_size;
 
-  CSEFrame(Interpreter& interpreter, int _proc, BytecodeProc::Mode _mode,
-           const std::vector<Val>& args, size_t _stack_size)
-      : proc(_proc), mode(_mode), stack_size(_stack_size), nargs(args.size()) {
+  CSEFrame(Interpreter& interpreter, int _proc, BytecodeProc::Mode _mode, arg_iter arg_start,
+           arg_iter arg_end, size_t _nargs, size_t _stack_size)
+      : proc(_proc), mode(_mode), stack_size(_stack_size), nargs(_nargs) {
     switch (nargs) {
       case 1: {
-        key.f1 = FixedKey<1>(interpreter, args);
+        key.f1 = FixedKey<1>(interpreter, arg_start, arg_end);
         break;
       }
       case 2: {
-        key.f2 = FixedKey<2>(interpreter, args);
+        key.f2 = FixedKey<2>(interpreter, arg_start, arg_end);
         break;
       }
       case 3: {
-        key.f3 = FixedKey<3>(interpreter, args);
+        key.f3 = FixedKey<3>(interpreter, arg_start, arg_end);
         break;
       }
       case 4: {
-        key.f4 = FixedKey<4>(interpreter, args);
+        key.f4 = FixedKey<4>(interpreter, arg_start, arg_end);
         break;
       }
       default: {
-        key.vk = VariadicKey(interpreter, args);
+        key.vk = VariadicKey(interpreter, arg_start, arg_end, nargs);
         break;
       }
     }

@@ -16,19 +16,20 @@
 
 namespace MiniZinc {
 
-void Constraint::destroy(Interpreter* interpreter) {
-  for (unsigned int i = 0; i < _size; i++) {
-    _args[i].rmRef(interpreter);
-  }
-  if (delayed()) {
-    interpreter->remove_delayed(this);
-  }
-}
-
-void Constraint::reconstruct(Interpreter* interpreter) {
-  for (unsigned int i = 0; i < _size; i++) {
+Constraint::Constraint(Interpreter* interpreter, int pred, char mode, arg_iter arg_start,
+                       arg_iter arg_end, size_t nargs, Val ann, Val defines, bool delayed)
+    : _pred(pred), _mode(mode), _size(nargs), _scheduled(0), _delayed(delayed) {
+  _ann.addRef(interpreter);
+  int i = 0;
+  for (auto it = arg_start; it != arg_end; ++it) {
+    new (&_args[i]) Val(*it);
     _args[i].addRef(interpreter);
+    if (!_delayed && pred > PrimitiveMap::MAX_LIN) {
+      _args[i].finalizeLin(interpreter);
+    }
+    ++i;
   }
+  assert(i == nargs);
 }
 
 Constraint::Constraint(Interpreter* interpreter, int pred, char mode, const std::vector<Val>& args,
@@ -45,6 +46,22 @@ Constraint::Constraint(Interpreter* interpreter, int pred, char mode, const std:
 }
 
 std::pair<Constraint*, bool> Constraint::a(Interpreter* interpreter, int pred, char mode,
+                                           arg_iter arg_start, arg_iter arg_end, size_t nargs,
+                                           Val defines, Val ann, bool delayed) {
+  Constraint* c = static_cast<Constraint*>(
+      ::malloc(sizeof(Constraint) + sizeof(Val) * (std::max(0, static_cast<int>(nargs) - 1))));
+  c = new (c) Constraint(interpreter, pred, mode, arg_start, arg_end, nargs, ann, defines, delayed);
+  PropStatus ps = interpreter->subscribe(c);
+  if (ps == PS_ENTAILED || ps == PS_FAILED) {
+    interpreter->unsubscribe(c);
+    c->destroy(interpreter);
+    ::free(c);
+    return {nullptr, ps == PS_ENTAILED};
+  }
+  return {c, true};
+}
+
+std::pair<Constraint*, bool> Constraint::a(Interpreter* interpreter, int pred, char mode,
                                            const std::vector<Val>& args, Val defines, Val ann,
                                            bool delayed) {
   Constraint* c = static_cast<Constraint*>(::malloc(
@@ -58,6 +75,21 @@ std::pair<Constraint*, bool> Constraint::a(Interpreter* interpreter, int pred, c
     return {nullptr, ps == PS_ENTAILED};
   }
   return {c, true};
+}
+
+void Constraint::destroy(Interpreter* interpreter) {
+  for (unsigned int i = 0; i < _size; i++) {
+    _args[i].rmRef(interpreter);
+  }
+  if (delayed()) {
+    interpreter->remove_delayed(this);
+  }
+}
+
+void Constraint::reconstruct(Interpreter* interpreter) {
+  for (unsigned int i = 0; i < _size; i++) {
+    _args[i].addRef(interpreter);
+  }
 }
 
 }  // namespace MiniZinc

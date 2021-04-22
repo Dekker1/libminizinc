@@ -697,21 +697,34 @@ void Interpreter::run(void) {
           DBG_CALLTRACE("--");
         }
         DBG_CALLTRACE("> " << _procs[code].name << "(");
+
         // TODO: See if args is created when not necessary
-        std::vector<Val> args(n);
+        _stack.emplace_back(_procs[code].mode[mode], code, mode);
+        BytecodeFrame& newFrame = _stack.back();
+        newFrame.reg_offset = _registers.size();
+        _registers.resize(newFrame.reg_offset + newFrame.bs->maxRegister() + 1);
         for (int i = 0; i < n; i++) {
           int r = frame->bs->reg(frame->pc);
-          args[i] = reg(*frame, r);
+          assign(newFrame, i, reg(*frame, r));
           DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
           DBG_CALLTRACE(args[i].toString(DBG_TRIM_OUTPUT) << ((i + 1 < n) ? ", " : ")\n"));
         }
-
         DBG_INTERPRETER("\n");
+
+        auto no_call = [&] {
+          for (size_t i = 0; i < n; i++) {
+            assign(_stack.back(), i, 0);
+          }
+          _registers.resize(_stack.back().reg_offset);
+          _stack.pop_back();
+        };
 
         // Lookup for Common Subexpression Elimination
         size_t cse_depth = _cse_stack.size();
         if (cse) {
-          _cse_stack.emplace_back(*this, code, mode, args, _agg.back().size());
+          _cse_stack.emplace_back(*this, code, mode, _registers.iter_n(newFrame.reg_offset),
+                                  _registers.iter_n(newFrame.reg_offset + n), n,
+                                  _agg.back().size());
           // Lookup item in CSE
           auto lookup = cse_find(code, _cse_stack.back().getKey(), mode);
           if (lookup.second) {
@@ -727,6 +740,7 @@ void Interpreter::run(void) {
             } else {
               pushAgg(lookup.first, -1);
             }
+            no_call();
             break;
           }
         }
@@ -740,12 +754,13 @@ void Interpreter::run(void) {
           // this is a FlatZinc builtin
           if (code == PrimitiveMap::MK_INTVAR) {
             assert(mode == BytecodeProc::ROOT);
-            Variable* v = Variable::a(this, args[0], true, newIdent());
+            Variable* v = Variable::a(this, _registers[newFrame.reg_offset], true, newIdent());
             pushAgg(Val(v), -1);
             DBG_CALLTRACE(" " << Val(v).toString() << "\n");
           } else {
             assert(mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG);
-            auto c = Constraint::a(this, code, mode, args);
+            auto c = Constraint::a(this, code, mode, _registers.iter_n(newFrame.reg_offset),
+                                   _registers.iter_n(newFrame.reg_offset + n), n);
             if (!(c.first || c.second)) {
               // Propagation failed
               _status = INCONSISTENT;
@@ -767,15 +782,8 @@ void Interpreter::run(void) {
             //              delayed_calls.push_back(c);
             //            }
           }
+          no_call();
         } else {
-          _stack.emplace_back(_procs[code].mode[mode], code, mode);
-          BytecodeFrame& newFrame = _stack.back();
-          newFrame.reg_offset = _registers.size();
-          _registers.resize(newFrame.reg_offset + newFrame.bs->maxRegister() + 1);
-          for (int i = 0; i < args.size(); i++) {
-            assign(newFrame, i, args[i]);
-          }
-          newFrame.cse_frame_depth = cse_depth;
           frame = &newFrame;
         }
       } break;
@@ -812,17 +820,12 @@ void Interpreter::run(void) {
           DBG_CALLTRACE("==");
         }
         DBG_CALLTRACE("> " << _procs[code].name << "(");
-        // TODO: Avoid creating the args vector
         int nargs = _procs[code].nargs;
-        std::vector<Val> args(nargs);
-        for (int i = 0; i < args.size(); ++i) {
-          args[i] = reg(*frame, i);
-          DBG_CALLTRACE(args[i].toString(DBG_TRIM_OUTPUT)
-                        << ((i + 1 < args.size()) ? ", " : ")\n"));
-        }
 
         if (cse) {
-          _cse_stack.emplace_back(*this, code, mode, args, _agg.back().size());
+          _cse_stack.emplace_back(*this, code, mode, _registers.iter_n(frame->reg_offset),
+                                  _registers.iter_n(frame->reg_offset + nargs), nargs,
+                                  _agg.back().size());
           bool found;
           Val ret;
           std::tie(ret, found) = cse_find(code, _cse_stack.back().getKey(), mode);
@@ -856,7 +859,8 @@ void Interpreter::run(void) {
           DBG_INTERPRETER((_procs[code].delay ? "--- Delayed CALL\n" : "--- FZN Builtin\n"));
           // this is a FlatZinc builtin
           assert(mode == BytecodeProc::ROOT || mode == BytecodeProc::ROOT_NEG);
-          auto c = Constraint::a(this, code, mode, args);
+          auto c = Constraint::a(this, code, mode, _registers.iter_n(frame->reg_offset),
+                                 _registers.iter_n(frame->reg_offset + nargs), nargs);
           if (!(c.first || c.second)) {
             // Propagation failed
             _status = INCONSISTENT;
@@ -1305,7 +1309,6 @@ void Interpreter::call(int code, std::vector<Val>&& args) {
   DBG_INTERPRETER("Interpreter::call " << BytecodeProc::mode_to_string[mode] << " " << code << "("
                                        << _procs[code].name << ")" << (cse ? "" : " no_cse"));
   DBG_CALLTRACE("\n> " << _procs[code].name << "(");
-  // TODO: See if args is created when not necessary
   assert(n == args.size());
   for (int i = 0; i < n; i++) {
     DBG_INTERPRETER(" R" << i << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
@@ -1316,7 +1319,7 @@ void Interpreter::call(int code, std::vector<Val>&& args) {
   // Lookup for Common Subexpression Elimination
   size_t cse_depth = _cse_stack.size();
   if (cse) {
-    _cse_stack.emplace_back(*this, code, mode, args, _agg.back().size());
+    _cse_stack.emplace_back(*this, code, mode, args.cbegin(), args.cend(), n, _agg.back().size());
     // Lookup item in CSE
     auto lookup = cse_find(code, _cse_stack.back().getKey(), mode);
     if (lookup.second) {

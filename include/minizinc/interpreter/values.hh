@@ -19,6 +19,8 @@
 
 namespace MiniZinc {
 
+typedef std::vector<Val>::const_iterator arg_iter;
+
 void simplify_linexp(std::vector<Val>& coeffs, std::vector<Val>& vars, Val& d);
 std::tuple<std::vector<Val>, std::vector<Val>, Val> simplify_linexp(Val v);
 

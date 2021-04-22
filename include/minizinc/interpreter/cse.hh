@@ -98,6 +98,18 @@ private:
 
 public:
   VariadicKey() : _size(0), _vals(nullptr) {}
+
+  VariadicKey(Interpreter& interpreter, arg_iter start, arg_iter end, size_t nargs) {
+    _size = nargs;
+    _vals = (WeakVal*)malloc(_size * sizeof(WeakVal));
+
+    int i = 0;
+    for (arg_iter it = start; it != end; ++it) {
+      _vals[i++] = WeakVal(interpreter, *it);
+    }
+    assert(i == _size);
+    _hash = compute_hash(*this);
+  }
   VariadicKey(Interpreter& interpreter, const std::vector<Val>& vals) {
     _size = vals.size();
     _vals = (WeakVal*)malloc(_size * sizeof(WeakVal));
@@ -148,6 +160,14 @@ private:
 
 public:
   FixedKey() {}
+  FixedKey(Interpreter& interpreter, arg_iter start, arg_iter end) {
+    int i = 0;
+    for (arg_iter it = start; it != end; ++it) {
+      _vals[i++] = WeakVal(interpreter, *it);
+    }
+    assert(i == nargs);
+    _hash = compute_hash(*this);
+  }
   FixedKey(Interpreter& interpreter, const std::vector<Val>& vals) {
     assert(vals.size() == nargs);
     for (int i = 0; i < nargs; ++i) {

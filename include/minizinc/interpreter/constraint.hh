@@ -32,6 +32,8 @@ protected:
   unsigned int _delayed : 1;
   Val _defines;
   Val _args[1];
+  Constraint(Interpreter* interpreter, int pred, char mode, arg_iter arg_start, arg_iter arg_end,
+             size_t nargs, Val ann, Val defines, bool delayed);
   Constraint(Interpreter* interpreter, int pred, char mode, const std::vector<Val>& args, Val ann,
              Val defines, bool delayed);
 
@@ -39,6 +41,9 @@ public:
   static std::pair<Constraint*, bool> a(Interpreter* interpreter, int pred, char mode,
                                         const std::vector<Val>& args, Val ann = 0, Val defines = 1,
                                         bool delayed = false);
+  static std::pair<Constraint*, bool> a(Interpreter* interpreter, int pred, char mode,
+                                        arg_iter arg_start, arg_iter arg_end, size_t nargs,
+                                        Val ann = 0, Val defines = 1, bool delayed = false);
   void destroy(Interpreter* interpreter);
   void reconstruct(Interpreter* interpreter);
 
