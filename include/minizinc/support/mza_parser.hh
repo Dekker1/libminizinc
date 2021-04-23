@@ -41,6 +41,6 @@ typedef struct MZAContext MZAContext;
 using namespace MiniZinc;
 
 // Parsing function
-std::vector<BytecodeProc> parse_mza(const std::string& assembly_str);
+std::pair<int, std::vector<BytecodeProc>> parse_mza(const std::string& assembly_str);
 
 #endif  //__MINIZINC_MZA_PARSER_HH__

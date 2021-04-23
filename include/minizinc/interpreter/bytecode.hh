@@ -151,8 +151,10 @@ public:
   }
 
   void addInstr(const Instr& i) { _bs.push_back(i); }
-  void addReg(int iv) {
-    _max_reg = std::max(_max_reg, iv);
+  void addReg(int iv, bool global = false) {
+    if (!global) {
+      _max_reg = std::max(_max_reg, iv);
+    }
     const char* cp = reinterpret_cast<const char*>(&iv);
     for (int i = 0; i < sizeof(int); i++) {
       _bs.push_back(cp[i]);

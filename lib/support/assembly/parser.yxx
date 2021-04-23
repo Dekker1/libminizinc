@@ -41,6 +41,7 @@ struct ProcPatch {
 typedef struct MZAContext {
   std::vector<BytecodeProc>& procs;
   std::unordered_map<std::string, int>& proc_map;
+  int& max_glob;
   std::vector<ProcPatch> to_patch;
   BytecodeStream proc_body;
   std::unordered_map<std::string, int> labels;
@@ -358,7 +359,8 @@ instruction:
     {
       $$ = ctx.proc_body.size();
       ctx.proc_body.addInstr($1);
-      ctx.proc_body.addReg($2);
+      ctx.proc_body.addReg($2, true);
+      ctx.max_glob = std::max(ctx.max_glob, $2);
       ctx.proc_body.addReg($3);
     }
   | MZA_STORE_GLOBAL MZA_REG MZA_INT
@@ -366,7 +368,8 @@ instruction:
       $$ = ctx.proc_body.size();
       ctx.proc_body.addInstr($1);
       ctx.proc_body.addReg($2);
-      ctx.proc_body.addReg($3);
+      ctx.proc_body.addReg($3, true);
+      ctx.max_glob = std::max(ctx.max_glob, $3);
     }
   | MZA_GET_ARRAY MZA_INT registers
     {
@@ -460,9 +463,10 @@ void yyerror(YYLTYPE* location, MZAContext& ctx, const char* s) {
   throw Error(oss.str());
 }
 
-std::vector<BytecodeProc> parse_mza(const std::string& assembly_str) {
+std::pair<int, std::vector<BytecodeProc>> parse_mza(const std::string& assembly_str) {
   std::vector<BytecodeProc> procs;
   std::unordered_map<std::string, int> proc_map;
+  int max_glob;
   // Initialise first slots with
   for (PrimitiveMap::Primitive* p : primitiveMap()) {
     BytecodeProc bcp;
@@ -473,7 +477,7 @@ std::vector<BytecodeProc> parse_mza(const std::string& assembly_str) {
     proc_map.emplace(bcp.name, p->ident());
   }
   mza_yy_scan_string(assembly_str.c_str());
-  MZAContext ctx = MZAContext{procs, proc_map};
+  MZAContext ctx = MZAContext{procs, proc_map, max_glob};
   int err = yyparse(ctx);
   if (err != 0) {
     throw std::runtime_error("Cannot parse MiniZinc assembly: " + std::to_string(err));
@@ -492,5 +496,5 @@ std::vector<BytecodeProc> parse_mza(const std::string& assembly_str) {
       procs[code].mode[mode].patchAddress(patch.first, proc_map[patch.second.first]);
     }
   }
-  return procs;
+  return {max_glob, procs};
 }

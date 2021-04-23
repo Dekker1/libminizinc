@@ -406,8 +406,12 @@ public:
   Trail trail;
   std::unordered_map<int, Val> solutions;
 
-  Interpreter(std::vector<BytecodeProc>& procs, const BytecodeFrame& f)
-      : _registers(4096), _procs(procs), _identCount(0), cse(procs.size()) {
+  Interpreter(std::vector<BytecodeProc>& procs, const BytecodeFrame& f, int max_globals = -1)
+      : _registers(4096),
+        _procs(procs),
+        _identCount(0),
+        cse(procs.size()),
+        globals(max_globals + 1) {
     _stack.reserve(32);
     _cse_stack.reserve(32);
     _stack.emplace_back(f);

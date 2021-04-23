@@ -723,7 +723,8 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
     std::swap(mzn_defs, assembly);
   }
   // Parse assembly file
-  bs = parse_mza(assembly);
+  int max_glob;
+  std::tie(max_glob, bs) = parse_mza(assembly);
   if (verbose) {
     std::cerr << "Disassembled code:\n";
     int b_count = 0;
@@ -744,7 +745,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   }
   // The main procedure is the last one in the file
   BytecodeFrame frame(bs.back().mode[BytecodeProc::ROOT], bs.size() - 1, BytecodeProc::ROOT);
-  interpreter = new Interpreter(bs, frame);
+  interpreter = new Interpreter(bs, frame, max_glob);
   // Parse and add data
   if (!mzn_defs.empty()) {
     GCLock lock;
