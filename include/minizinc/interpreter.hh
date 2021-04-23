@@ -58,6 +58,7 @@ public:
     if (n < _size) {
       for (int i = n; i < _size; ++i) {
         _r[i].rmRef(interpreter);
+        _r[i] = 0;
       }
     }
     _size = n;
