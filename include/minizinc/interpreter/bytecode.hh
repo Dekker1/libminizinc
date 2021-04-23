@@ -180,6 +180,8 @@ public:
     _bs.push_back(0);
   }
 
+  void setNArgs(int n) { _max_reg = std::max(_max_reg, n); }
+
   std::string toString(const std::vector<BytecodeProc>& procs = std::vector<BytecodeProc>()) const;
   int maxRegister(void) const { return _max_reg; }
 };

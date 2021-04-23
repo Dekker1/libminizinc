@@ -168,6 +168,8 @@ procedure:
       ctx.labels.clear();
       ctx.patch_labels.clear();
 
+      ctx.proc_body.setNArgs($5);
+
       // Add ABORT instruction for error management
       if (ctx.proc_body.size() > 0) {
         ctx.proc_body.addInstr(BytecodeStream::ABORT);
