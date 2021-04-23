@@ -707,8 +707,8 @@ void Interpreter::run(void) {
         for (int i = 0; i < n; i++) {
           int r = frame->bs->reg(frame->pc);
           assign(newFrame, i, reg(*frame, r));
-          DBG_INTERPRETER(" R" << r << "(" << args[i].toString(DBG_TRIM_OUTPUT) << ")");
-          DBG_CALLTRACE(args[i].toString(DBG_TRIM_OUTPUT) << ((i + 1 < n) ? ", " : ")\n"));
+          DBG_INTERPRETER(" R" << r << "(" << reg(newFrame, i).toString(DBG_TRIM_OUTPUT) << ")");
+          DBG_CALLTRACE(reg(newFrame, i).toString(DBG_TRIM_OUTPUT) << ((i + 1 < n) ? ", " : ")\n"));
         }
         DBG_INTERPRETER("\n");
 
