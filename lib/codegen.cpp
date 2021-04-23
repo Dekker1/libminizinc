@@ -1230,23 +1230,19 @@ bool collect_prod(std::vector<int>& pos, std::vector<int>& neg,
     CG_Cond::C_Call* call(static_cast<CG_Cond::C_Call*>(p));
     std::vector<Type> ty(call->ty.begin() + 1, call->ty.end());
     auto fun = find_call_fun(cg, call->ident, call->ty[0], ty, call->m);
-    OPEN_OTHER(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::CALL, std::get<1>(fun), std::get<0>(fun),
                CG::i((!std::get<2>(fun)) && call->cse), call->params);
-    CLOSE_AGG(cg, frag);
     int r = GET_REG(cg);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     if (BytecodeProc::is_neg(call->m) != BytecodeProc::is_neg(std::get<1>(fun))) {
       if (call->ty[0].ispar()) {
         PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
       } else {
-        OPEN_OTHER(cg, frag);
         auto fun =
             find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
         assert(std::get<1>(fun) == BytecodeProc::FUN);
         PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                    CG::i(!std::get<2>(fun)), CG::r(r));
-        CLOSE_AGG(cg, frag);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       }
     }
@@ -1287,23 +1283,19 @@ bool collect_disj(std::vector<int>& pos, std::vector<int>& neg,
     CG_Cond::C_Call* call(static_cast<CG_Cond::C_Call*>(p));
     std::vector<Type> ty(call->ty.begin() + 1, call->ty.end());
     auto fun = find_call_fun(cg, call->ident, call->ty[0], ty, call->m);
-    OPEN_OTHER(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::CALL, std::get<1>(fun), std::get<0>(fun),
                CG::i((!std::get<2>(fun)) && call->cse), call->params);
-    CLOSE_AGG(cg, frag);
     int r = GET_REG(cg);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     if (BytecodeProc::is_neg(call->m) != BytecodeProc::is_neg(std::get<1>(fun))) {
       if (call->ty[0].ispar()) {
         PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
       } else {
-        OPEN_OTHER(cg, frag);
         auto fun =
             find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
         assert(std::get<1>(fun) == BytecodeProc::FUN);
         PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                    CG::i(!std::get<2>(fun)), CG::r(r));
-        CLOSE_AGG(cg, frag);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       }
     }
@@ -1398,13 +1390,11 @@ void force_and_leaves(std::vector<int>& var_leaves, std::vector<int>& par_leaves
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(p->reg[1 - sign].reg), CG::r(r));
     } else {
       GCLock lock;
-      OPEN_OTHER(cg, frag);
       auto fun =
           find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
       assert(std::get<1>(fun) == BytecodeProc::FUN);
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                  CG::i(!std::get<2>(fun)), CG::r(p->reg[1 - sign].reg));
-      CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
     p->reg[sign] = CG_Cond::cond_reg(r, p->reg[1 - sign].is_par);
@@ -1445,13 +1435,11 @@ void force_or_leaves(std::vector<int>& var_leaves, std::vector<int>& par_leaves,
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(p->reg[sign].reg), CG::r(r));
     } else {
       GCLock lock;
-      OPEN_OTHER(cg, frag);
       auto fun =
           find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
       assert(std::get<1>(fun) == BytecodeProc::FUN);
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                  CG::i(!std::get<2>(fun)), CG::r(p->reg[sign].reg));
-      CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
     p->reg[1 - sign] = CG_Cond::cond_reg(r, p->reg[sign].is_par);
@@ -1486,23 +1474,19 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     if (m.strength() != CG::Mode::Root) {
       Mode call_m(m.strength(), negated);
       auto fun = find_call_fun(cg, call->ident, call->ty[0], ty, call->m);
-      OPEN_OTHER(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::CALL, std::get<1>(fun), std::get<0>(fun),
                  CG::i((!std::get<2>(fun)) && call->cse), call->params);
-      CLOSE_AGG(cg, frag);
       r = GET_REG(cg);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       if (BytecodeProc::is_neg(call->m) != BytecodeProc::is_neg(std::get<1>(fun))) {
         if (call->ty[0].ispar()) {
           PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
         } else {
-          OPEN_OTHER(cg, frag);
           auto fun =
               find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
           assert(std::get<1>(fun) == BytecodeProc::FUN);
           PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                      CG::i(!std::get<2>(fun)), CG::r(r));
-          CLOSE_AGG(cg, frag);
           PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
         }
       }
@@ -1518,23 +1502,19 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
       assert(std::get<1>(fun) == BytecodeProc::FUN);
       std::cerr << "Warning: emitting reification for " << call->ident
                 << " because no ROOT_NEG version is available\n";
-      OPEN_OTHER(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::CALL, std::get<1>(fun), std::get<0>(fun),
                  CG::i(!std::get<2>(fun)), call->params);
-      CLOSE_AGG(cg, frag);
       r = GET_REG(cg);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       if (BytecodeProc::is_neg(call->m) != BytecodeProc::is_neg(std::get<1>(fun))) {
         if (call->ty[0].ispar()) {
           PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
         } else {
-          OPEN_OTHER(cg, frag);
           auto fun =
               find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
           assert(std::get<1>(fun) == BytecodeProc::FUN);
           PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                      CG::i(!std::get<2>(fun)), CG::r(r));
-          CLOSE_AGG(cg, frag);
           PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
         }
       }
@@ -1547,14 +1527,12 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     std::vector<int> par_leaves;
     int r = GET_REG(cg);
     // I don't think these are necessary
-    OPEN_OTHER(cg, frag);
     force_and_leaves(var_leaves, par_leaves, cond, cg, frag);
     if (var_leaves.empty()) {
       PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(par_leaves[0]), CG::r(r));
       for (int i = 1; i < par_leaves.size(); ++i) {
         PUSH_INSTR(frag, BytecodeStream::AND, CG::r(r), CG::r(par_leaves[i]), CG::r(r));
       }
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
     } else {
       OPEN_AND(cg, frag);
       for (int r_c : par_leaves) {
@@ -1564,9 +1542,8 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
       }
       CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
-    CLOSE_AGG(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     return {r, var_leaves.empty()};
 #else
     std::vector<CG_Cond::T> par_leaves;
@@ -1607,13 +1584,11 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
       PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_c), CG::r(r));
     } else if (var_leaves.size() > 1) {
       // In this case, we need to open a context.
-      OPEN_OTHER(cg, frag);
       OPEN_AND(cg, frag);
       for (CG_Cond::T c : var_leaves) {
         int r_c = CG::force(c, BytecodeProc::FUN, cg, frag);
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
       }
-      CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
@@ -1630,14 +1605,12 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
     std::vector<int> par_leaves;
     int r = GET_REG(cg);
     // I don't think these are necessary
-    OPEN_OTHER(cg, frag);
     force_or_leaves(var_leaves, par_leaves, ~cond, cg, frag);
     if (var_leaves.empty()) {
       PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(par_leaves[0]), CG::r(r));
       for (int i = 1; i < par_leaves.size(); ++i) {
         PUSH_INSTR(frag, BytecodeStream::OR, CG::r(r), CG::r(par_leaves[i]), CG::r(r));
       }
-      PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
     } else {
       OPEN_OR(cg, frag);
       for (int r_c : par_leaves) {
@@ -1647,9 +1620,8 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
       }
       CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
-    CLOSE_AGG(cg, frag);
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     return {r, var_leaves.empty()};
 #else
     std::vector<CG_Cond::T> par_leaves;
@@ -1690,13 +1662,11 @@ std::pair<int, bool> _force_cond(CG_Cond::T cond, CodeGen& cg, CG_Builder& frag)
       PUSH_INSTR(frag, BytecodeStream::MOV, CG::r(r_c), CG::r(r));
     } else if (var_leaves.size() > 1) {
       // In this case, we need to open a context.
-      OPEN_OTHER(cg, frag);
       OPEN_OR(cg, frag);
       for (CG_Cond::T c : var_leaves) {
         int r_c = CG::force(c, BytecodeProc::FUN, cg, frag);
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_c));
       }
-      CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
@@ -1727,13 +1697,11 @@ int CG::force(CG_Cond::T _cond, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     if (p->reg[1 - sign].is_par) {
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(p->reg[1 - sign].reg), CG::r(r));
     } else {
-      OPEN_OTHER(cg, frag);
       auto fun =
           find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
       assert(std::get<1>(fun) == BytecodeProc::FUN);
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                  CG::i(!std::get<2>(fun)), CG::r(p->reg[1 - sign].reg));
-      CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
     p->reg[sign] = CG_Cond::cond_reg(r, p->reg[1 - sign].is_par);
@@ -2035,15 +2003,13 @@ void post_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
     if (p->reg[1 - sign].is_par) {
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(p->reg[1 - sign].reg), CG::r(r));
     } else {
-      OPEN_OTHER(cg, frag);
       auto fun =
           find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
       assert(std::get<1>(fun) == BytecodeProc::FUN);
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                  CG::i(!std::get<2>(fun)), CG::r(p->reg[1 - sign].reg));
-      CLOSE_AGG(cg, frag);
+      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     }
-    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     PUSH_INSTR(frag, BytecodeStream::POST, CG::r(r));
     p->reg[sign] = CG_Cond::cond_reg(r, p->reg[1 - sign].is_par);
   } else if (p->kind() == CG_Cond::CC_Call) {
@@ -2058,23 +2024,19 @@ void post_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
       assert(std::get<1>(fun) == BytecodeProc::FUN);
       std::cerr << "Warning: emitting reification for " << call->ident
                 << " because no ROOT_NEG version is available\n";
-      OPEN_OTHER(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::CALL, std::get<1>(fun), std::get<0>(fun),
                  CG::i((!std::get<2>(fun)) && call->cse), call->params);
-      CLOSE_AGG(cg, frag);
       int r = GET_REG(cg);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       if (BytecodeProc::is_neg(call->m) != BytecodeProc::is_neg(std::get<1>(fun))) {
         if (call->ty[0].ispar()) {
           PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r), CG::r(r));
         } else {
-          OPEN_OTHER(cg, frag);
           auto fun =
               find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
           assert(std::get<1>(fun) == BytecodeProc::FUN);
           PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                      CG::i(!std::get<2>(fun)), CG::r(r));
-          CLOSE_AGG(cg, frag);
           PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
         }
       }
@@ -2114,13 +2076,11 @@ void aggregate_cond(CodeGen& cg, CG_Builder& frag, CG_Cond::T cond) {
       PUSH_INSTR(frag, BytecodeStream::NOT, CG::r(r_neg), CG::r(r));
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r));
     } else {
-      OPEN_OTHER(cg, frag);
       auto fun =
           find_call_fun(cg, {"op_not"}, Type::varbool(), {Type::varbool()}, BytecodeProc::FUN);
       assert(std::get<1>(fun) == BytecodeProc::FUN);
       PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                  CG::i(!std::get<2>(fun)), CG::r(r_neg));
-      CLOSE_AGG(cg, frag);
     }
     return;
   }
@@ -2407,7 +2367,6 @@ private:
     }
 
     // Now compile the result.
-    OPEN_OTHER(cg, frag);
     CG::Binding b_res = CG::bind(e, cg, frag);
     if (b_res.second.p) {
       // FIXME: What actually happens with this forced result?
@@ -2415,7 +2374,6 @@ private:
       CG::force(b_res.second, BytecodeProc::FUN, cg, frag);
     }
     PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b_res.first));
-    CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::RET);
 
     // now restore everything
@@ -2450,14 +2408,12 @@ private:
     }
 
     // Now compile the result.
-    OPEN_OTHER(cg, frag);
     CG_Cond::T cond(CG::compile(e, cg, frag));
     if (m.strength() == Mode::Root) {
       post_cond(cg, frag, m.is_neg() ? ~cond : cond);
     } else {
       aggregate_cond(cg, frag, m.is_neg() ? ~cond : cond);
     }
-    CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::RET);
 
     cg.current_reg_count = saved_regs;
@@ -2845,7 +2801,6 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         return CG_Cond::reg(r, true);
       } else {
         // General case, just aggregate the values.
-        OPEN_OTHER(cg, frag);
         OPEN_AND(cg, frag);
         execute_comprehension_generic(
             c, ctx, cg, frag,
@@ -2855,25 +2810,13 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
               PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_cond));
             });
         CLOSE_AGG(cg, frag);
-        CLOSE_AGG(cg, frag);
         int r(GET_REG(cg));
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
         return CG_Cond::reg(r, false);
       }
     }
-      /*
-      OPEN_OTHER(cg, frag);
-      OPEN_AND(cg, frag);
-      CLOSE_AGG(cg, frag);
-      CLOSE_AGG(cg, frag);
-      int r(GET_REG(cg));
-      PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
-      return CG_Cond::reg(r, call->type().ispar());
-      }
-      */
     default: {
       int r(GET_REG(cg));
-      OPEN_OTHER(cg, frag);
       CG::Binding b_param(CG::bind(param, cg, frag));
       int r_A(b_param.first);
       std::vector<int> p_A;
@@ -2891,7 +2834,6 @@ CG_Cond::T eval_forall(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       ITER_ARRAY(cg, frag, r_A, [](CodeGen& cg, CG_Builder& frag, int r_elt) {
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_elt));
       });
-      CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       return CG_Cond::reg(r, call->type().ispar());
@@ -2940,7 +2882,6 @@ CG_Cond::T eval_exists(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
             });
         return CG_Cond::reg(r, true);
       } else {
-        OPEN_OTHER(cg, frag);
         OPEN_OR(cg, frag);
         execute_comprehension_generic(
             c, ctx, cg, frag,
@@ -2949,7 +2890,6 @@ CG_Cond::T eval_exists(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
                   CG::force(CG::compile(elt, cg, frag), CG::Mode(ctx.strength(), false), cg, frag);
               PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_cond));
             });
-        CLOSE_AGG(cg, frag);
         CLOSE_AGG(cg, frag);
         int r(GET_REG(cg));
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
@@ -2963,12 +2903,10 @@ CG_Cond::T eval_exists(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       CG::Binding b_A(CG::bind(param, cg, frag));
       int r_A(b_A.first);
       // and push every element.
-      OPEN_OTHER(cg, frag);
       OPEN_OR(cg, frag);
       ITER_ARRAY(cg, frag, r_A, [](CodeGen& cg, CG_Builder& frag, int r_elt) {
         PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_elt));
       });
-      CLOSE_AGG(cg, frag);
       CLOSE_AGG(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       return CG_Cond::forall(ctx, b_A.second, CG_Cond::reg(r, call->type().ispar()));
@@ -3090,10 +3028,8 @@ CG::Binding bind_sum(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   // Sum n arguments
   auto fun = find_call_fun(cg, {"sum_cc"}, Type::varint(), {Type::varint(1)}, BytecodeProc::FUN);
   assert(std::get<1>(fun) == BytecodeProc::FUN);
-  OPEN_OTHER(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
              CG::i(!std::get<2>(fun)), CG::r(b_elts.first));
-  CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
   PUSH_INSTR(frag, BytecodeStream::JMP, CG::l(l_end));
 
@@ -3625,14 +3561,12 @@ CG::Binding bind_internal(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     p_args[i] = b_arg.second;
   }
 
-  OPEN_OTHER(cg, frag);
   // Push BUILTIN instruction with the correct id
   PUSH_INSTR(frag, BytecodeStream::BUILTIN, proc);
   // Append instruction with register arguments
   CG_Instr& i = frag.instrs.back();
   PUSH_INSTR_OPERAND(i, r_args);
 
-  CLOSE_AGG(cg, frag);
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_res));
 
   return {r_res, CG_Cond::forall(ctx, p_args)};
@@ -3780,10 +3714,8 @@ CG::Binding CG::bind(SetLit* sl, Mode ctx, CodeGen& cg, CG_Builder& frag) {
         PUSH_INSTR(frag, BytecodeStream::IMMI, CG::i(u.toInt()), CG::r(r_t));
       } else {
         assert(u.isPlusInfinity());
-        OPEN_OTHER(cg, frag);
         PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("infinity"),
                    CG::r(bind_cst(1, cg, frag)));
-        CLOSE_AGG(cg, frag);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_t));
       }
       PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(r_t));
@@ -3940,14 +3872,12 @@ CG::Binding CG::bind(ArrayAccess* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     r_args[sz] = CG::r(r_A);
 
     // Push CALL instruction with the correct id
-    OPEN_OTHER(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                CG::i(!std::get<2>(fun)));
     // Append instruction with register arguments
     CG_Instr& i = frag.instrs.back();
     PUSH_INSTR_OPERAND(i, r_args);
 
-    CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
     return {r, CG_Cond::forall(ctx, cond)};
   } else {
@@ -4126,10 +4056,8 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
                                {Type::varbool(1), Type::varbool(1)}, BytecodeProc::FUN);
       assert(std::get<1>(fun) == BytecodeProc::FUN);
 
-      OPEN_OTHER(cg, frag);
       PUSH_INSTR(frag, BytecodeStream::CALL, std::get<1>(fun), std::get<0>(fun),
                  CG::i(!std::get<2>(fun)), CG::r(r_vec_cond), CG::r(r_vec_part));
-      CLOSE_AGG(cg, frag);
       r_part = GET_REG(cg);
       PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_part));
     }
@@ -4141,10 +4069,8 @@ CG::Binding CG::bind(ITE* ite, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     assert(std::get<1>(fun) == BytecodeProc::FUN);
 
     int r_ret(GET_REG(cg));
-    OPEN_OTHER(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::CALL, std::get<1>(fun), std::get<0>(fun),
                CG::i(!std::get<2>(fun)), CG::r(r_vec_cond), CG::r(r_vec_res));
-    CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
 
     return {r_ret, is_total ? CG_Cond::ttt() : CG_Cond::reg(r_part, false)};
@@ -4187,9 +4113,7 @@ CG::Binding CG::bind(BinOp* b, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     int r_rhs = CG::force_or_bind(b->rhs(), ctx, partial, cg, frag);
 
     int r = GET_REG(cg);
-    OPEN_OTHER(cg, frag);
     bind_binop_var(cg, frag, BytecodeProc::FUN, b->op(), r_lhs, r_rhs);
-    CLOSE_AGG(cg, frag);
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
 
     if (b->op() == BOT_DIV || b->op() == BOT_IDIV || b->op() == BOT_MOD) {
@@ -4214,13 +4138,11 @@ CG::Binding CG::bind(UnOp* u, Mode ctx, CodeGen& cg, CG_Builder& frag) {
       int r;
       if (u->type().isvar()) {
         GCLock lock;
-        OPEN_OTHER(cg, frag);
         auto fun =
             find_call_fun(cg, {"op_minus"}, Type::varint(), {Type::varint()}, BytecodeProc::FUN);
         assert(std::get<1>(fun) == BytecodeProc::FUN);
         PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
                    CG::i(!std::get<2>(fun)), CG::r(b_e.first));
-        CLOSE_AGG(cg, frag);
         r = GET_REG(cg);
         PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
       } else {
@@ -4244,13 +4166,11 @@ CG::Binding bind_call(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     p_arg[ii] = r_bind.second;
   }
 
-  OPEN_OTHER(cg, frag);
   // Bind the value part.
   auto fun = find_call_fun(cg, call, BytecodeProc::ROOT);
   assert(std::get<1>(fun) == BytecodeProc::FUN);
   PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::FUN, std::get<0>(fun),
              CG::i((!std::get<2>(fun)) && call->type().isvar()), r_arg);
-  CLOSE_AGG(cg, frag);
 
   int r_ret(GET_REG(cg));
   PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r_ret));
@@ -4271,94 +4191,31 @@ CG::Binding CG::bind(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
 }
 
 CG::Binding CG::bind(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
-  ASTExprVec<Expression> bindings(let->let());
   std::vector<CG_Cond::T> partial;
-  cg.env_push();
-  for (Expression* e : bindings) {
-    if (auto vd = e->dyn_cast<VarDecl>()) {
-      // Create the new name
-      CG::Binding to_bind(0xdeadbeef, CG_Cond::ttt());
-      if (vd->e() && vd->type().isbool()) {
-        CG_Cond::T cond = CG::compile(vd->e(), cg, frag);
-        if (!cond.get()) {
-          to_bind.first = bind_cst(cond.sign(), cg, frag);
-        } else {
-          to_bind.second = cond;
-        }
-      } else if (vd->e()) {
-        // FIXME: Assuming domain isn't constraining.
-        CG::Binding b_v(CG::bind(vd->e(), cg, frag));
-        to_bind.first = b_v.first;
-        partial.push_back(b_v.second);
-        if (Expression* d = vd->ti()->domain()) {
-          if (!vd->ti()->isarray()) {
-            CG::Binding b_d = CG::bind(d, cg, frag);  // Discarding any constraints on the set.
-            partial.push_back(b_d.second);
-            int r_dp = GET_REG(cg);
-            PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(to_bind.first),
-                       CG::r(b_d.first), CG::r(r_dp));
-          }
-        }
-      } else {
-        // Variable declaration. Assumes is total and nonempty.
-        to_bind.first = GET_REG(cg);
-        CG::Binding b_d(bind_domain(vd, cg, frag));
-        int r_d = b_d.first;  // Ignoring constraints introduced by domain.
-        partial.push_back(b_d.second);
-        if (!vd->ti()->isarray()) {
-          OPEN_OTHER(cg, frag);
-          PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::ROOT, cg.find_builtin("mk_intvar"),
-                     CG::i(0), CG::r(r_d));
-          CLOSE_AGG(cg, frag);
-        } else {
-          // Open nested iterators
-          int rTMP(GET_REG(cg));
-          std::vector<int> r_regs;
-          for (Expression* r : vd->ti()->ranges()) {
-            Expression* dim(r->template cast<TypeInst>()->domain());
-            CG::Binding b_reg(CG::bind(dim, cg, frag));
-            // FIXME: Ignoring conditions
-            // post_cond(cg, frag, b_reg.second);
-            r_regs.push_back(b_reg.first);
-          }
-          std::vector<Forset> nesting;
-          OPEN_VEC(cg, frag);
-          for (int r_r : r_regs) {
-            Forset iter(cg, r_r);
-            nesting.push_back(iter);
-            iter.emit_pre(frag);
-          }
-          PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::ROOT, cg.find_builtin("mk_intvar"),
-                     CG::i(0), CG::r(b_d.first));
-          for (int r_i = r_regs.size() - 1; r_i >= 0; --r_i) {
-            nesting[r_i].emit_post(frag);
-          }
-          CLOSE_AGG(cg, frag);
-          PUSH_INSTR(frag, BytecodeStream::POP, CG::r(to_bind.first));
-          OPEN_VEC(cg, frag);
-          for (int r_r : r_regs) {
-            PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_r), CG::r(bind_cst(1, cg, frag)),
-                       CG::r(rTMP));
-            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rTMP));
-            PUSH_INSTR(frag, BytecodeStream::GET_VEC, CG::r(r_r), CG::r(bind_cst(2, cg, frag)),
-                       CG::r(rTMP));
-            PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(rTMP));
-          }
-          CLOSE_AGG(cg, frag);
 
-          PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("array_Xd"),
-                     CG::r(to_bind.first), CG::r(rTMP));
-        }
-        PUSH_INSTR(frag, BytecodeStream::POP, CG::r(to_bind.first));
-      }
-      cg.env().bind(vd->id()->v(), to_bind);
-    } else {
-      // Must be a constraint
-      partial.push_back(CG::compile(e, cg, frag));
-    }
+  cg.env_push();
+
+  if (let->ann().contains(constants().ann.promise_total)) {
+    OPEN_OTHER(cg, frag);
+    eval_let_body(let, BytecodeProc::ROOT, cg, frag, partial);
+
+    CG::Binding b_in(CG::bind(let->in(), cg, frag));
+    partial.push_back(b_in.second);
+    post_cond(cg, frag, CG_Cond::forall(BytecodeProc::ROOT, partial));
+    PUSH_INSTR(frag, BytecodeStream::PUSH, CG::r(b_in.first));
+    CLOSE_AGG(cg, frag);
+    cg.env_pop();
+
+    int ret = GET_REG(cg);
+    PUSH_INSTR(frag, BytecodeStream::POP, CG::r(ret));
+
+    return {ret, CG_Cond::forall(ctx, partial)};
   }
+
+  eval_let_body(let, BytecodeProc::ROOT, cg, frag, partial);
   CG::Binding b_in(CG::bind(let->in(), cg, frag));
   partial.push_back(b_in.second);
+
   cg.env_pop();
   return {b_in.first, CG_Cond::forall(ctx, partial)};
 }
@@ -4786,10 +4643,9 @@ CG_Cond::T CG::compile(Call* call, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   return compile_call(call, ctx, cg, frag);
 }
 
-void eval_let_body(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag,
+void eval_let_body(Let* let, BytecodeProc::Mode ctx, CodeGen& cg, CG_Builder& frag,
                    std::vector<CG_Cond::T>& conj) {
   ASTExprVec<Expression> bindings(let->let());
-  std::vector<CG_Cond::T> partial;
   for (Expression* e : bindings) {
     if (auto vd = e->dyn_cast<VarDecl>()) {
       // Bind the new definitions in context
@@ -4809,7 +4665,7 @@ void eval_let_body(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag,
         if (Expression* d = vd->ti()->domain()) {
           if (!vd->ti()->isarray()) {
             CG::Binding b_d = CG::bind(d, cg, frag);  // Discarding any constraints on the set.
-            partial.push_back(b_d.second);
+            conj.push_back(b_d.second);
             int r_dp = GET_REG(cg);
             PUSH_INSTR(frag, BytecodeStream::INTERSECT_DOMAIN, CG::r(to_bind.first),
                        CG::r(b_d.first), CG::r(r_dp));
@@ -4821,10 +4677,8 @@ void eval_let_body(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag,
         to_bind.first = GET_REG(cg);
         if (!vd->ti()->isarray()) {
           conj.push_back(b_d.second);
-          OPEN_OTHER(cg, frag);
           PUSH_INSTR(frag, BytecodeStream::CALL, BytecodeProc::ROOT, cg.find_builtin("mk_intvar"),
                      CG::i(0), CG::r(b_d.first));
-          CLOSE_AGG(cg, frag);
         } else {
           int rTMP(GET_REG(cg));
           std::vector<int> r_regs;
@@ -4874,8 +4728,7 @@ void eval_let_body(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag,
 
 CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
   std::vector<CG_Cond::T> conj;
-  // ASTExprVec<Expression> bindings(let->let());
-  // std::vector<CG_Cond::T> partial;
+
   cg.env_push();
 
   if (let->ann().contains(constants().ann.promise_total)) {
@@ -4894,6 +4747,7 @@ CG_Cond::T CG::compile(Let* let, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     eval_let_body(let, BytecodeProc::ROOT, cg, frag, conj);
     conj.push_back(CG::compile(let->in(), cg, frag));
   }
+  cg.env_pop();
   return CG_Cond::forall(ctx, conj);
 }
 
@@ -4909,5 +4763,4 @@ int CG::vec2array(std::vector<int> vec, CodeGen& cg, CG_Builder& frag) {
 
   return r_vec;
 }
-
 };  // namespace MiniZinc

@@ -916,6 +916,9 @@ std::tuple<CG_ProcID, BytecodeProc::Mode, bool> find_call_fun(CodeGen& cg, Call*
                                                               BytecodeProc::Mode m,
                                                               bool reserved_name = false);
 
+void eval_let_body(Let* let, BytecodeProc::Mode ctx, CodeGen& cg, CG_Builder& frag,
+                   std::vector<CG_Cond::T>& conj);
+
 };  // namespace MiniZinc
 
 #endif
