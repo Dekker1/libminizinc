@@ -478,6 +478,7 @@ public:
   void assign(const BytecodeFrame& bf, int r, const Val& v) {
     _registers.assign(this, bf.reg_offset + r, v);
   }
+  BytecodeFrame& frame() { return _stack.back(); }
 
   Val infinite_domain() { return Val(infinite_dom); }
   Val boolean_domain() { return Val(boolean_dom); }
