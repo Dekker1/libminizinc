@@ -183,7 +183,7 @@ void SliceXd::execute(Interpreter& i, const std::vector<Val>& args) {
   // Initialise indexes to the index lower bound
   if (args[0].toVec()->hasIndexSet()) {
     Val index_set = args[0].toVec()->index_set();
-    assert(index_set / 2 == selection.size());
+    assert(index_set.size() / 2 == selection.size());
     for (int j = 0; j < idxs.size(); ++j) {
       idxs[j] = index_set[j * 2];
     }
