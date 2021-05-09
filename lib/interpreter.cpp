@@ -711,7 +711,8 @@ void Interpreter::run(void) {
         for (int i = 0; i < n; i++) {
           int r = _stack[_stack.size() - 2].bs->reg(_stack[_stack.size() - 2].pc);
           assign(frame(), i, reg(_stack[_stack.size() - 2], r));
-          DBG_INTERPRETER(" R" << r << "(" << reg(frame(), i).toString(DBG_TRIM_OUTPUT) << ")");
+          DBG_INTERPRETER(" R" << r << "(" << reg(frame(), i).toString(DBG_TRIM_OUTPUT) << ")"
+                               << ((i + 1 < n) ? "" : "\n"));
           DBG_CALLTRACE(reg(frame(), i).toString(DBG_TRIM_OUTPUT) << ((i + 1 < n) ? ", " : ")\n"));
         }
 
