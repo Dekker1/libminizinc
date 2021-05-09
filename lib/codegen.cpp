@@ -3804,7 +3804,7 @@ CG::Binding CG::bind(ArrayLit* a, Mode ctx, CodeGen& cg, CG_Builder& frag) {
     }
 
     // Combine array and index sets
-    PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("array_Xd"), CG::r(r), CG::r(r));
+    PUSH_INSTR(frag, BytecodeStream::BUILTIN, cg.find_builtin("array_Xd"), CG::r(r), CG::r(rI));
     PUSH_INSTR(frag, BytecodeStream::POP, CG::r(r));
   }
 
