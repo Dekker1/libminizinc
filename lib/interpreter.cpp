@@ -887,7 +887,10 @@ void Interpreter::run(void) {
           goto execute_ret;
         } else {
           // Replace frame with new procedure
+          frame()._pred = code;
+          frame()._mode = mode;
           frame().bs = &_procs[code].mode[mode];
+          _registers.resize(this, frame().reg_offset + frame().bs->maxRegister() + 1);
           frame().pc = 0;
         }
       } break;
