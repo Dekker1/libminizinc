@@ -88,6 +88,8 @@ void ScipPlugin::load() {
   load_symbol(SCIPcreateConsBasicIndicator);
   load_symbol(SCIPcreateConsBasicBounddisjunction);
   load_symbol(SCIPcreateConsBasicCumulative);
+  load_symbol(SCIPcreateConsBasicOrbisack);
+  load_symbol(SCIPcreateConsBasicOrbitope);
   load_symbol(SCIPgetNSolsFound);
   load_symbol(SCIPgetNSols);
   load_symbol(SCIPsetIntParam);
@@ -564,6 +566,48 @@ void MIPScipWrapper::addCumulative(int nnz, int* rmatind, double* d, double* r, 
   SCIP_PLUGIN_CALL(_plugin->SCIPreleaseCons(_scip, &cons));
 }
 
+/// Lex-lesseq binary, currently SCIP only
+/// TODO check all variables are binary, SCIP 7.0.2 does not
+void MIPScipWrapper::addLexLesseq(int nnz, int* rmatind1, int* rmatind2, bool isModelCons,
+                                  const std::string& rowName) {
+  SCIP_CONS* cons;
+  vector<SCIP_VAR*> vars1(nnz);
+  vector<SCIP_VAR*> vars2(nnz);
+
+  for (int j = 0; j < nnz; ++j) {
+    vars1[j] = _scipVars[rmatind1[j]];
+    vars2[j] = _scipVars[rmatind2[j]];
+  }
+
+  SCIP_PLUGIN_CALL(_plugin->SCIPcreateConsBasicOrbisack(
+      _scip, &cons, rowName.c_str(), vars2.data(), vars1.data(),  // it's actually lex_greatereq
+      nnz, FALSE, FALSE, (SCIP_Bool)isModelCons));
+  SCIP_PLUGIN_CALL(_plugin->SCIPaddCons(_scip, cons));
+  SCIP_PLUGIN_CALL(_plugin->SCIPreleaseCons(_scip, &cons));
+}
+
+/// Lex-chain-lesseq binary, currently SCIP only
+void MIPScipWrapper::addLexChainLesseq(int m, int n, int* rmatind, int nOrbitopeType,
+                                       bool resolveprop, bool isModelCons,
+                                       const std::string& rowName) {
+  SCIP_CONS* cons;
+  vector<vector<SCIP_VAR*> > vars(m, vector<SCIP_VAR*>(size_t(n)));
+  vector<SCIP_VAR**> vars_data(m);
+
+  for (int i = 0; i < m; ++i) {
+    for (int j = 0; j < n; ++j) {
+      vars[i][j] = _scipVars[rmatind[i * n + (n - j - 1)]];  // it's actually lex_chain_greatereq
+    }
+    vars_data[i] = vars[i].data();
+  }
+
+  SCIP_PLUGIN_CALL(_plugin->SCIPcreateConsBasicOrbitope(
+      _scip, &cons, rowName.c_str(), vars_data.data(), (SCIP_ORBITOPETYPE)nOrbitopeType, m, n,
+      (SCIP_Bool)resolveprop, (SCIP_Bool)isModelCons));
+  SCIP_PLUGIN_CALL(_plugin->SCIPaddCons(_scip, cons));
+  SCIP_PLUGIN_CALL(_plugin->SCIPreleaseCons(_scip, &cons));
+}
+
 void MIPScipWrapper::addTimes(int x, int y, int z, const string& rowName) {
   /// As x*y - z == 0
   double zCoef = -1.0;
@@ -583,8 +627,13 @@ void MIPScipWrapper::addTimes(int x, int y, int z, const string& rowName) {
 #define EVENTHDLR_NAME "bestsol"
 #define EVENTHDLR_DESC "event handler for best solutions found"
 
+namespace {
 // Dirty way of accessing SCIP functions inside C callbacks
-static ScipPlugin* _cb_plugin;
+ScipPlugin* _cb_plugin;
+
+MIPWrapper::CBUserInfo* cbuiPtr = nullptr;
+SCIP_VAR** _scipVarsPtr = nullptr;
+}  // namespace
 
 /** initialization method of event handler (called after problem was transformed) */
 static SCIP_DECL_EVENTINIT(eventInitBestsol) { /*lint --e{715}*/
@@ -611,9 +660,6 @@ static SCIP_DECL_EVENTEXIT(eventExitBestsol) { /*lint --e{715}*/
 
   return SCIP_OKAY;
 }
-
-static MIPWrapper::CBUserInfo* cbuiPtr = nullptr;
-static SCIP_VAR** _scipVarsPtr = nullptr;
 
 /** execution method of event handler */
 static SCIP_DECL_EVENTEXEC(eventExecBestsol) { /*lint --e{715}*/
@@ -654,7 +700,11 @@ static SCIP_DECL_EVENTEXEC(eventExecBestsol) { /*lint --e{715}*/
     cbuiPtr->pOutput->nOpenNodes = _cb_plugin->SCIPgetNNodesLeft(scip);
     cbuiPtr->pOutput->bestBound = _cb_plugin->SCIPgetDualbound(scip);
 
-    cbuiPtr->pOutput->dCPUTime = -1;
+    cbuiPtr->pOutput->dWallTime = std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                                                cbuiPtr->pOutput->dWallTime0)
+                                      .count();
+    cbuiPtr->pOutput->dCPUTime =
+        double(std::clock() - cbuiPtr->pOutput->cCPUTime0) / CLOCKS_PER_SEC;
 
     /// Call the user function:
     if (cbuiPtr->solcbfn != nullptr) {

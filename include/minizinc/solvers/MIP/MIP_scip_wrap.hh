@@ -21,6 +21,7 @@
 #include <scip/scipdefplugins.h>
 
 #ifndef _WIN32
+// NOLINTNEXTLINE(bugprone-reserved-identifier)
 #define __stdcall
 #endif
 
@@ -105,6 +106,25 @@ public:
   SCIP_RETCODE(__stdcall* SCIPcreateConsBasicCumulative)
   (SCIP* scip, SCIP_CONS** cons, const char* name, int nvars, SCIP_VAR** vars, int* durations,
    int* demands, int capacity);
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  SCIP_RETCODE(__stdcall* SCIPcreateConsBasicOrbisack)
+  (SCIP* scip, SCIP_CONS** cons, const char* name, SCIP_VAR** vars1, SCIP_VAR** vars2, int nrows,
+   SCIP_Bool ispporbisack, SCIP_Bool isparttype, SCIP_Bool ismodelcons);
+
+  // NOLINTNEXTLINE(readability-identifier-naming)
+  SCIP_RETCODE(__stdcall* SCIPcreateConsBasicOrbitope)
+  (SCIP* scip,                     /**< SCIP data structure */
+   SCIP_CONS** cons,               /**< pointer to hold the created constraint */
+   const char* name,               /**< name of constraint */
+   SCIP_VAR*** vars,               /**< matrix of variables on which the symmetry acts */
+   SCIP_ORBITOPETYPE orbitopetype, /**< type of orbitope constraint */
+   int nspcons,                    /**< number of set partitioning/packing constraints  <=> p */
+   int nblocks,                    /**< number of symmetric variable blocks             <=> q */
+   SCIP_Bool resolveprop,          /**< should propagation be resolved? */
+   SCIP_Bool ismodelcons           /**< whether the orbitope is a model constraint */
+  );
+
   // NOLINTNEXTLINE(readability-identifier-naming)
   SCIP_Longint(__stdcall* SCIPgetNSolsFound)(SCIP* scip);
   // NOLINTNEXTLINE(readability-identifier-naming)
@@ -358,6 +378,13 @@ public:
   /// Cumulative, currently SCIP only
   void addCumulative(int nnz, int* rmatind, double* d, double* r, double b,
                      const std::string& rowName = "") override;
+
+  /// Lex-lesseq binary, currently SCIP only
+  void addLexLesseq(int nnz, int* rmatind1, int* rmatind2, bool isModelCons,
+                    const std::string& rowName = "") override;
+
+  void addLexChainLesseq(int m, int n, int* rmatind, int nOrbitopeType, bool resolveprop,
+                         bool isModelCons, const std::string& rowName = "") override;
 
   /// Times constraint: var[x]*var[y] == var[z]
   void addTimes(int x, int y, int z, const std::string& rowName = "") override;

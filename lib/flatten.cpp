@@ -681,6 +681,7 @@ EnvI::EnvI(Model* model0, std::ostream& outstream0, std::ostream& errstream0)
       ignoreUnknownIds(false),
       maxCallStack(0),
       inRedundantConstraint(0),
+      inSymmetryBreakingConstraint(0),
       inMaybePartial(0),
       inReverseMapVar(false),
       counters({0, 0, 0, 0}),
@@ -736,6 +737,9 @@ EnvI::~EnvI() {
 }
 long long int EnvI::genId() { return _ids++; }
 void EnvI::cseMapInsert(Expression* e, const EE& ee) {
+  if (e->type().isPar() && !e->isa<ArrayLit>()) {
+    return;
+  }
   KeepAlive ka(e);
   _cseMap.insert(ka, WW(ee.r(), ee.b()));
   Call* c = e->dynamicCast<Call>();
@@ -853,6 +857,11 @@ void EnvI::annotateFromCallStack(Expression* e) {
   bool allCalls = true;
   for (int i = static_cast<int>(callStack.size()) - 1; i >= prev; i--) {
     Expression* ee = callStack[i]->untag();
+    if (ee->type().isAnn()) {
+      // If we are inside an annotation call, don't annotate it again with
+      // anything from outside the call
+      break;
+    }
     allCalls = allCalls && (i == callStack.size() - 1 || ee->isa<Call>() || ee->isa<BinOp>());
     for (ExpressionSetIter it = ee->ann().begin(); it != ee->ann().end(); ++it) {
       EE ee_ann = flat_exp(*this, Ctx(), *it, nullptr, constants().varTrue);
@@ -1104,6 +1113,9 @@ CallStackItem::CallStackItem(EnvI& env0, Expression* e) : env(env0) {
   if (e->isa<Call>() && e->cast<Call>()->id() == "redundant_constraint") {
     env.inRedundantConstraint++;
   }
+  if (e->isa<Call>() && e->cast<Call>()->id() == "symmetry_breaking_constraint") {
+    env.inSymmetryBreakingConstraint++;
+  }
   if (e->ann().contains(constants().ann.maybe_partial)) {
     env.inMaybePartial++;
   }
@@ -1123,6 +1135,9 @@ CallStackItem::~CallStackItem() {
     }
     if (e->isa<Call>() && e->cast<Call>()->id() == "redundant_constraint") {
       env.inRedundantConstraint--;
+    }
+    if (e->isa<Call>() && e->cast<Call>()->id() == "symmetry_breaking_constraint") {
+      env.inSymmetryBreakingConstraint--;
     }
     if (e->ann().contains(constants().ann.maybe_partial)) {
       env.inMaybePartial--;
@@ -2674,10 +2689,6 @@ KeepAlive flat_cv_exp(EnvI& env, Ctx ctx, Expression* e) {
         typedef Expression* ArrayVal;
         Expression* e(EnvI& env, Expression* e) const { return flat_cv_exp(env, ctx, e)(); }
         static Expression* exp(Expression* e) { return e; }
-        static Expression* flatten(EnvI& env, Expression* e0) {
-          return flat_exp(env, Ctx(), e0, nullptr, constants().varTrue).r();
-        }
-
       } eval(ctx);
       std::vector<Expression*> a = eval_comp<EvalFlatCvExp>(env, eval, c);
 
@@ -3146,8 +3157,14 @@ void flatten(Env& e, FlatteningOptions opt) {
             GCLock lock;
             IntSetVal* dom = eval_intset(env, vdi->e()->ti()->domain());
 
-            bool needRangeDomain = onlyRangeDomains;
-            if (!needRangeDomain && dom->size() > 0) {
+            if (0 == dom->size()) {
+              std::ostringstream oss;
+              oss << "Variable has empty domain: " << (*vdi->e());
+              env.fail(oss.str());
+            }
+
+            bool needRangeDomain = onlyRangeDomains && !vdi->e()->type().isOpt();
+            if (!needRangeDomain && !vdi->e()->type().isOpt()) {
               if (dom->min(0).isMinusInfinity() || dom->max(dom->size() - 1).isPlusInfinity()) {
                 needRangeDomain = true;
               }
@@ -3186,7 +3203,7 @@ void flatten(Env& e, FlatteningOptions opt) {
                   std::vector<Expression*> args(2);
                   args[0] = vdi->e()->id();
                   args[1] = new SetLit(vdi->e()->loc(), dom);
-                  Call* call = new Call(vdi->e()->loc(), constants().ids.set_in, args);
+                  Call* call = new Call(vdi->e()->loc(), constants().ids.mzn_set_in_internal, args);
                   call->type(Type::varbool());
                   call->decl(env.model->matchFn(env, call, false));
                   // Give distinct call stack
@@ -3207,6 +3224,11 @@ void flatten(Env& e, FlatteningOptions opt) {
               vdi->e()->ti()->domain() != nullptr) {
             GCLock lock;
             FloatSetVal* vdi_dom = eval_floatset(env, vdi->e()->ti()->domain());
+            if (0 == vdi_dom->size()) {
+              std::ostringstream oss;
+              oss << "Variable has empty domain: " << (*vdi->e());
+              env.fail(oss.str());
+            }
             FloatVal vmin = vdi_dom->min();
             FloatVal vmax = vdi_dom->max();
             if (vmin == -FloatVal::infinity() && vmax == FloatVal::infinity()) {

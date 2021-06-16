@@ -5,7 +5,6 @@
 ##  checks solutions and compares to given solution logs.
 
 ##  TODO type errors etc. when checking?
-##  TODO -a for optimization only
 ##  TODO continuous output dumping as option
 ##  TODO CPU/user time limit, proper memory limit (setrlimit not working)
 
@@ -35,7 +34,7 @@ sFlnStatLog = sDirResults + "/STATS/stat_log__{}.txt"              ### The insta
 
 sDZNOutputAgrs = "--output-mode dzn --output-objective"    ## The flattener arguments to produce DZN-compatible output facilitating solution checking
                              ## Remove --output-objective in MZN Release <=2.1.7
-sFlatOptChecker = "--allow-multiple-assignments"
+sFlatOptChecker = "--allow-multiple-assignments -Dmzn_ignore_symmetry_breaking_constraints=true"
 
 s_UsageExamples = ( 
     "\nUSAGE EXAMPLES:"
@@ -148,7 +147,7 @@ class MZT_Param:
                         #"MZN-CPLEX",
                         "/// At the moment only the 1st element is used for solving" ],
             "SOLUTION_CHECKING": {
-              "Checkers": ["GECODE-CHK", "GUROBI-CHK", "CPLEX-CHK" ],
+              "Checkers": ["GECODE-CHK", "GUROBI-CHK", "CPLEX-CHK", "ORTOOLS-CHK" ],
               "n_CheckedMax": [ -10, "/// Negative value means it's that many last solutions" ],
               "n_FailedSaveMax": [ 3, "/// After that many failed solutions, stop checking the instance" ],
               "s_FailedSaveFile": [ sFlnSolFailBase, "/// Filename to save failed solutions" ],
@@ -200,6 +199,7 @@ class MZT_Param:
             ],
             "MINIZINC-CHK": [ "__BE_COMMON", "__BE_CHECKER_OLDMINIZINC", "BE_MINIZINC" ],
             "GECODE-CHK": [ "__BE_COMMON", "__BE_CHECKER", "BE_GECODE" ],
+            "ORTOOLS-CHK": [ "__BE_COMMON", "__BE_CHECKER", "BE_ORTOOLS" ],
             "GUROBI-CHK": [ "__BE_COMMON", "__BE_CHECKER", "BE_GUROBI" ],
             "CPLEX-CHK": [ "__BE_COMMON", "__BE_CHECKER", "BE_CPLEX" ],
             "CHUFFED-CHK": [ "__BE_COMMON", "__BE_CHECKER", "BE_CHUFFED" ],
@@ -218,7 +218,7 @@ class MZT_Param:
               s_CommentKey: [ "THE INITIALIZING BACKEND." ],
               "EXE": {
                 s_CommentKey: [ "Solver call parameters" ],
-                "s_SolverCall" : ["minizinc -v -s -a " + sDZNOutputAgrs + " %s",
+                "s_SolverCall" : ["minizinc -v -s -i " + sDZNOutputAgrs + " %s",
                   "/// The 1st element defines the call line. %s is replaced by the instance filename(s)."],
                 "s_ExtraCmdline" : ["", "/// Only for __BE_SOLVER/__BE_CHECKER... subprofiles."
                                         " The 1st element gives extra cmdline arguments to the call"],
@@ -241,11 +241,11 @@ class MZT_Param:
                 ### The %%%mzn-stat values appear in stdout (as of May 2019) but leave them here just in case
                 "Time_Flt": [ "%%%mzn-stat: flatTime", "[:=]", 3, "/// E.g., 'Flattening done, 3s' produces 3."
                                 " !!! This is interpreted as successful flattening by the checker" ],
-                "ObjVal_Solver":   [ "%%%mzn-stat objective=", "[,:/=]", 3,        ## Need = to avoid mixup witht the bound
+                "ObjVal_Solver":   [ "%%%mzn-stat: objective=", "[,:/=]", 3,        ## Need = to avoid mixup with the bound
                                         "/// The objval as reported by solver."],
-                "DualBnd_Solver":   [ "%%%mzn-stat objectiveBound", "[,:/=]", 3 ],
-                "CPUTime_Solver":   [ "%%%mzn-stat solveTime", "[,:/=]", 3 ],
-                "NNodes_Solver":   [ "%%%mzn-stat nodes", "[,:/=]", 3 ],
+                "DualBnd_Solver":   [ "%%%mzn-stat: objectiveBound", "[,:/=]", 3 ],
+                "CPUTime_Solver":   [ "%%%mzn-stat: solveTime", "[,:/=]", 3 ],
+                "NNodes_Solver":   [ "%%%mzn-stat: nodes", "[,:/=]", 3 ],
               },
               "Stdout_Keylines": {
                 s_CommentKey: [ "Similar to Stderr_Keylines"],
@@ -268,11 +268,11 @@ class MZT_Param:
                 s_CommentKey: ["Similar to Stderr_Keyvalues." ],
                 "Time_Flt": [ "%%%mzn-stat: flatTime", "[:=]", 3, "/// E.g., 'Flattening done, 3s' produces 3."
                                 " !!! This is interpreted as successful flattening by the checker" ],
-                "ObjVal_Solver":   [ "%%%mzn-stat objective=", "[,:/=]", 3,        ## Need = to avoid mixup witht the bound
+                "ObjVal_Solver":   [ "%%%mzn-stat: objective=", "[,:/=]", 3,        ## Need = to avoid mixup with the bound
                                         "/// The objval as reported by solver."],
-                "DualBnd_Solver":   [ "%%%mzn-stat objectiveBound", "[,:/=]", 3 ],
-                "CPUTime_Solver":   [ "%%%mzn-stat solveTime", "[,:/=]", 3 ],
-                "NNodes_Solver":   [ "%%%mzn-stat nodes", "[,:/=]", 3 ],
+                "DualBnd_Solver":   [ "%%%mzn-stat: objectiveBound", "[,:/=]", 3 ],
+                "CPUTime_Solver":   [ "%%%mzn-stat: solveTime", "[,:/=]", 3 ],
+                "NNodes_Solver":   [ "%%%mzn-stat: nodes", "[,:/=]", 3 ],
                 "ObjVal_MZN":   [ "_objective", "[():=;%]", 2,
                                     "/// The objective value as evaluated by MZN." ],
                 "RealTime_Solns2Out": [ "% time elapsed:", " ", 4 ],
@@ -281,7 +281,7 @@ class MZT_Param:
             "__BE_SOLVER": {
               s_CommentKey: ["Specializations for a general solver" ],
               "EXE": {
-                "s_ExtraCmdline" : ["-a"],
+                "s_ExtraCmdline" : ["-i"],
                 "b_ThruShell"  : [True],
                 "n_TimeoutRealHard": [150],
                 #  "n_VMEMLIMIT_SoftHard": [8000100000, 8100000000]
@@ -890,7 +890,7 @@ class MznTest:
             resSlv["NOFZN"] = ["      !!!!! No flattening finish time registered or successfully parsed"]
         dTmLast = utils.try_float( resSlv.get( "RealTime_Solns2Out" ) )
         if None!=dTmLast:
-            resSlv["TimeReal_LastStatus"] = dTmLast / 1000.0
+            resSlv["TimeReal_LastStatus"] = dTmLast
             resSlv.pop( "RealTime_Solns2Out" )
         ## if "SolutionLast" in resSlv:
         ##     print( "   SOLUTION_LAST:\n", resSlv["SolutionLast"], sep='' )

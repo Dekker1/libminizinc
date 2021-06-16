@@ -154,10 +154,45 @@ public:
   }
 };
 
+// Create all required mapping functions for a new enum
+// (mapping enum identifiers to strings, and mapping between different enums)
 void create_enum_mapper(EnvI& env, Model* m, unsigned int enumId, VarDecl* vd, Model* enumItems) {
   GCLock lock;
 
   Id* ident = vd->id();
+
+  if (vd->e() == nullptr) {
+    // Enum without right hand side (may be supplied later in an assignment
+    // item, or we may be runnint in --model-interface-only mode).
+    // Need to create stub function declarations, so that the type checker
+    // is happy.
+    Type tx = Type::parint();
+    tx.ot(Type::OT_OPTIONAL);
+    auto* ti_aa = new TypeInst(Location().introduce(), tx);
+    auto* vd_aa = new VarDecl(Location().introduce(), ti_aa, "x");
+    vd_aa->toplevel(false);
+
+    auto* ti_ab = new TypeInst(Location().introduce(), Type::parbool());
+    auto* vd_ab = new VarDecl(Location().introduce(), ti_ab, "b");
+    vd_ab->toplevel(false);
+
+    auto* ti_aj = new TypeInst(Location().introduce(), Type::parbool());
+    auto* vd_aj = new VarDecl(Location().introduce(), ti_aj, "json");
+    vd_aj->toplevel(false);
+
+    auto* ti_fi = new TypeInst(Location().introduce(), Type::parstring());
+    std::vector<VarDecl*> fi_params(3);
+    fi_params[0] = vd_aa;
+    fi_params[1] = vd_ab;
+    fi_params[2] = vd_aj;
+    auto* fi =
+        new FunctionI(Location().introduce(), create_enum_to_string_name(ident, "_toString_"),
+                      ti_fi, fi_params, nullptr);
+    enumItems->addItem(fi);
+
+    return;
+  }
+
   Call* c = vd->e()->dynamicCast<Call>();
   auto* al = vd->e()->dynamicCast<ArrayLit>();
 
@@ -761,7 +796,14 @@ void create_enum_mapper(EnvI& env, Model* m, unsigned int enumId, VarDecl* vd, M
   }
 
   // Create set literal for overall enum
-  auto* rhs = new BinOp(vd->loc(), IntLit::a(1), BOT_DOTDOT, partCardinality.back());
+  Expression* upperBound;
+  if (!partCardinality.empty()) {
+    upperBound = partCardinality.back();
+  } else {
+    // For empty enums, just create 1..0.
+    upperBound = IntLit::a(0);
+  }
+  auto* rhs = new BinOp(vd->loc(), IntLit::a(1), BOT_DOTDOT, upperBound);
   vd->e(rhs);
 
   if (parts.size() > 1) {
@@ -1120,9 +1162,7 @@ void TopoSorter::add(EnvI& env, VarDeclI* vdi, bool handleEnums, Model* enumItem
     vd->ti()->type(vdt);
     vd->type(vdt);
 
-    if (vd->e() != nullptr) {
-      create_enum_mapper(env, model, enumId, vd, enumItems);
-    }
+    create_enum_mapper(env, model, enumId, vd, enumItems);
   }
   scopes.add(env, vd);
 }
@@ -1448,7 +1488,7 @@ KeepAlive add_coercion(EnvI& env, Model* m, Expression* e, const Type& funarg_t)
     FunctionI* fi = m->matchFn(env, c, false);
     assert(fi);
     Type ct = fi->rtype(env, args, false);
-    ct.cv(e->type().cv());
+    ct.cv(e->type().cv() || ct.cv());
     c->type(ct);
     c->decl(fi);
     KeepAlive ka(c);
@@ -2103,7 +2143,7 @@ public:
       args[0] = bop.lhs();
       args[1] = bop.rhs();
       Type ty = fi->rtype(_env, args, true);
-      ty.cv(bop.lhs()->type().cv() || bop.rhs()->type().cv());
+      ty.cv(bop.lhs()->type().cv() || bop.rhs()->type().cv() || ty.cv());
       bop.type(ty);
 
       if (fi->e() != nullptr) {
@@ -2252,7 +2292,7 @@ public:
       uop.e(add_coercion(_env, _model, uop.e(), fi->argtype(_env, args, 0))());
       args[0] = uop.e();
       Type ty = fi->rtype(_env, args, true);
-      ty.cv(uop.e()->type().cv());
+      ty.cv(uop.e()->type().cv() || ty.cv());
       uop.type(ty);
       if (fi->e() != nullptr) {
         uop.decl(fi);
@@ -2380,7 +2420,7 @@ public:
 
     // Set type and decl
     Type ty = fi->rtype(_env, args, true);
-    ty.cv(cv);
+    ty.cv(cv || ty.cv());
     call.type(ty);
 
     if (Call* deprecated = fi->ann().getCall(constants().ann.mzn_deprecated)) {
@@ -2436,7 +2476,7 @@ public:
       isVar |= li->type().isvar();
     }
     Type ty = let.in()->type();
-    ty.cv(cv);
+    ty.cv(cv || ty.cv());
     if (isVar && ty.bt() == Type::BT_BOOL && ty.dim() == 0) {
       ty.ti(Type::TI_VAR);
     }
@@ -2912,6 +2952,13 @@ void typecheck(Env& env, Model* origModel, std::vector<TypeError>& typeErrors,
         _bottomUpTyper.run(i->e());
         if (i->e() != nullptr) {
           Type et = i->e()->type();
+          if (et.isbool()) {
+            Type target_t = Type::varint();
+            if (et.isOpt()) {
+              target_t.ot(Type::OT_OPTIONAL);
+            }
+            i->e(add_coercion(_env, _env.model, i->e(), target_t)());
+          }
 
           bool needOptCoercion = et.isOpt() && et.isint();
           if (needOptCoercion) {
@@ -3133,10 +3180,34 @@ void typecheck(Env& env, Model* origModel, std::vector<TypeError>& typeErrors,
   } while (didRemove);
 
   // Create par versions of remaining functions
-  {
+  if (!fnsToMakePar.empty()) {
     // First step: copy and register functions
     std::vector<FunctionI*> parFunctions;
     CopyMap parCopyMap;
+    // Step 1a: enter all global declarations into copy map
+    class EnterGlobalDecls : public EVisitor {
+    public:
+      CopyMap& cm;
+      EnterGlobalDecls(CopyMap& cm0) : cm(cm0) {}
+      void vId(Id& ident) {
+        if (ident.decl() != nullptr && ident.decl()->toplevel()) {
+          cm.insert(ident.decl(), ident.decl());
+        }
+      }
+    } _egd(parCopyMap);
+    for (auto& p : fnsToMakePar) {
+      if (!p.second.first) {
+        for (auto* param : p.first->params()) {
+          top_down(_egd, param);
+        }
+        for (ExpressionSetIter i = p.first->ann().begin(); i != p.first->ann().end(); ++i) {
+          top_down(_egd, *i);
+        }
+        top_down(_egd, p.first->e());
+      }
+    }
+
+    // Step 1b: copy functions
     for (auto& p : fnsToMakePar) {
       if (!p.second.first) {
         GCLock lock;
@@ -3503,7 +3574,7 @@ void output_model_interface(Env& env, Model* m, std::ostream& os,
   os << ",\n  \"method\": \"";
   os << _ifc.method;
   os << "\"";
-  os << ",\n  \"has_outputItem\": " << (_ifc.outputItem ? "true" : "false");
+  os << ",\n  \"has_output_item\": " << (_ifc.outputItem ? "true" : "false");
   os << ",\n  \"included_files\": [\n" << _ifc.ossIncludedFiles.str() << "\n  ]";
   os << "\n}\n";
 }

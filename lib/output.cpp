@@ -217,7 +217,7 @@ void make_par(EnvI& env, Expression* e) {
         bool outputObjective = (c.argCount() == 1 && eval_bool(env, c.arg(0)));
         c.id(ASTString("array1d"));
         Expression* json =
-            copy(env, env.cmap, create__json_output(env, outputObjective, false, false));
+            copy(env, env.cmap, create_json_output(env, outputObjective, false, false));
         std::vector<Expression*> new_args({json});
         new_args[0]->type(Type::parstring(1));
         c.args(new_args);
@@ -655,12 +655,14 @@ void create_dzn_output_item(EnvI& e, bool outputObjective, bool includeOutputIte
         bool needArrayXd = false;
         if (vd->type().dim() > 0) {
           ArrayLit* al = nullptr;
-          if ((vd->flat() != nullptr) && (vd->flat()->e() != nullptr)) {
-            al = eval_array_lit(_e, vd->flat()->e());
-          } else if (vd->e() != nullptr) {
-            al = eval_array_lit(_e, vd->e());
+          if (!vd->ann().contains(constants().ann.output_only)) {
+            if ((vd->flat() != nullptr) && (vd->flat()->e() != nullptr)) {
+              al = eval_array_lit(_e, vd->flat()->e());
+            } else if (vd->e() != nullptr) {
+              al = eval_array_lit(_e, vd->e());
+            }
           }
-          if (al->size() > 0) {
+          if (al == nullptr || al->size() > 0) {
             needArrayXd = true;
             s << "array" << vd->type().dim() << "d(";
             for (int i = 0; i < vd->type().dim(); i++) {
@@ -670,9 +672,33 @@ void create_dzn_output_item(EnvI& e, bool outputObjective, bool includeOutputIte
                 s << _e.getEnum(enumId)->e()->id()->str() << ", ";
               } else if (al != nullptr) {
                 s << al->min(i) << ".." << al->max(i) << ", ";
-              } else {
+              } else if (vd->ti()->ranges()[i]->domain() != nullptr) {
                 IntSetVal* idxset = eval_intset(_e, vd->ti()->ranges()[i]->domain());
                 s << *idxset << ", ";
+              } else {
+                // Don't know index set range - have to compute in solns2out
+                auto* sl = new StringLit(Location().introduce(), s.str());
+                _outputVars.push_back(sl);
+
+                std::string index_set_fn = "index_set";
+                if (vd->type().dim() > 1) {
+                  index_set_fn +=
+                      "_" + std::to_string(i + 1) + "of" + std::to_string(vd->type().dim());
+                }
+                auto* index_set_xx = new Call(Location().introduce(), index_set_fn, {vd->id()});
+                index_set_xx->type(Type::parsetint());
+                auto* i_fi = _e.model->matchFn(_e, index_set_xx, false);
+                assert(i_fi);
+                index_set_xx->decl(i_fi);
+
+                auto* show = new Call(Location().introduce(), constants().ids.show, {index_set_xx});
+                show->type(Type::parstring());
+                FunctionI* s_fi = _e.model->matchFn(_e, show, false);
+                assert(s_fi);
+                show->decl(s_fi);
+
+                _outputVars.push_back(show);
+                s.str(", ");
               }
             }
           }
@@ -738,8 +764,8 @@ void create_dzn_output_item(EnvI& e, bool outputObjective, bool includeOutputIte
   e.model->addItem(newOutputItem);
 }
 
-ArrayLit* create__json_output(EnvI& e, bool outputObjective, bool includeOutputItem,
-                              bool hasChecker) {
+ArrayLit* create_json_output(EnvI& e, bool outputObjective, bool includeOutputItem,
+                             bool hasChecker) {
   std::vector<Expression*> outputVars;
   outputVars.push_back(new StringLit(Location().introduce(), "{\n"));
 
@@ -867,7 +893,7 @@ void create_json_output_item(EnvI& e, bool outputObjective, bool includeOutputIt
                              bool hasChecker) {
   auto* newOutputItem =
       new OutputI(Location().introduce(),
-                  create__json_output(e, outputObjective, includeOutputItem, hasChecker));
+                  create_json_output(e, outputObjective, includeOutputItem, hasChecker));
   e.model->addItem(newOutputItem);
 }
 

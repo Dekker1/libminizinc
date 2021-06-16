@@ -1619,6 +1619,10 @@ std::string b_logstream(EnvI& env, Call* call) { return env.logstream.str(); }
 
 bool b_in_redundant_constraint(EnvI& env, Call* /*call*/) { return env.inRedundantConstraint > 0; }
 
+bool b_in_symmetry_breaking_constraint(EnvI& env, Call* /*call*/) {
+  return env.inSymmetryBreakingConstraint > 0;
+}
+
 Expression* b_set2array(EnvI& env, Call* call) {
   assert(call->argCount() == 1);
   GCLock lock;
@@ -1785,7 +1789,7 @@ std::string b_show_json(EnvI& env, Call* call) {
 }
 
 Expression* b_output_json(EnvI& env, Call* call) {
-  return create__json_output(env, false, false, false);
+  return create_json_output(env, false, false, false);
 }
 Expression* b_output_json_parameters(EnvI& env, Call* call) {
   std::vector<Expression*> outputVars;
@@ -3176,6 +3180,10 @@ void register_builtins(Env& e) {
   {
     rb(env, m, ASTString("mzn_in_redundant_constraint"), std::vector<Type>(),
        b_in_redundant_constraint);
+  }
+  {
+    rb(env, m, ASTString("mzn_in_symmetry_breaking_constraint"), std::vector<Type>(),
+       b_in_symmetry_breaking_constraint);
   }
   {
     std::vector<Type> t_length(1);
