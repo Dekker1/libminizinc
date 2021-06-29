@@ -424,14 +424,12 @@ inline bool GecodeSolverInstance::valueWithinBounds(double b) {
 
 void GecodeSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) {
   const std::string& name = bs[c->pred()].name;
+
   if (name == "solve_this") {
     IntVal solve_mode = c->arg(0).toIntVal();
     Val obj = c->arg(1);
-    //      Val search_a = c->arg(2);
-    //      IntVal var_sel = c->arg(3)();
-    //      IntVal val_sel = c->arg(4)();
-    /// TODO: handle solve annotation
-    if (solve_mode != 0) {
+    SolveI* si;
+    if (solve_mode != 1) {
       _current_space->_optVarIsInt = true;
       _current_space->_solveType = solve_mode == 1 ? MiniZinc::SolveI::SolveType::ST_MIN
                                                    : MiniZinc::SolveI::SolveType::ST_MAX;
@@ -444,8 +442,23 @@ void GecodeSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Co
         }
       }
       GCLock lock;
-      solveExpr = new Id(Location().introduce(), c->arg(0).timestamp(), nullptr);
+      solveExpr = new Id(Location().introduce(), obj.timestamp(), nullptr);
     }
+    // TODO: Use correct search heuristic
+    /* if (c->size() == 5) {
+      Val search_a = c->arg(2);
+      IntVal var_sel = c->arg(3).toIntVal();
+      IntVal val_sel = c->arg(4).toIntVal();
+      if (search_a.isVec() && search_a.size() > 0 && var_sel > 0 && val_sel > 0) {
+        Expression* search_vars = val_to_expr(Type::varint(1), search_a);
+        ASTString var_sel_s(var_sel == 1 ? "input_order" : "first_fail");
+        ASTString val_sel_s(val_sel == 1 ? "indomain_min" : "indomain_max");
+        Id* var_sel_id = new Id(Location().introduce(), var_sel_s, nullptr);
+        Id* val_sel_id = new Id(Location().introduce(), val_sel_s, nullptr);
+        Id* complete_id = new Id(Location().introduce(), "complete", nullptr);
+        si->ann().add(new Call(Location().introduce(), ASTString("int_search"),
+                               {search_vars, var_sel_id, val_sel_id, complete_id}));
+      } */
     return;
   }
   _constraintRegistry.post(name, c);
@@ -527,9 +540,9 @@ void GecodeSolverInstance::processFlatZinc(void) {
   //                 std::endl;
   //               } else {
   //                 std::stringstream ssm;
-  //                 ssm << "GecodeSolverInstance::processFlatZinc: Error: Unbounded variable: " <<
-  //                 *vd->id() << ", rerun with --allow-unbounded-vars to add arbitrary bounds."<<
-  //                 std::endl; throw InternalError(ssm.str());
+  //                 ssm << "GecodeSolverInstance::processFlatZinc: Error: Unbounded variable: "
+  //                 << *vd->id() << ", rerun with --allow-unbounded-vars to add arbitrary
+  //                 bounds."<< std::endl; throw InternalError(ssm.str());
   //               }
   //             }
   //           } else { // there is an initialisation expression
@@ -549,8 +562,8 @@ void GecodeSolverInstance::processFlatZinc(void) {
   //                       _current_space->iv.size()-1));
   //               } else {
   //                 std::stringstream ssm;
-  //                 ssm << "GecodeSolverInstance::processFlatZinc: Error: Unsafe value for Gecode:
-  //                 " << il << std::endl; throw InternalError(ssm.str());
+  //                 ssm << "GecodeSolverInstance::processFlatZinc: Error: Unsafe value for
+  //                 Gecode: " << il << std::endl; throw InternalError(ssm.str());
   //               }
   //             }
   //           }
@@ -614,13 +627,13 @@ void GecodeSolverInstance::processFlatZinc(void) {
   //                 lb = Gecode::Float::Limits::min;
   //                 ub = Gecode::Float::Limits::max;
   //                 std::cerr << "%% GecodeSolverInstance::processFlatZinc: Warning: Unbounded
-  //                 variable " << *vd->id() << " given maximum float bounds, this may be incorrect:
-  //                 " << std::endl;
+  //                 variable " << *vd->id() << " given maximum float bounds, this may be
+  //                 incorrect: " << std::endl;
   //               } else {
   //                 std::stringstream ssm;
-  //                 ssm << "GecodeSolverInstance::processFlatZinc: Error: Unbounded variable: " <<
-  //                 *vd->id() << ", rerun with --allow-unbounded-vars to add arbitrary bounds."<<
-  //                 std::endl; throw InternalError(ssm.str());
+  //                 ssm << "GecodeSolverInstance::processFlatZinc: Error: Unbounded variable: "
+  //                 << *vd->id() << ", rerun with --allow-unbounded-vars to add arbitrary
+  //                 bounds."<< std::endl; throw InternalError(ssm.str());
   //               }
   //             }
   //             FloatVar floatVar(*this->_current_space, lb, ub);
@@ -744,14 +757,14 @@ Gecode::IntArgs GecodeSolverInstance::arg2intargs(Expression* arg, int offset) {
   return ia;
 }
 
-Gecode::IntArgs GecodeSolverInstance::arg2intargs(const Val& arg, int offset) {
-  if (!arg.isVec()) {
+Gecode::IntArgs GecodeSolverInstance::arg2intargs(const Val& vec, int offset) {
+  if (!vec.isVec()) {
     std::stringstream ssm;
-    ssm << "Invalid argument in arg2intargs: " << arg.toString();
+    ssm << "Invalid argument in arg2intargs: " << vec.toString();
     ssm << ". Expected Array.";
     throw InternalError(ssm.str());
   }
-  Val vec = arg[0];
+  assert(!vec.toVec()->hasIndexSet());
   IntArgs ia(vec.size() + offset);
   for (int i = offset; i--;) ia[i] = 0;
   for (int i = vec.size(); i--;) {
@@ -775,14 +788,14 @@ Gecode::IntArgs GecodeSolverInstance::arg2boolargs(Expression* arg, int offset) 
   return ia;
 }
 
-Gecode::IntArgs GecodeSolverInstance::arg2boolargs(const Val& arg, int offset) {
-  if (!arg.isVec()) {
+Gecode::IntArgs GecodeSolverInstance::arg2boolargs(const Val& vec, int offset) {
+  if (!vec.isVec()) {
     std::stringstream ssm;
-    ssm << "Invalid argument in arg2intargs: " << arg.toString();
+    ssm << "Invalid argument in arg2intargs: " << vec.toString();
     ssm << ". Expected Vec.";
     throw InternalError(ssm.str());
   }
-  Val vec = arg[0];
+  assert(!vec.toVec()->hasIndexSet());
   IntArgs ia(vec.size() + offset);
   for (int i = offset; i--;) ia[i] = 0;
   for (int i = vec.size(); i--;) {
@@ -857,8 +870,8 @@ IntSetArgs GecodeSolverInstance::arg2intsetargs(EnvI& envi, Expression* arg, int
   return ia;
 }
 
-Gecode::IntVarArgs GecodeSolverInstance::arg2intvarargs(const Val& arg, int offset) {
-  Val vec = arg[0];
+Gecode::IntVarArgs GecodeSolverInstance::arg2intvarargs(const Val& vec, int offset) {
+  assert(!vec.toVec()->hasIndexSet());
   if (vec.size() == 0) {
     IntVarArgs emptyIa(0);
     return emptyIa;
@@ -932,8 +945,8 @@ Gecode::IntVarArgs GecodeSolverInstance::arg2intvarargs(Expression* arg, int off
   return ia;
 }
 
-Gecode::BoolVarArgs GecodeSolverInstance::arg2boolvarargs(const Val& arg, int offset, int siv) {
-  Val vec = arg[0];
+Gecode::BoolVarArgs GecodeSolverInstance::arg2boolvarargs(const Val& vec, int offset, int siv) {
+  assert(!vec.toVec()->hasIndexSet());
   if (vec.size() == 0) {
     BoolVarArgs emptyIa(0);
     return emptyIa;
@@ -1130,8 +1143,8 @@ ArrayLit* GecodeSolverInstance::arg2arraylit(Expression* arg) {
   return a;
 }
 
-bool GecodeSolverInstance::isBoolArray(const Val& arg, int& singleInt) {
-  Val arr = arg[0];
+bool GecodeSolverInstance::isBoolArray(const Val& arr, int& singleInt) {
+  assert(!arr.toVec()->hasIndexSet());
   singleInt = -1;
   if (arr.size() == 0) return true;
   for (int i = arr.size(); i--;) {
@@ -2125,8 +2138,9 @@ void GecodeSolverInstance::createBranchers(Annotation& ann, Expression* addition
   if (iv_sol.size() > 0) branch(*this->_current_space, iv_sol, def_int_varsel, def_int_valsel);
   if (bv_sol.size() > 0) branch(*this->_current_space, bv_sol, def_bool_varsel, def_bool_valsel);
 
-    // std::cout << "DEBUG: branched over " << iv_sol.size()  << " integer variables."<< std::endl;
-    // std::cout << "DEBUG: branched over " << bv_sol.size()  << " Boolean variables."<< std::endl;
+    // std::cout << "DEBUG: branched over " << iv_sol.size()  << " integer variables."<<
+    // std::endl; std::cout << "DEBUG: branched over " << bv_sol.size()  << " Boolean
+    // variables."<< std::endl;
 #ifdef GECODE_HAS_FLOAT_VARS
   introduced = 0;
   funcdep = 0;
@@ -2212,7 +2226,8 @@ void GecodeSolverInstance::createBranchers(Annotation& ann, Expression* addition
                          def_float_varsel, def_float_valsel
 #endif
     );  // end post
-    // std::cout << "DEBUG: Posted aux-var-brancher for " << n_aux << " aux-variables" << std::endl;
+    // std::cout << "DEBUG: Posted aux-var-brancher for " << n_aux << " aux-variables" <<
+    // std::endl;
   }  // end if n_aux > 0
   // else
   // std::cout << "DEBUG: No aux vars to branch on." << std::endl;
