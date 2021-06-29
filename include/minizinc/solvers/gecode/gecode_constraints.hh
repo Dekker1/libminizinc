@@ -93,7 +93,7 @@ PosterImpl(p_bool_lin_gt_imp);
 
 ///* arithmetic constraints */
 //      PosterImpl(p_int_plus);
-//      PosterImpl(p_int_sum);
+PosterImpl(p_int_sum);
 //      PosterImpl(p_int_minus);
 PosterImpl(p_int_times);
 PosterImpl(p_int_div);

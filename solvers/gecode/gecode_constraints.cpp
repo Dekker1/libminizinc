@@ -203,6 +203,78 @@ void p_int_lt_imp(SolverInstanceBase& s, const Constraint* call) {
   p_int_CMP_reif(static_cast<GecodeSolverInstance&>(s), IRT_LE, RM_IMP, call);
 }
 
+// TODO: int_sum shouldn't occur
+// These should be int_lin_eq, but binding domains are not yet aggregated.
+// This is a temporary solution in the meantime.
+void p_int_sum(SolverInstanceBase& _s, const Constraint* call) {
+  GecodeSolverInstance& s = static_cast<GecodeSolverInstance&>(_s);
+  const Val& ann = call->ann();
+  const Val& vars = call->arg(0);
+  const Val& res = Val::follow_alias(call->arg(1));
+  IntArgs ia(vars.size() + 1);
+  for (int i = 0; i < vars.size(); i++) {
+    ia[i] = 1;
+  }
+  ia[vars.size()] = -1;
+  int singleIntVar;
+  bool isBool = s.isBoolArray(vars, singleIntVar);
+  if (res.lb().toInt() < 0 || res.ub().toInt() > 1) {
+    if (singleIntVar == -1) {
+      singleIntVar = vars.size();
+    } else {
+      isBool = false;
+    }
+  }
+
+  if (isBool) {
+    if (singleIntVar != -1) {
+      if (std::abs(ia[singleIntVar]) == 1) {
+        IntVar siv = s.arg2intvar(singleIntVar < vars.size() ? vars[singleIntVar] : res);
+        BoolVarArgs iv = s.arg2boolvarargs(vars, 0, singleIntVar);
+        IntArgs ia_tmp(ia.size() - 1);
+        int count = 0;
+        for (int i = 0; i < ia.size(); i++) {
+          if (i != singleIntVar) ia_tmp[count++] = ia[singleIntVar] == -1 ? ia[i] : -ia[i];
+        }
+        IntRelType t = (ia[singleIntVar] == -1 ? IRT_EQ : swap(IRT_EQ));
+        if (singleIntVar == vars.size()) {
+          linear(*s._current_space, ia_tmp, iv, t, siv, s.ann2icl(ann));
+        } else {
+          BoolVarArgs iv_new(vars.size());
+          for (int i = 0; i < vars.size(); i++) {
+            iv_new[i] = iv[i];
+          }
+          iv_new[vars.size() - 1] = s.arg2boolvar(res);
+        }
+      } else {
+        IntVarArgs iv = s.arg2intvarargs(vars);
+        IntVarArgs iv_new(vars.size() + 1);
+        for (int i = 0; i < vars.size(); i++) {
+          iv_new[i] = iv[i];
+        }
+        iv_new[vars.size()] = s.arg2intvar(res);
+        linear(*s._current_space, ia, iv_new, IRT_EQ, 0, s.ann2icl(ann));
+      }
+    } else {
+      BoolVarArgs iv = s.arg2boolvarargs(vars);
+      BoolVarArgs iv_new(vars.size() + 1);
+      for (int i = 0; i < vars.size(); i++) {
+        iv_new[i] = iv[i];
+      }
+      iv_new[vars.size()] = s.arg2boolvar(res);
+      linear(*s._current_space, ia, iv_new, IRT_EQ, 0, s.ann2icl(ann));
+    }
+  } else {
+    IntVarArgs iv = s.arg2intvarargs(vars);
+    IntVarArgs iv_new(vars.size() + 1);
+    for (int i = 0; i < vars.size(); i++) {
+      iv_new[i] = iv[i];
+    }
+    iv_new[vars.size()] = s.arg2intvar(res);
+    linear(*s._current_space, ia, iv_new, IRT_EQ, 0, s.ann2icl(ann));
+  }
+}
+
 void p_int_lin_CMP(GecodeSolverInstance& s, IntRelType irt, const Constraint* call) {
   const Val& ann = call->ann();
   IntArgs ia = s.arg2intargs(call->arg(0));

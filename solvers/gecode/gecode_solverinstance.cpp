@@ -207,7 +207,7 @@ void GecodeSolverInstance::registerConstraints(void) {
   registerConstraint("int_lin_gt_reif", GecodeConstraints::p_int_lin_gt_reif);
   registerConstraint("int_lin_gt_imp", GecodeConstraints::p_int_lin_gt_imp);
   //      registerConstraint("int_plus", GecodeConstraints::p_int_plus);
-  //      registerConstraint("int_sum", GecodeConstraints::p_int_sum);
+  registerConstraint("int_sum", GecodeConstraints::p_int_sum);
   //      registerConstraint("int_minus", GecodeConstraints::p_int_minus);
   registerConstraint("int_times", GecodeConstraints::p_int_times);
   registerConstraint("int_div", GecodeConstraints::p_int_div);
@@ -951,7 +951,7 @@ Gecode::BoolVarArgs GecodeSolverInstance::arg2boolvarargs(const Val& vec, int of
     BoolVarArgs emptyIa(0);
     return emptyIa;
   }
-  BoolVarArgs ia(vec.size() + offset - (siv == -1 ? 0 : 1));
+  BoolVarArgs ia(vec.size() + offset - ((siv < 0 || siv >= vec.size()) ? 0 : 1));
   for (int i = offset; i--;) ia[i] = BoolVar(*this->_current_space, 0, 0);
   for (int i = 0; i < static_cast<int>(vec.size()); i++) {
     if (i == siv) continue;
