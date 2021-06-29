@@ -450,8 +450,8 @@ void GecodeSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Co
   }
   _constraintRegistry.post(name, c);
 }
-void GecodeSolverInstance::addVariable(Variable* var) {
-  GecodeConstraints::p_mk_intvar(*this, var);
+void GecodeSolverInstance::addVariable(Variable* var, bool isOutput) {
+  GecodeConstraints::p_mk_intvar(*this, var, isOutput);
 }
 
 void GecodeSolverInstance::processFlatZinc(void) {

@@ -55,7 +55,7 @@ void minizinc_add_call(MZNInstance _inst, const char* call, ...) {
     args.emplace_back(num);
   }
 
-  inst->slv.interpreter->call(it->second.first, BytecodeProc::ROOT, args);
+  inst->slv.interpreter->call(it->second.first, std::move(args));
 }
 
 void minizinc_set_solution(MZNInstance _inst, int def, int sol) {

@@ -52,7 +52,7 @@ endif(POLICY CMP0074)
 find_package(CPlex)
 # TODO: Resolve issues with the Gecode / Geas solver interface
 # find_package(Geas)
-# find_package(Gecode 6.0 COMPONENTS Driver Float Int Kernel Minimodel Search Set Support)
+find_package(Gecode 6.0 COMPONENTS Driver Float Int Kernel Minimodel Search Set Support)
 find_package(Gurobi)
 find_package(OsiCBC)
 find_package(SCIP CONFIG)

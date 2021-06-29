@@ -252,9 +252,9 @@ public:
   Status solve(void) override;
   void resetSolver(void) override;
 
-  virtual void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override;
-  virtual void addVariable(Variable* var) override;
-  virtual Val getSolutionValue(Variable* var) override;
+  void addConstraint(const std::vector<BytecodeProc>& bs, Constraint* c) override;
+  void addVariable(Variable* var, bool isOutput) override;
+  Val getSolutionValue(Variable* var) override;
 
   // Able to return to the solver into a position where no search decisions
   // have been made. SolverInstance must allow addDefinition calls after

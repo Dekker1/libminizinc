@@ -22,7 +22,7 @@ namespace MiniZinc {
 
 namespace GecodeConstraints {
 
-void p_mk_intvar(SolverInstanceBase& s, const Variable* var);
+void p_mk_intvar(SolverInstanceBase& s, const Variable* var, bool isOutput);
 
 #define PosterImpl(X) void X(SolverInstanceBase& s, const Constraint* ce)
 

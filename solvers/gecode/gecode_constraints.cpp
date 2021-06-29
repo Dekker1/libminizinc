@@ -19,7 +19,7 @@ using namespace Gecode;
 namespace MiniZinc {
 namespace GecodeConstraints {
 
-void p_mk_intvar(SolverInstanceBase& s, const Variable* var) {
+void p_mk_intvar(SolverInstanceBase& s, const Variable* var, bool isOutput) {
   GecodeSolverInstance& gi = static_cast<GecodeSolverInstance&>(s);
   assert(var->timestamp() != -1);
   if (var->isBounded()) {
@@ -28,14 +28,14 @@ void p_mk_intvar(SolverInstanceBase& s, const Variable* var) {
       gi._current_space->bv.push_back(boolVar);
       gi.insertVar(var,
                    GecodeVariable(GecodeVariable::BOOL_TYPE, gi._current_space->bv.size() - 1));
-      gi._current_space->bv_introduced.push_back(false);
-      gi._current_space->bv_defined.push_back(false);
+      gi._current_space->bv_introduced.push_back(!isOutput);
+      gi._current_space->bv_defined.push_back(!var->definitions().empty());
     } else {
       IntVar intVar(*gi._current_space, gi.arg2intset(Val(var->domain())));
       gi._current_space->iv.push_back(intVar);
       gi.insertVar(var, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size() - 1));
-      gi._current_space->iv_introduced.push_back(false);
-      gi._current_space->iv_defined.push_back(false);
+      gi._current_space->iv_introduced.push_back(!isOutput);
+      gi._current_space->iv_defined.push_back(!var->definitions().empty());
     }
   } else {
     IntVar intVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
@@ -44,8 +44,8 @@ void p_mk_intvar(SolverInstanceBase& s, const Variable* var) {
     std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable "
               << var->timestamp()
               << " given maximum integer bounds, this may be incorrect: " << std::endl;
-    gi._current_space->iv_introduced.push_back(false);
-    gi._current_space->iv_defined.push_back(false);
+    gi._current_space->iv_introduced.push_back(!isOutput);
+    gi._current_space->iv_defined.push_back(!var->definitions().empty());
   }
 }
 
