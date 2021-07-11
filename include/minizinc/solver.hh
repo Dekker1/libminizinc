@@ -133,8 +133,8 @@ private:
   std::ostream& os;
   std::ostream& log;
   SolverInstance::Status interpreter_status = SolverInstance::UNKNOWN;
-  //    Definition* def_ptr = nullptr; /// TODO: this doesn't work, need to keep track of what's new
-  //    in some other way
+  // Incremental interface
+  std::vector<std::pair<Variable*, size_t>> def_stack = {{nullptr, 0}};
   double flatten_time = 0;
 
 public:

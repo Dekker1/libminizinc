@@ -994,49 +994,65 @@ std::pair<SolverInstance::Status, std::string> MznSolver::run() {
 
 void MznSolver::addDefinitions() {
   /// TODO: currently this will always add all variables and constraints
-  Variable* v = interpreter->root();
-  bool has_output = false;
-  std::set<int> output;
-  for (Constraint* c : v->definitions()) {
-    if (interpreter->_procs[c->pred()].name == "output_this") {
-      assert(c->size() == 1);
-      has_output = true;
-      Val arg = c->arg(0);
-      assert(arg.isVec());
-      for (int i = 0; i < arg.size(); ++i) {
-        Val real = Val::follow_alias(Val(arg[i]));
-        if (real.isVar()) {
-          output.insert(real.toVar()->timestamp());
+  Variable* v_start;
+  size_t c_start;
+  std::tie(v_start, c_start) = def_stack.back();
+  std::set<int> output_vars;
+  Variable* root = interpreter->root();
+
+  auto fzn = dynamic_cast<FZNSolverInstance*>(si);
+  if (v_start == nullptr) {
+    v_start = root;
+    for (Constraint* c : v_start->definitions()) {
+      if (interpreter->_procs[c->pred()].name == "output_this") {
+        assert(c->size() == 1);
+        output = c;
+        Val arg = c->arg(0);
+        assert(arg.isVec());
+        for (int i = 0; i < arg.size(); ++i) {
+          Val real = Val::follow_alias(Val(arg[i]));
+          if (real.isVar()) {
+            output_vars.insert(real.toVar()->timestamp());
+          }
         }
+        break;
       }
-      break;
     }
   }
-  for (Variable* v = interpreter->root()->next(); v != interpreter->root(); v = v->next()) {
+
+  // Add all new variables
+  for (Variable* v = v_start->next(); v != interpreter->root(); v = v->next()) {
     // Only add variables that are not aliased
     if (Val(v) == Val::follow_alias(Val(v))) {
-      si->addVariable(v, !has_output || output.find(v->timestamp()) != output.end());
+      si->addVariable(v,
+                      output != nullptr || output_vars.find(v->timestamp()) != output_vars.end());
     }
   }
-  auto fzn = dynamic_cast<FZNSolverInstance*>(si);
-  do {
+  // Add defining constraints
+  for (Variable* v = v_start->next(); v != interpreter->root(); v = v->next()) {
     for (Constraint* c : v->definitions()) {
-      if (interpreter->_procs[c->pred()].name == "output_this") {
-        if (fzn) {
-          assert(c->size() == 1);
-          fzn->outputArray(c->arg(0).toVec());
-        }
-        continue;
-      } else {
-        si->addConstraint(interpreter->_procs, c);
-      }
+      si->addConstraint(interpreter->_procs, c);
     }
-    v = v->next();
-  } while (v != interpreter->root());
-  if (!has_output && fzn != nullptr) {
+  }
+  // Add new root level constraints
+  for (size_t i = c_start; i < root->definitions().size(); ++i) {
+    Constraint* c = root->definitions()[i];
+    if (interpreter->_procs[c->pred()].name == "output_this") {
+      if (fzn) {
+        assert(c->size() == 1);
+        fzn->outputArray(c->arg(0).toVec());
+      }
+      continue;
+    } else {
+      si->addConstraint(interpreter->_procs, c);
+    }
+  }
+  // Force output statement
+  if (output == nullptr && fzn != nullptr) {
     fzn->outputDict(interpreter->root());
   }
   // TODO: Domain Changes
+  def_stack[def_stack.size() - 1] = {root->prev(), root->definitions().size()};
 }
 
 void MznSolver::pushToSolver() {
@@ -1046,6 +1062,7 @@ void MznSolver::pushToSolver() {
     assert(interpreter->trail.len() == tsi->states() + 1);
     tsi->restart();
     addDefinitions();
+    def_stack.push_back(def_stack.back());
     tsi->pushState();
   } else {
     assert(false);
@@ -1057,13 +1074,12 @@ void MznSolver::popFromSolver() {
     assert(interpreter->trail.len() == tsi->states() - 1);
     tsi->restart();
     tsi->popState();
-
-    //    Definition* head = interpreter->_agg[0].def_stack;
-    //    def_ptr = head->prev();
+    def_stack.pop_back();
   } else {
     assert(false);
     delete si;
     si = nullptr;
-    // TODO: do we need to reconstruct the model here or can we trust there is a push before solving
+    // TODO: do we need to reconstruct the model here or can we trust there is a push before
+    // solving
   }
 }

@@ -51,6 +51,11 @@ void Interpreter::pushAgg(const Val& v, int stackOffset) {
 void Interpreter::pushConstraint(Constraint* c) { _agg.back().constraints.push_back(c); }
 
 PropStatus Interpreter::subscribe(Constraint* c) {
+  // TODO: This disables propagation after trailing, this shouldn't be necessary if we can correctly
+  // communicate with the solvers
+  if (trail.is_trailed(_root_var)) {
+    return PS_OK;
+  }
   if (c->pred() < primitiveMap().size()) {
     return primitiveMap()[c->pred()]->subscribe(*this, c);
   }
