@@ -22,7 +22,8 @@ using namespace MiniZinc;
 
 class Instance {
 public:
-  Instance(std::string file, std::string solver) : slv({"--solver", solver, file}){};
+  Instance(std::string file, std::string data_file, std::string solver)
+      : slv({"--solver", solver, file, data_file}){};
 
   MznSolver slv;
   std::string result;
@@ -32,8 +33,9 @@ void set_rnd_seed(int seed) {
   dynamic_cast<BytecodePrimitives::Uniform*>(primitiveMap()[PrimitiveMap::UNIFORM])->setSeed(seed);
 }
 
-MZNInstance minizinc_instance_init(const char* mza_file, const char* solver) {
-  auto inst = new Instance(mza_file, solver);
+MZNInstance minizinc_instance_init(const char* mza_file, const char* data_file,
+                                   const char* solver) {
+  auto inst = new Instance(mza_file, data_file, solver);
   return reinterpret_cast<MZNInstance>(inst);
 }
 
