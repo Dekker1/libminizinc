@@ -95,13 +95,14 @@ void Uniform::execute(Interpreter& i, const std::vector<Val>& args) {
 
 void Sol::execute(Interpreter& i, const std::vector<Val>& args) {
   assert(args.size() == 1);
-  assert(args[0].isVar());
-
-  auto it = i.solutions.find(args[0].timestamp());
-  assert(it != i.solutions.end());
-  Val sol(it->second);
-
-  i.pushAgg(sol, -1);
+  if (args[0].isVar()) {
+    auto it = i.solutions.find(args[0].timestamp());
+    assert(it != i.solutions.end());
+    i.pushAgg(Val(it->second), -1);
+  } else {
+    assert(args[0].isInt());
+    i.pushAgg(args[0], -1);
+  }
 };
 
 void Sort::execute(Interpreter& i, const std::vector<Val>& args) {
