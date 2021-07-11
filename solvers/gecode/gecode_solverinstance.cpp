@@ -2417,6 +2417,7 @@ IntAssign GecodeSolverInstance::ann2asnivalsel(std::string s, Rnd& rnd) {
 void GecodeSolverInstance::pushState() {
   stack.push_back(_current_space);
   _variableMap.emplace_back();
+  _current_space->status();
   _current_space = static_cast<FznSpace*>(_current_space->clone());
 }
 
