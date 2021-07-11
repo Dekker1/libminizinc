@@ -858,10 +858,10 @@ std::string MznSolver::printSolution(SolverInstance::Status s) {
     case SolverInstance::SAT:
     case SolverInstance::OPT: {
       if (output) {
-        Val vec = output->arg(0)[0];
+        Val vec = output->arg(0);
         ss << (output_dict ? '{' : '[');
         for (int i = 0; i < vec.size(); ++i) {
-          Val v = Val::follow_alias(vec[i]);
+          Val v = vec[i];
           if (i > 0) {
             ss << ", ";
           }
@@ -870,7 +870,12 @@ std::string MznSolver::printSolution(SolverInstance::Status s) {
               ss << "\"" << v.timestamp() << "\""
                  << ": ";
             }
-            ss << si->getSolutionValue(v.toVar()).toString();
+            v = Val::follow_alias(v);
+            if (v.isVar()) {
+              ss << si->getSolutionValue(v.toVar()).toString();
+            } else {
+              ss << v.toString();
+            }
           } else {
             assert(!output_dict);
             ss << v.toString();
