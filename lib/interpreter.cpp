@@ -1530,15 +1530,28 @@ void Trail::untrail(MiniZinc::Interpreter* interpreter) {
       }
     }
   }
-  /// TODO: Remove all newly created variables
-  //    if (stack->prev() != back) {  // If last element on the stack changed
-  //      do {
-  //        Variable* rem = back;
-  //        back = back->prev();
-  //        rem->destroy(interpreter);
-  //        Variable::free(rem);
-  //      } while (back->next() != back);
-  //    }
+  // Undo all changes to definitions
+  while (def_trail.size() > deft_size) {
+    Variable* var;
+    Constraint* con;
+    bool remove;
+    std::tie(var, con, remove) = def_trail.back();
+    if (remove) {
+      assert(var->definitions().back() == con);
+      var->_definitions.pop_back();
+    } else {
+      assert(false);
+    }
+    def_trail.pop_back();
+  }
+  // Remove all newly created variables
+  Variable* back = interpreter->root()->prev();
+  while (back->timestamp() > timestamp) {
+    Variable* rem = back;
+    back = back->prev();
+    rem->destroy(interpreter);
+    Variable::free(rem);
+  }
   // TODO: Should we remove newly created propagators??
   // Reset the timestamp count to its previous value
   interpreter->_identCount = timestamp;
