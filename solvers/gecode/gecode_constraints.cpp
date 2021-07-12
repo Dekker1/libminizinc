@@ -38,7 +38,9 @@ void p_mk_intvar(SolverInstanceBase& s, const Variable* var, bool isOutput) {
       gi._current_space->iv_defined.push_back(!var->definitions().empty());
     }
   } else {
-    IntVar intVar(*gi._current_space, Gecode::Int::Limits::min, Gecode::Int::Limits::max);
+    IntVar intVar(*gi._current_space,
+                  var->lb().isFinite() ? var->lb().toInt() : Gecode::Int::Limits::min,
+                  var->ub().isFinite() ? var->ub().toInt() : Gecode::Int::Limits::max);
     gi._current_space->iv.push_back(intVar);
     gi.insertVar(var, GecodeVariable(GecodeVariable::INT_TYPE, gi._current_space->iv.size() - 1));
     std::cerr << "% GecodeSolverInstance::processFlatZinc: Warning: Unbounded variable "
