@@ -1555,7 +1555,7 @@ void Trail::untrail(MiniZinc::Interpreter* interpreter) {
       assert(var->definitions().back() == con);
       var->_definitions.pop_back();
     } else {
-      assert(false);
+      var->_definitions.push_back(con);
     }
     def_trail.pop_back();
   }
