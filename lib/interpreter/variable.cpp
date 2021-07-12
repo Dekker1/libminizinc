@@ -346,10 +346,10 @@ void Variable::alias(Interpreter* interpreter, Val v) {
   _subscriptions.clear();
 
   // Set Alias
-  interpreter->trail.trail_alias(interpreter, this);
   _aliased = true;
   _domain = v;
   v.addRef(interpreter);
+  interpreter->trail.trail_alias(interpreter, this);
 }
 
 void Variable::unalias(Interpreter* interpreter, Val dom) {
