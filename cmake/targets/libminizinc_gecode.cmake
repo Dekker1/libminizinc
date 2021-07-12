@@ -21,6 +21,17 @@ if(GECODE_FOUND AND USE_GECODE)
   target_include_directories(minizinc_gecode PRIVATE "${GECODE_INCLUDE_DIRS}")
   add_dependencies(minizinc_gecode minizinc_parser)
 
+  # Workaround to force CMake to link in the correct order
+  target_link_libraries(Gecode::Support INTERFACE ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries(Gecode::Kernel INTERFACE Gecode::Support)
+  target_link_libraries(Gecode::Search INTERFACE Gecode::Kernel)
+  target_link_libraries(Gecode::Int INTERFACE Gecode::Kernel)
+  target_link_libraries(Gecode::Set INTERFACE Gecode::Int)
+  target_link_libraries(Gecode::Float INTERFACE Gecode::Int)
+  target_link_libraries(Gecode::Minimodel INTERFACE Gecode::Int Gecode::Set Gecode::Float Gecode::Search)
+  target_link_libraries(Gecode::Driver INTERFACE Gecode::Int)
+  target_link_libraries(Gecode::Flatzinc INTERFACE Gecode::Minimodel Gecode::Driver)
+
   ### Setup correct compilation into the MiniZinc library
   target_compile_definitions(mzn PRIVATE HAS_GECODE)
   target_sources(mzn PRIVATE $<TARGET_OBJECTS:minizinc_gecode>)
