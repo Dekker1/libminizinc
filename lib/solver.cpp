@@ -817,7 +817,7 @@ void MznSolver::flatten(const std::string& filename, const std::string& modelNam
   }
   flatten_time = tm01.s();
   // FIXME: Global registers should not be removed, merely hidden
-  interpreter->clear_globals();
+  // interpreter->clear_globals();
   if (verbose) {
     std::cerr << "Status: " << Interpreter::status_to_string[interpreter->status()] << std::endl;
     if (interpreter->status() == Interpreter::ROGER) {
