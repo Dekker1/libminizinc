@@ -1282,22 +1282,27 @@ Interpreter::~Interpreter(void) {
       case 1: {
         auto table = static_cast<CSETable<FixedKey<1>>*>(cse[i]);
         table->destroy(this);
+        break;
       }
       case 2: {
         auto table = static_cast<CSETable<FixedKey<2>>*>(cse[i]);
         table->destroy(this);
+        break;
       }
       case 3: {
         auto table = static_cast<CSETable<FixedKey<3>>*>(cse[i]);
         table->destroy(this);
+        break;
       }
       case 4: {
         auto table = static_cast<CSETable<FixedKey<4>>*>(cse[i]);
         table->destroy(this);
+        break;
       }
       default: {
         auto table = static_cast<CSETable<VariadicKey>*>(cse[i]);
         table->destroy(this);
+        break;
       }
     }
   }
@@ -1432,22 +1437,27 @@ size_t Trail::save_state(MiniZinc::Interpreter* interpreter) {
       case 1: {
         auto table = static_cast<CSETable<FixedKey<1>>*>(interpreter->cse[i]);
         table->push(interpreter, !last_operation_pop);
+        break;
       }
       case 2: {
         auto table = static_cast<CSETable<FixedKey<2>>*>(interpreter->cse[i]);
         table->push(interpreter, !last_operation_pop);
+        break;
       }
       case 3: {
         auto table = static_cast<CSETable<FixedKey<3>>*>(interpreter->cse[i]);
         table->push(interpreter, !last_operation_pop);
+        break;
       }
       case 4: {
         auto table = static_cast<CSETable<FixedKey<4>>*>(interpreter->cse[i]);
         table->push(interpreter, !last_operation_pop);
+        break;
       }
       default: {
         auto table = static_cast<CSETable<VariadicKey>*>(interpreter->cse[i]);
         table->push(interpreter, !last_operation_pop);
+        break;
       }
     }
   }
@@ -1511,22 +1521,27 @@ void Trail::untrail(MiniZinc::Interpreter* interpreter) {
       case 1: {
         auto table = static_cast<CSETable<FixedKey<1>>*>(interpreter->cse[i]);
         table->pop(interpreter);
+        break;
       }
       case 2: {
         auto table = static_cast<CSETable<FixedKey<2>>*>(interpreter->cse[i]);
         table->pop(interpreter);
+        break;
       }
       case 3: {
         auto table = static_cast<CSETable<FixedKey<3>>*>(interpreter->cse[i]);
         table->pop(interpreter);
+        break;
       }
       case 4: {
         auto table = static_cast<CSETable<FixedKey<4>>*>(interpreter->cse[i]);
         table->pop(interpreter);
+        break;
       }
       default: {
         auto table = static_cast<CSETable<VariadicKey>*>(interpreter->cse[i]);
         table->pop(interpreter);
+        break;
       }
     }
   }
