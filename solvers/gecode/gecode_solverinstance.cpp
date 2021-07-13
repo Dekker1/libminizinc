@@ -1152,7 +1152,7 @@ bool GecodeSolverInstance::isBoolArray(const Val& arr, int& singleInt) {
     if (val.isInt() && val >= 0 && val <= 1) {
       continue;
     } else if (val.isVar()) {
-      if (val.lb() >= Val(int(0)) && val.ub() <= Val(int(1))) {
+      if (val.lb() >= Val((long long int)0) && val.ub() <= Val((long long int)1)) {
         continue;
       }
       return false;
