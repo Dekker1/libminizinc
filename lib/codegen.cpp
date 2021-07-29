@@ -1768,9 +1768,6 @@ private:
 
   void vSolveI(SolveI* si) {
     GCLock lock;
-    if (si->st() == SolveI::ST_SAT) {
-      return;
-    }
     ASTString ident("solve_this");
     int mode;
     Expression* objective;

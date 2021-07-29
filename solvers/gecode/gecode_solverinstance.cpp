@@ -429,7 +429,7 @@ void GecodeSolverInstance::addConstraint(const std::vector<BytecodeProc>& bs, Co
     IntVal solve_mode = c->arg(0).toIntVal();
     Val obj = c->arg(1);
     SolveI* si;
-    if (solve_mode != 1) {
+    if (solve_mode != 0) {
       _current_space->_optVarIsInt = true;
       _current_space->_solveType = solve_mode == 1 ? MiniZinc::SolveI::SolveType::ST_MIN
                                                    : MiniZinc::SolveI::SolveType::ST_MAX;
