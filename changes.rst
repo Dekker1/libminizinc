@@ -11,6 +11,11 @@ https://github.com/MiniZinc/libminizinc/issues.
 
 Changes:
 ^^^^^^^^
+-  Parse data files selected by ``MZN_TREE_SITTER_PARSER`` directly with
+   `tree-feller <https://github.com/Dekker1/tree-feller>`__ and the DataZinc
+   grammar.
+-  Download the tree-sitter runtime when configuring instead of vendoring it,
+   which raises the CMake required to build MiniZinc to 3.24.
 -  Update URLs in documentation to use minizinc.org as the canonical domain for
    all MiniZinc resources.
 

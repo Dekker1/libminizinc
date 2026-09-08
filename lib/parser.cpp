@@ -46,7 +46,11 @@ bool use_tree_sitter_parser = []() noexcept {  // NOLINT(bugprone-throwing-stati
 namespace {
 void run_parser(MiniZinc::ParserState& pp) {
   if (MiniZinc::use_tree_sitter_parser) {
-    MiniZinc::parse_tree_sitter(pp);
+    if (pp.isDatafile) {
+      MiniZinc::parse_tree_feller(pp);
+    } else {
+      MiniZinc::parse_tree_sitter(pp);
+    }
     return;
   }
   mzn_yylex_init(&pp.yyscanner);

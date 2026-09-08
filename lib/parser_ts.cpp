@@ -4,25 +4,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* Lowering of the tree-sitter concrete syntax tree into the MiniZinc AST.
- *
- * The grammar (lib/thirdparty/tree_sitter_minizinc.c, generated from
- * lib/thirdparty/tree_sitter_minizinc/grammar.js) covers more of the language
- * than this compiler implements; anything it accepts but we cannot compile is
- * rejected here with a "not supported" syntax error rather than silently
- * dropped.
- *
- * Data files are parsed with the DataZinc grammar instead, which has only
- * assignment items and only literal-shaped expressions, so that a model
- * construct in a data file is reported where it appears rather than left to the
- * type checker. Its node types are a subset of MiniZinc's, so one lowering
- * serves both; `argument` and `signedLiteralText` are where the shapes differ.
- * A data file the DataZinc grammar rejects but MiniZinc accepts is still
- * parsed, with a deprecation warning: see `fall_back_to_model_grammar`.
- */
+/* Lower tree-sitter syntax trees into the MiniZinc AST. Data files normally use
+ * parser_tf.cpp; this parser supplies recovery and the MiniZinc fallback. */
 
 #include <minizinc/parser.hh>
 #include <minizinc/warning.hh>
+
+#include "parser_shared.hh"
 
 #include <algorithm>
 #include <cerrno>
@@ -32,7 +20,7 @@
 #include <set>
 #include <sstream>
 
-#include <minizinc/_thirdparty/tree_sitter/api.h>
+#include <tree_sitter/api.h>
 
 extern "C" const TSLanguage* tree_sitter_minizinc(void);
 extern "C" const TSLanguage* tree_sitter_datazinc(void);
@@ -505,168 +493,6 @@ const char* open_range_call(const std::string& op, bool operandOnLeft) {
   return nullptr;
 }
 
-/// Quoted identifiers naming an operator (`'+'(a,b)`) build a BinOp/UnOp
-/// rather than a Call. Matched exactly, so that identifiers that merely look
-/// like operators (`'C⁻¹'`) stay identifiers.
-struct QuotedOp {
-  const char* text;
-  int bot;  ///< -1 means `not`
-};
-
-const QuotedOp QUOTED_OPS[] = {
-    {"<->", BOT_EQUIV},
-    {"->", BOT_IMPL},
-    {"<-", BOT_RIMPL},
-    {"\\/", BOT_OR},
-    {"/\\", BOT_AND},
-    {"xor", BOT_XOR},
-    {"<", BOT_LE},
-    {"<=", BOT_LQ},
-    {">", BOT_GR},
-    {">=", BOT_GQ},
-    {"=", BOT_EQ},
-    {"==", BOT_EQ},
-    {"!=", BOT_NQ},
-    {"in", BOT_IN},
-    {"subset", BOT_SUBSET},
-    {"superset", BOT_SUPERSET},
-    {"union", BOT_UNION},
-    {"diff", BOT_DIFF},
-    {"symdiff", BOT_SYMDIFF},
-    {"+", BOT_PLUS},
-    {"-", BOT_MINUS},
-    {"*", BOT_MULT},
-    {"/", BOT_DIV},
-    {"div", BOT_IDIV},
-    {"mod", BOT_MOD},
-    {"^", BOT_POW},
-    {"intersect", BOT_INTERSECT},
-    {"++", BOT_PLUSPLUS},
-    {"..", BOT_DOTDOT},
-    {"not", -1},
-};
-
-/// Quoted identifiers naming an operator keep their quotes in the AST, and a
-/// few spellings are normalised (`'=='` is `'='`). Anything else in quotes is
-/// an ordinary identifier and loses them.
-const char* quoted_op_name(const std::string& content) {
-  static const std::map<std::string, const char*> NAMES = {
-      {"<->", "'<->'"},
-      {"->", "'->'"},
-      {"<-", "'<-'"},
-      {"\\/", "'\\/'"},
-      {"xor", "'xor'"},
-      {"/\\", "'/\\'"},
-      {"<", "'<'"},
-      {">", "'>'"},
-      {"<=", "'<='"},
-      {">=", "'>='"},
-      {"=", "'='"},
-      {"==", "'='"},
-      {"!=", "'!='"},
-      {"in", "'in'"},
-      {"subset", "'subset'"},
-      {"superset", "'superset'"},
-      {"union", "'union'"},
-      {"diff", "'diff'"},
-      {"symdiff", "'symdiff'"},
-      {"..", "'..'"},
-      {"<..", "'<..'"},
-      {"..<", "'..<'"},
-      {"<..<", "'<..<'"},
-      {"+", "'+'"},
-      {"-", "'-'"},
-      {"*", "'*'"},
-      {"^", "'^'"},
-      {"/", "'/'"},
-      {"div", "'div'"},
-      {"mod", "'mod'"},
-      {"intersect", "'intersect'"},
-      {"not", "'not'"},
-      {"++", "'++'"},
-  };
-  auto it = NAMES.find(content);
-  return it == NAMES.end() ? nullptr : it->second;
-}
-
-/// Type keywords cannot name a function. tree-sitter keywords are contextual,
-/// so `int(x)` would otherwise parse as a call to a function named `int`,
-/// where the reference lexer reserves the word and rejects it.
-bool is_reserved_call_name(const std::string& s) {
-  static const std::set<std::string> RESERVED = {
-      "ann", "any", "array",  "bool", "enum",   "float", "int",  "list",
-      "opt", "par", "record", "set",  "string", "tuple", "type", "var",
-  };
-  return RESERVED.count(s) != 0;
-}
-
-const QuotedOp* quoted_op(const std::string& text) {
-  for (const auto& e : QUOTED_OPS) {
-    if (text == e.text) {
-      return &e;
-    }
-  }
-  return nullptr;
-}
-
-/// Variant of the definition in lexer.lxx: overflow throws ArithmeticError.
-bool decimal_to_intval(const char* b, const char* e, IntVal& out) {
-  IntVal x = 0;
-  try {
-    for (const char* p = b; p != e; p++) {
-      x = (x * 10) + (*p - '0');
-    }
-  } catch (ArithmeticError&) {
-    return false;
-  }
-  out = x;
-  return true;
-}
-
-bool based_to_intval(const char* b, const char* e, int base, IntVal& out) {
-  IntVal x = 0;
-  try {
-    for (const char* p = b; p != e; p++) {
-      char c = *p;
-      int d;
-      if (c >= '0' && c <= '9') {
-        d = c - '0';
-      } else if (c >= 'a' && c <= 'f') {
-        d = c - 'a' + 10;
-      } else {
-        d = c - 'A' + 10;
-      }
-      if (d >= base) {
-        return false;
-      }
-      x = (x * base) + d;
-    }
-  } catch (ArithmeticError&) {
-    return false;
-  }
-  out = x;
-  return true;
-}
-
-/// Location of a byte offset, used before a tree exists.
-ParserLocation nul_location(const ParserState& pp, unsigned int offset) {
-  unsigned int line = 1;
-  unsigned int lineStart = 0;
-  for (unsigned int i = 0; i < offset; i++) {
-    if (pp.buf[i] == '\n') {
-      line++;
-      lineStart = i + 1;
-    }
-  }
-  unsigned int col = 0;
-  for (unsigned int i = lineStart; i < offset; i++) {
-    if ((static_cast<unsigned char>(pp.buf[i]) & 0xc0) != 0x80) {
-      col++;
-    }
-  }
-  return {ASTString(pp.filename), line, col + 1, line, col + 1};
-}
-
 /// Walks the children of a node under one field, without collecting them: a
 /// `TSNode` is 32 bytes and a data file can hold millions of array members.
 class ChildIterator {
@@ -790,7 +616,6 @@ public:
   void warnNotDataZinc();
 
 private:
-  // -- tree navigation -------------------------------------------------------
   TSNode child(TSNode n, F f) const { return ts_node_child_by_field_id(n, _s.field(f)); }
   bool has(TSNode n, F f) const { return !ts_node_is_null(child(n, f)); }
   /// Every child of `n` under field `f`, in source order.
@@ -804,12 +629,10 @@ private:
     return {_buf + ts_node_start_byte(n), _buf + ts_node_end_byte(n)};
   }
 
-  // -- locations -------------------------------------------------------------
   /// Number of UTF-8 code points in [lineStart, byte).
   unsigned int codePointColumn(unsigned int lineStart, unsigned int byte) const;
   ParserLocation loc(TSNode n) const;
 
-  // -- diagnostics -----------------------------------------------------------
   void error(TSNode n, const std::string& msg);
   void warn(TSNode n, const std::string& msg);
   /// Records a call made by a data file for the type checker to judge, unless it
@@ -825,7 +648,6 @@ private:
   /// The first token after \a n, or a null node at end of file
   static TSNode nextToken(TSNode n);
 
-  // -- items -----------------------------------------------------------------
   Item* item(TSNode n, const std::string* docComment);
   Item* includeItem(TSNode n);
   Item* constraintItem(TSNode n);
@@ -841,7 +663,6 @@ private:
   Item* enumerationItem(TSNode n);
   Item* typeAliasItem(TSNode n);
 
-  // -- expressions -----------------------------------------------------------
   Expression* expr(TSNode n);
   Expression* infixExpr(TSNode n);
   Expression* prefixExpr(TSNode n);
@@ -868,7 +689,6 @@ private:
   Expression* recordLiteral(TSNode n);
   Expression* tupleLiteral(TSNode n);
 
-  // -- types -----------------------------------------------------------------
   TypeInst* typeInst(TSNode n);
   TypeInst* typeBase(TSNode n);
   /// Applies the `var`/`par` and `opt` prefixes of `n` to `t`.
@@ -876,7 +696,6 @@ private:
   TypeInst* arrayTypeInst(TSNode n);
   VarDecl* parameter(TSNode n);
 
-  // -- shared helpers --------------------------------------------------------
   std::vector<Expression*> annotations(TSNode n);
   std::vector<Expression*> callArguments(TSNode n, bool& ok);
   Expression* argument(TSNode arg);
@@ -907,10 +726,6 @@ private:
   mutable unsigned int _colByte = 0;
   mutable unsigned int _colCount = 0;
 };
-
-// ---------------------------------------------------------------------------
-// Navigation and locations
-// ---------------------------------------------------------------------------
 
 std::vector<TSNode> Lowerer::childVector(TSNode n, F f) const {
   std::vector<TSNode> out;
@@ -982,12 +797,6 @@ std::nullptr_t Lowerer::futureFeature(TSNode n, const char* what) {
   error(n, std::string(what) + " are not supported by this version of MiniZinc");
   return nullptr;
 }
-
-/// Functions a data file may call, being those that reshape data rather than
-/// compute it. The rule for the list is that anything `--output-mode dzn` can
-/// write has to be readable again, which is these plus enum constructors.
-const char* const DATA_FUNCTIONS[] = {"anon_enum", "anon_enum_set", "array1d", "array2d", "array3d",
-                                      "array4d",   "array5d",       "array6d", "to_enum"};
 
 /// How an item that may not appear in a data file is named, or null if it may.
 /// Kept word for word the same as the bison parser's `notInDatafile`.
@@ -1336,10 +1145,6 @@ void Lowerer::collectSyntaxErrors(TSNode n) {
     collectSyntaxErrors(ts_node_child(n, i));
   }
 }
-
-// ---------------------------------------------------------------------------
-// Items
-// ---------------------------------------------------------------------------
 
 void Lowerer::run() {
   std::string pendingDoc;
@@ -1808,10 +1613,6 @@ std::vector<Expression*> Lowerer::annotations(TSNode n) {
   }
   return out;
 }
-
-// ---------------------------------------------------------------------------
-// Expressions
-// ---------------------------------------------------------------------------
 
 Expression* Lowerer::expr(TSNode n) {
   if (ts_node_is_null(n)) {
@@ -2605,10 +2406,6 @@ Expression* Lowerer::letExpr(TSNode n) {
   return new Let(loc(n), lets, in);
 }
 
-// ---------------------------------------------------------------------------
-// Literals
-// ---------------------------------------------------------------------------
-
 void Lowerer::signedLiteralText(TSNode n, bool& negated, const char*& b, const char*& e) const {
   b = _buf + ts_node_start_byte(n);
   e = _buf + ts_node_end_byte(n);
@@ -2844,10 +2641,6 @@ Expression* Lowerer::stringInterpolation(TSNode n) {
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Names and patterns
-// ---------------------------------------------------------------------------
-
 ASTString Lowerer::identifier(TSNode n) {
   if (ts_node_is_null(n)) {
     return {};
@@ -2895,10 +2688,6 @@ bool Lowerer::patternName(TSNode n, ASTString& out) {
       return false;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 Expression* Lowerer::typeAsExpr(TSNode n) {
   if (ts_node_is_null(n)) {
@@ -3172,10 +2961,9 @@ TreePtr parse_with(const TSLanguage* lang, const ParserState& pp) {
   return {ts_parser_parse_string(ts_parser(lang), nullptr, pp.buf, pp.length), ts_tree_delete};
 }
 
-/// Handles a data file the DataZinc grammar could not parse. If it is valid
-/// MiniZinc then a model item is still an error, but an expression only earns a
-/// warning and is parsed as MiniZinc, so that data files which compute their
-/// data keep working. True if this took care of the file.
+/// If the file is valid MiniZinc then a model item is still an error, but an
+/// expression only earns a warning and is parsed as MiniZinc. True if this took
+/// care of the file.
 bool fall_back_to_model_grammar(ParserState& pp, TSNode dataRoot) {
   TreePtr tree = parse_with(tree_sitter_minizinc(), pp);
   if (tree == nullptr) {
@@ -3199,6 +2987,20 @@ bool fall_back_to_model_grammar(ParserState& pp, TSNode dataRoot) {
 
 }  // namespace
 
+bool parse_rejected_data_file(ParserState& pp) {
+  TreePtr tree = parse_with(tree_sitter_datazinc(), pp);
+  if (tree == nullptr) {
+    return false;
+  }
+  TSNode dataRoot = ts_tree_root_node(tree.get());
+  if (fall_back_to_model_grammar(pp, dataRoot)) {
+    return true;
+  }
+  // Use tree-sitter's recovered tree for the more specific diagnostic.
+  Lowerer asData(pp, dataRoot, syms(true), tree_sitter_datazinc());
+  return asData.reportSyntaxErrors();
+}
+
 void parse_tree_sitter(ParserState& pp) {
   if (const void* nul = memchr(pp.buf, 0, pp.length)) {
     auto offset = static_cast<unsigned int>(static_cast<const char*>(nul) - pp.buf);
@@ -3210,16 +3012,12 @@ void parse_tree_sitter(ParserState& pp) {
                                  std::vector<ASTString>(), "syntax error, null character");
     return;
   }
-  const TSLanguage* lang = pp.isDatafile ? tree_sitter_datazinc() : tree_sitter_minizinc();
-  TreePtr tree = parse_with(lang, pp);
+  TreePtr tree = parse_with(tree_sitter_minizinc(), pp);
   if (tree == nullptr) {
     throw InternalError("tree-sitter failed to parse '" + std::string(pp.filename) + "'");
   }
   TSNode root = ts_tree_root_node(tree.get());
-  if (pp.isDatafile && ts_node_has_error(root) && fall_back_to_model_grammar(pp, root)) {
-    return;
-  }
-  Lowerer lowerer(pp, root, syms(pp.isDatafile), lang);
+  Lowerer lowerer(pp, root, syms(false), tree_sitter_minizinc());
   // A broken tree is not lowered: the recovered subtrees would otherwise
   // produce a cascade of misleading follow-on errors.
   if (lowerer.reportSyntaxErrors()) {

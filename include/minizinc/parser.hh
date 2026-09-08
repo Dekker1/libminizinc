@@ -221,13 +221,16 @@ public:
   std::string canonicalFilename(const std::string& f) const;
 };
 
-/// Parse `pp.buf` with the tree-sitter grammar, adding the items to `pp.model`.
-/// Syntax errors accumulate in `pp.syntaxErrors`; this does not throw for them.
+/// Parse `pp.buf` with the MiniZinc tree-sitter grammar into `pp.model`.
 void parse_tree_sitter(ParserState& pp);
 
-/// Selects the tree-sitter parser over the bison one. Initialised from the
-/// MZN_TREE_SITTER_PARSER environment variable; settable so that the
-/// differential test harness can parse the same file both ways.
+/// Parse `pp.buf` into `pp.model` with tree-feller and the DataZinc grammar.
+void parse_tree_feller(ParserState& pp);
+
+/// Diagnose or fall back to MiniZinc for a data file rejected by tree-feller.
+bool parse_rejected_data_file(ParserState& pp);
+
+/// Selects tree-sitter and tree-feller instead of bison.
 /// Temporary: goes away with the bison parser.
 extern bool use_tree_sitter_parser;
 
