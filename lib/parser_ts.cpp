@@ -22,7 +22,6 @@
  */
 
 #include <minizinc/parser.hh>
-#include <minizinc/warning.hh>
 
 #include <algorithm>
 #include <cerrno>
@@ -958,9 +957,7 @@ ParserLocation Lowerer::loc(TSNode n) const {
   return {ASTString(_pp.filename), s.row + 1, firstColumn, e.row + 1, lastColumn};
 }
 
-void Lowerer::warn(TSNode n, const std::string& msg) {
-  Warning(Location(loc(n)), msg).print(_pp.err, /*werror=*/false);
-}
+void Lowerer::warn(TSNode n, const std::string& msg) { _pp.addWarning(Location(loc(n)), msg); }
 
 void Lowerer::error(TSNode n, const std::string& msg) {
   _pp.hadError = true;

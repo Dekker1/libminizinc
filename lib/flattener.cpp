@@ -604,6 +604,9 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
     Model* m;
     _pEnv.reset(new Env(nullptr, _os, _log));
     Env* env = getEnv();
+    // Set early, so that warnings raised while parsing are subject to the
+    // warning options as well
+    env->envi().fopts = _fopts;
     env->envi().warnNonAuthoritativeNames = _flags.warnNonAuthoritativeNames;
     if (!_flags.compileSolutionCheckModel && !_flagSolutionCheckModel.empty()) {
       // Extract variables to check from solution check model
@@ -782,9 +785,13 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
         }
         status = SolverInstance::NONE;
         // Not flattening so have to print warnings ourselves
+        bool hadWarnings = !env->warnings().empty();
         env->dumpWarnings(_flags.encapsulateJSON ? _os : _log, _flags.werror,
                           _flags.encapsulateJSON);
         env->clearWarnings();
+        if (hadWarnings && _flags.werror) {
+          throw Error("warnings treated as errors.");
+        }
       } else {
         if (_isFlatzinc) {
           GCLock lock;

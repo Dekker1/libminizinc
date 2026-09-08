@@ -85,7 +85,7 @@ struct ParseWorkItem {
 /// %State of the %MiniZinc parser
 class ParserState {
 public:
-  ParserState(const std::string& f, const std::string& b, std::ostream& err0,
+  ParserState(const std::string& f, const std::string& b, EnvI& env0, std::ostream& err0,
               const std::vector<std::string>& includePaths0, std::vector<ParseWorkItem>& files0,
               std::map<std::string, Model*>& seenModels0, MiniZinc::Model* model0,
               std::vector<Call*>& dataFileCalls0, bool isDatafile0, bool isFlatZinc0,
@@ -107,6 +107,7 @@ public:
         isSTDLib(isSTDLib0),
         parseDocComments(parseDocComments0),
         hadError(false),
+        env(env0),
         err(err0) {
 #ifdef _WIN32
     cLocale = _create_locale(LC_ALL, "C");
@@ -148,7 +149,12 @@ public:
   bool parseDocComments;
   bool hadError;
   std::vector<SyntaxError> syntaxErrors;
+  EnvI& env;
   std::ostream& err;
+
+  /// Record a warning, so that it is subject to the usual warning handling
+  /// (e.g. -Werror, --disable-warnings) rather than printed immediately
+  void addWarning(const Location& loc, const std::string& msg);
 
   std::string stringBuffer;
 

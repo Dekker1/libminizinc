@@ -41,7 +41,6 @@ namespace MiniZinc{ class ParserLocation; }
 
 #include <minizinc/parser.hh>
 #include <minizinc/file_utils.hh>
-#include <minizinc/warning.hh>
 #include <minizinc/prettyprinter.hh>
 
 using namespace std;
@@ -90,7 +89,7 @@ void yyerror(YYLTYPE* location, void* parm, const string& str) {
 
 void yywarn(YYLTYPE* location, void* parm, const string& str) {
   ParserState* pp = static_cast<ParserState*>(parm);
-  Warning(Location(*location), str).print(pp->err, /*werror=*/false);
+  pp->addWarning(Location(*location), str);
 }
 
 bool notInDatafile(YYLTYPE* location, void* parm, const string& item) {

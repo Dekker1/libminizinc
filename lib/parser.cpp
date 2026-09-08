@@ -125,6 +125,10 @@ std::unordered_set<std::string> global_includes(const std::string& stdlib) {
   return files;
 }
 
+void ParserState::addWarning(const Location& loc, const std::string& msg) {
+  env.addWarning(loc, msg, false);
+}
+
 void parse(Env& env, Model*& model, const vector<string>& filenames,
            const vector<string>& datafiles, const std::string& modelString,
            const std::string& modelStringName, const vector<string>& ip,
@@ -295,8 +299,8 @@ void parse(Env& env, Model*& model, const vector<string>& filenames,
       fullname = f;
       s = parentPath;
     }
-    ParserState pp(fullname, s, err, includePaths, files, seenModels, m, env.envi().dataFileCalls,
-                   false, isFzn, isSTDLib, parseDocComments);
+    ParserState pp(fullname, s, env.envi(), err, includePaths, files, seenModels, m,
+                   env.envi().dataFileCalls, false, isFzn, isSTDLib, parseDocComments);
     run_parser(pp);
     if (pp.hadError) {
       throw MultipleErrors<SyntaxError>(pp.syntaxErrors);
@@ -326,8 +330,8 @@ void parse(Env& env, Model*& model, const vector<string>& filenames,
         s = get_file_contents(file);
       }
 
-      ParserState pp(f, s, err, includePaths, files, seenModels, model, env.envi().dataFileCalls,
-                     true, false, false, parseDocComments);
+      ParserState pp(f, s, env.envi(), err, includePaths, files, seenModels, model,
+                     env.envi().dataFileCalls, true, false, false, parseDocComments);
       run_parser(pp);
       if (pp.hadError) {
         throw MultipleErrors<SyntaxError>(pp.syntaxErrors);

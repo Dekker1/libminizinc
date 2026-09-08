@@ -14,6 +14,17 @@ Changes:
 -  Update URLs in documentation to use minizinc.org as the canonical domain for
    all MiniZinc resources.
 
+Bug fixes:
+^^^^^^^^^^
+-  Make warnings raised while parsing (for example, for deprecated syntax)
+   respect ``-Werror`` and ``-w``/``--disable-warnings``. Parser warnings were
+   printed directly, bypassing all warning handling, and the warning options
+   were only applied once flattening started (:bugref:`1054`).
+-  Report an error for ``-Werror`` when only checking a model or instance
+   (``--model-check-only``, ``--instance-check-only``, ``--model-interface-only``
+   and ``--model-types-only``), rather than printing the warnings as errors but
+   exiting successfully.
+
 .. _v2.10.1:
 
 `Version 2.10.1 <https://github.com/MiniZinc/MiniZincIDE/releases/tag/2.10.1>`__
