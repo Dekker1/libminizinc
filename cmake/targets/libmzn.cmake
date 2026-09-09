@@ -40,6 +40,7 @@ add_library(mzn
   lib/gc.cpp
   lib/htmlprinter.cpp
   lib/json_parser.cpp
+  lib/library_bundle.cpp
   lib/lexer.lxx
   lib/thirdparty/miniz.c
   lib/model.cpp
@@ -83,6 +84,7 @@ add_library(mzn
   include/minizinc/eval_par.hh
   include/minizinc/exception.hh
   include/minizinc/file_utils.hh
+  include/minizinc/library_bundle.hh
   include/minizinc/flat_exp.hh
   include/minizinc/flatten.hh
   include/minizinc/flatten_internal.hh
@@ -161,6 +163,27 @@ install(
   DIRECTORY share/minizinc
   DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}
 )
+
+# Bundle the shipped MiniZinc libraries at install time. Development builds use
+# the source files directly, so edits do not require regenerating bundles.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+option(MZN_BUNDLE_LIBRARIES "Install bundled .lib.mzn versions of the MiniZinc libraries"
+       ${Python3_FOUND})
+
+if(MZN_BUNDLE_LIBRARIES)
+  if(NOT Python3_FOUND)
+    message(FATAL_ERROR "MZN_BUNDLE_LIBRARIES requires a Python 3 interpreter")
+  endif()
+  # The standard library reports original source locations. Solver libraries
+  # report bundle locations because they override files they do not own.
+  set(MZN_BUNDLED_LIBRARIES std linear gecode_presolver geas)
+  configure_file(
+    ${PROJECT_SOURCE_DIR}/cmake/scripts/bundle_libraries.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/bundle_libraries.cmake
+    @ONLY
+  )
+  install(SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/bundle_libraries.cmake)
+endif()
 install(
   DIRECTORY include/minizinc
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

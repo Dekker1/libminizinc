@@ -216,7 +216,11 @@ void parseFieldTail(const ParserLocation& loc, std::vector<Expression*>& parsed,
 %initial-action
 {
   GCLock lock;
-  @$.filename(ASTString(static_cast<ParserState*>(parm)->filename));
+  ParserState* pp0 = static_cast<ParserState*>(parm);
+  @$.filename(ASTString(pp0->filename));
+  // Files parsed out of a library bundle start at the line they occupy in the bundle
+  @$.firstLine(@$.firstLine()+pp0->lineOffset);
+  @$.lastLine(@$.lastLine()+pp0->lineOffset);
 }
 
 %token <iValue> MZN_INTEGER_LITERAL "integer literal" MZN_BOOL_LITERAL "bool literal"

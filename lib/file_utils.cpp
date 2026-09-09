@@ -18,8 +18,10 @@
 #include <minizinc/file_utils.hh>
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdint>  // Required on some platforms for miniz
 #include <cstring>
+#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -419,6 +421,27 @@ std::string share_directory() {
   return "";
 }
 
+// fastest way to read a file into a string (especially big files)
+// see: http://insanecoding.blogspot.be/2011/11/how-to-read-in-file-in-c.html
+std::string read_file_contents(const std::string& filename) {
+  std::ifstream in(FILE_PATH(filename), std::ios::binary);
+  if (in) {
+    std::string contents;
+    in.seekg(0, std::ios::end);
+    contents.resize(static_cast<unsigned int>(in.tellg()));
+    in.seekg(0, std::ios::beg);
+    // Warning assume editability of the string underlying storage
+    in.read(const_cast<char*>(contents.data()), static_cast<long>(contents.size()));
+    in.close();
+    if (!contents.empty() && contents[0] == '@') {
+      contents = decode_base64(contents);
+      inflate_string(contents);
+    }
+    return contents;
+  }
+  throw errno;  // NOLINT(misc-throw-by-value-catch-by-reference)
+}
+
 std::string user_config_dir() {
 #ifdef _MSC_VER
   HRESULT hr;
@@ -777,12 +800,14 @@ void inflate_string(std::string& s) {
     if (status != Z_OK) {
       throw status;
     }
-    std::ostringstream oss;
+    // Appended to directly rather than through a stringstream: for a whole
+    // compressed library that would hold the result twice.
+    std::string out;
     while (true) {
       status = inflate(&stream, Z_NO_FLUSH);
       if (status == Z_STREAM_END || (stream.avail_out == 0U)) {
         // output buffer full or compression finished
-        oss << std::string(reinterpret_cast<char*>(s_outbuf), BUF_SIZE - stream.avail_out);
+        out.append(reinterpret_cast<char*>(s_outbuf), BUF_SIZE - stream.avail_out);
         stream.next_out = &s_outbuf[0];
         stream.avail_out = BUF_SIZE;
       }
@@ -797,7 +822,7 @@ void inflate_string(std::string& s) {
     if (status != Z_OK) {
       throw status;
     }
-    s = oss.str();
+    s = std::move(out);
   }
 }
 

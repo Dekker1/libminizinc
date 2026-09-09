@@ -170,6 +170,8 @@ protected:
   std::ostream& _log;
   std::vector<std::string> _includePaths;
   std::string _stdlibDir;
+  /// Include path for the standard library (a bundle if one is available)
+  std::string stdIncludePath() const;
 
   // Basically open output
   void init();

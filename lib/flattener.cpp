@@ -18,6 +18,7 @@
 
 #include <minizinc/file_utils.hh>
 #include <minizinc/flattener.hh>
+#include <minizinc/library_bundle.hh>
 #include <minizinc/pathfileprinter.hh>
 #include <minizinc/statistics.hh>
 
@@ -73,7 +74,9 @@ void Flattener::printHelp(ostream& os) const {
      << "  --stdlib-dir <dir>\n    Path to MiniZinc standard library directory" << std::endl
      << "  -G <dir>, --globals-dir <dir>, --mzn-globals-dir <dir>\n    Search for included "
         "globals "
-        "in <stdlib>/<dir>, or <dir> when given a absolute or relative path."
+        "in <stdlib>/<dir>, or <dir> when given a absolute or relative path. <dir> may also be "
+        "a library bundle (.lib.mzn). Can be given multiple times to search several libraries "
+        "in order; replaces the library of the selected solver."
      << std::endl
      << "  -, --input-from-stdin\n    Read problem from standard input. Combine with "
         "--input-is-flatzinc when passing FlatZinc code."
@@ -175,6 +178,43 @@ void Flattener::printHelp(ostream& os) const {
      << "  -w --disable-warnings\n    Supress all warnings" << std::endl;
 }
 
+std::string Flattener::libraryIncludePath(const std::string& name) const {
+  const std::string path = _stdLibDir + "/" + name;
+  // A bundle wins over the directory of the same name. \a name may also already
+  // name the bundle itself.
+  for (const std::string& candidate : {path + LibraryBundle::SUFFIX, path}) {
+    std::string resolved = FileUtils::file_path(candidate);
+    if (LibraryBundle::exists(resolved)) {
+      return resolved;
+    }
+  }
+  return FileUtils::file_path(path + "/");
+}
+
+std::string Flattener::resolveGlobalsDir(const std::string& g,
+                                         const std::string& workingDir) const {
+  // Resolve globals directory to be an absolute path. It may name either a
+  // directory or a library bundle file.
+  if (FileUtils::is_absolute(g)) {
+    return g;
+  }
+  // Either name may be a library bundle rather than a directory
+  auto as_include_path = [](const std::string& p) {
+    return LibraryBundle::exists(p) ? p : p + "/";
+  };
+  const std::string share = as_include_path(FileUtils::file_path(_stdLibDir + "/" + g));
+  const std::string rel = as_include_path(FileUtils::file_path(g, workingDir));
+  auto exists = [](const std::string& p) {
+    return FileUtils::directory_exists(p) || LibraryBundle::exists(p);
+  };
+  if ((g.size() >= 2 && g[0] == '.' && (g[1] == '/' || g[1] == '\\')) ||
+      (g.size() >= 3 && g[0] == '.' && g[1] == '.' && (g[2] == '/' || g[2] == '\\')) ||
+      (exists(rel) && !exists(share))) {
+    return rel;
+  }
+  return share;
+}
+
 bool Flattener::processOption(int& i, std::vector<std::string>& argv,
                               const std::string& workingDir) {
   CLOParser cop(i, argv);
@@ -182,7 +222,11 @@ bool Flattener::processOption(int& i, std::vector<std::string>& argv,
   int intBuffer;
 
   if (cop.getOption("-I --search-dir", &buffer)) {
-    _includePaths.push_back(FileUtils::file_path(buffer + "/", workingDir));
+    if (LibraryBundle::exists(FileUtils::file_path(buffer, workingDir))) {
+      _includePaths.push_back(FileUtils::file_path(buffer, workingDir));
+    } else {
+      _includePaths.push_back(FileUtils::file_path(buffer + "/", workingDir));
+    }
   } else if (cop.getOption("--ignore-stdlib")) {
     _flags.ignoreStdlib = true;
   } else if (cop.getOption("--no-typecheck")) {
@@ -280,22 +324,17 @@ bool Flattener::processOption(int& i, std::vector<std::string>& argv,
   } else if (cop.getOption("--stdlib-dir", &buffer)) {
     _stdLibDir = FileUtils::file_path(buffer, workingDir);
   } else if (cop.getOption("-G --globals-dir --mzn-globals-dir",
-                           &_globalsDir)) {  // NOLINT: Allow repeated empty if
-    // Resolve globals directory to be an absolute path
-    const std::string share = FileUtils::file_path(_stdLibDir + "/" + _globalsDir + "/");
-    const std::string rel = FileUtils::file_path(_globalsDir, workingDir);
-    if (FileUtils::is_absolute(_globalsDir)) {
-      // Do nothing (already have absolute path)
-    } else if ((_globalsDir.size() >= 2 && _globalsDir[0] == '.' && _globalsDir[1] == '/') ||
-               (_globalsDir.size() >= 2 && _globalsDir[0] == '.' && _globalsDir[1] == '\\') ||
-               (_globalsDir.size() >= 3 && _globalsDir[0] == '.' && _globalsDir[1] == '.' &&
-                _globalsDir[2] == '/') ||
-               (_globalsDir.size() >= 3 && _globalsDir[0] == '.' && _globalsDir[1] == '.' &&
-                _globalsDir[2] == '\\') ||
-               (FileUtils::directory_exists(rel) && !FileUtils::directory_exists(share))) {
-      _globalsDir = rel;
-    } else {
-      _globalsDir = share;
+                           &buffer)) {  // NOLINT: Allow repeated empty if
+    if (!_globalsDirsFromCli) {
+      // Command line globals directories replace those from the solver configuration
+      _globalsDirs.clear();
+      _globalsDirsFromCli = true;
+    }
+    _globalsDirs.push_back(resolveGlobalsDir(buffer, workingDir));
+  } else if (cop.getOption("--solver-globals-dir", &buffer)) {
+    // Set by the solver configuration; ignored if the user gave -G on the command line
+    if (!_globalsDirsFromCli) {
+      _globalsDirs.push_back(resolveGlobalsDir(buffer, workingDir));
     }
   } else if (cop.getOption("-D --cmdline-data", &buffer)) {
     _datafiles.push_back("cmd:/" + buffer);
@@ -547,13 +586,26 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
         "MZN_STDLIB_DIR environment variable.");
   }
 
-  if (!_globalsDir.empty()) {
-    _includePaths.insert(_includePaths.begin(), _globalsDir);
+  {
+    // Solver libraries are listed as a bundle followed by the directory it was
+    // built from, of which only one is usually installed, so a globals
+    // directory that does not exist is skipped rather than being an error.
+    std::vector<std::string> present;
+    for (const auto& g : _globalsDirs) {
+      if (FileUtils::directory_exists(g) || LibraryBundle::exists(g)) {
+        present.push_back(g);
+      }
+    }
+    if (present.empty() && !_globalsDirs.empty()) {
+      throw Error("Cannot access include directory " + _globalsDirs.front());
+    }
+    _globalsDirs = present;
   }
-  _includePaths.push_back(FileUtils::file_path(_stdLibDir + "/std/"));
+  _includePaths.insert(_includePaths.begin(), _globalsDirs.begin(), _globalsDirs.end());
+  _includePaths.push_back(libraryIncludePath("std"));
 
   for (auto& includePath : _includePaths) {
-    if (!FileUtils::directory_exists(includePath)) {
+    if (!FileUtils::directory_exists(includePath) && !LibraryBundle::exists(includePath)) {
       throw Error("Cannot access include directory " + includePath);
     }
   }
@@ -603,6 +655,9 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
 
     Model* m;
     _pEnv.reset(new Env(nullptr, _os, _log));
+    if (_cancelled) {
+      _pEnv->envi().cancel();
+    }
     Env* env = getEnv();
     // Set early, so that warnings raised while parsing are subject to the
     // warning options as well
@@ -617,7 +672,7 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
           _flagSolutionCheckModel.size() >= 4 &&
           _flagSolutionCheckModel.substr(_flagSolutionCheckModel.size() - 4) == ".mzc";
       std::vector<std::string> smm_model({_flagSolutionCheckModel});
-      Model* smm = parse(*env, smm_model, _datafiles, "", "", _includePaths, {}, _isFlatzinc,
+      Model* smm = parse(*env, smm_model, _datafiles, "", "", _includePaths, false, _isFlatzinc,
                          _flags.ignoreStdlib, false, _flags.verbose, errstream);
       if (_flags.verbose) {
         _log << " done parsing (" << _starttime.stoptime() << ")" << std::endl;
@@ -732,13 +787,11 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
       _log << " ..." << std::endl;
     }
     errstream.str("");
-    std::unordered_set<std::string> globalInc(global_includes(_stdLibDir));
     m = parse(*env, _filenames, _datafiles, modelText, modelName.empty() ? "stdin" : modelName,
-              _includePaths, std::move(globalInc), _isFlatzinc, _flags.ignoreStdlib, false,
+              _includePaths, /*checkGlobalOverrides=*/true, _isFlatzinc, _flags.ignoreStdlib, false,
               _flags.verbose, errstream);
-    if (!_globalsDir.empty()) {
-      _includePaths.erase(_includePaths.begin());
-    }
+    _includePaths.erase(_includePaths.begin(),
+                        _includePaths.begin() + static_cast<long>(_globalsDirs.size()));
     if (m == nullptr) {
       throw Error(errstream.str());
     }
@@ -847,8 +900,9 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
           std::vector<unique_ptr<Pass>> managed_passes;
 
           if (_flags.twoPass) {
-            std::string library = _stdLibDir + (_flags.gecode ? "/gecode_presolver/" : "/std/");
-            bool differentLibrary = (library != _globalsDir);
+            std::vector<std::string> library{
+                libraryIncludePath(_flags.gecode ? "gecode_presolver" : "std")};
+            bool differentLibrary = (library != _globalsDirs);
             managed_passes.emplace_back(new CompilePass(env, pass_opts, cfs, library, _includePaths,
                                                         true, differentLibrary));
 #ifdef HAS_GECODE
@@ -857,8 +911,8 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
             }
 #endif
           }
-          managed_passes.emplace_back(
-              new CompilePass(env, _fopts, cfs, _globalsDir, _includePaths, _flags.twoPass, false));
+          managed_passes.emplace_back(new CompilePass(env, _fopts, cfs, _globalsDirs, _includePaths,
+                                                      _flags.twoPass, false));
 
           Env* out_env = multiPassFlatten(managed_passes);
           if (out_env == nullptr) {
@@ -1115,7 +1169,11 @@ void Flattener::flatten(const std::string& modelString, const std::string& model
             case FlattenerFlags::FF_FZN: {
               ofs << "% Generated by MiniZinc " << MZN_VERSION_MAJOR << "." << MZN_VERSION_MINOR
                   << "." << MZN_VERSION_PATCH << std::endl;
-              ofs << "% Solver library: " << _globalsDir << std::endl;
+              ofs << "% Solver library: ";
+              for (size_t gi = 0; gi < _globalsDirs.size(); gi++) {
+                ofs << (gi > 0 ? ", " : "") << _globalsDirs[gi];
+              }
+              ofs << std::endl;
               ofs << "% Command line invocation: " << _cmdlineStr << std::endl << std::endl;
               Printer p(ofs, 0, true, &env->envi());
               p.print(env->flat());

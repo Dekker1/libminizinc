@@ -31,7 +31,10 @@
 
 using namespace std;
 
-std::string MIPWrapper::getMznLib() { return "-Glinear"; }
+std::vector<std::string> MIPWrapper::getMznLib() {
+  // Prefer an installed bundle; otherwise use the source directory.
+  return {"-Glinear.lib.mzn", "-Glinear"};
+}
 
 namespace MiniZinc {
 namespace SCIPConstraints {

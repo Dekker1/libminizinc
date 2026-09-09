@@ -33,15 +33,15 @@ private:
   Env* _env;
   FlatteningOptions _fopts;
   CompilePassFlags _compflags;
-  std::string _library;
+  std::vector<std::string> _library;
   std::vector<std::string> _includePaths;
   bool _changeLibrary;
   bool _ignoreUnknownIds;
 
 public:
   CompilePass(Env* e, FlatteningOptions& opts, CompilePassFlags& cflags,
-              std::string globals_library, std::vector<std::string> include_paths, bool change_lib,
-              bool ignore_unknown);
+              std::vector<std::string> globals_library, std::vector<std::string> include_paths,
+              bool change_lib, bool ignore_unknown);
 
   Env* run(Env* store, std::ostream& log) override;
   ~CompilePass() override;

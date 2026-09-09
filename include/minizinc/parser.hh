@@ -41,6 +41,7 @@ class ParserLocation;
 #include <minizinc/astexception.hh>
 #include <minizinc/astmap.hh>
 #include <minizinc/file_utils.hh>
+#include <minizinc/library_bundle.hh>
 #include <minizinc/model.hh>
 #include <minizinc/parser.tab.hh>
 
@@ -87,10 +88,12 @@ class ParserState {
 public:
   ParserState(const std::string& f, const std::string& b, EnvI& env0, std::ostream& err0,
               const std::vector<std::string>& includePaths0, std::vector<ParseWorkItem>& files0,
-              std::map<std::string, Model*>& seenModels0, MiniZinc::Model* model0,
-              std::vector<Call*>& dataFileCalls0, bool isDatafile0, bool isFlatZinc0,
-              bool isSTDLib0, bool parseDocComments0)
+              std::map<std::string, Model*>& seenModels0, LibraryBundleCache& bundles0,
+              MiniZinc::Model* model0, std::vector<Call*>& dataFileCalls0, bool isDatafile0,
+              bool isFlatZinc0, bool isSTDLib0, bool parseDocComments0,
+              unsigned int lineOffset0 = 0)
       : filename(f.c_str()),
+        lineOffset(lineOffset0),
         buf(b.c_str()),
         pos(0),
         length(static_cast<unsigned int>(b.size())),
@@ -100,6 +103,7 @@ public:
         includePaths(includePaths0),
         files(files0),
         seenModels(seenModels0),
+        bundles(bundles0),
         model(model0),
         dataFileCalls(dataFileCalls0),
         isDatafile(isDatafile0),
@@ -127,6 +131,8 @@ public:
   }
 
   const char* filename;
+  /// Number to add to line numbers (non-zero for files parsed out of a library bundle)
+  unsigned int lineOffset;
 
   void* yyscanner;
   const char* buf;
@@ -139,6 +145,8 @@ public:
   const std::vector<std::string>& includePaths;
   std::vector<ParseWorkItem>& files;
   std::map<std::string, Model*>& seenModels;
+  /// The library bundles read by this parse
+  LibraryBundleCache& bundles;
   MiniZinc::Model* model;
   /// Where calls found in a data file are recorded for the type checker
   std::vector<Call*>& dataFileCalls;
@@ -237,16 +245,14 @@ void parse_tree_sitter(ParserState& pp);
 /// Temporary: goes away with the bison parser.
 extern bool use_tree_sitter_parser;
 
-/// Returns the filenames of direct global constraints in globals.mzn.
-/// These files should not be directly overriden by the solver. They should
-/// override fzn_<name> instead.
-std::unordered_set<std::string> global_includes(const std::string& stdlib);
-
+/// Parse a model. When \a checkGlobalOverrides is set, warn about files that
+/// override a global constraint file of the standard library (the last entry of
+/// \a includePaths); those should override fzn_<name> instead.
 Model* parse(Env& env, const std::vector<std::string>& filenames,
              const std::vector<std::string>& datafiles, const std::string& textModel,
              const std::string& textModelName, const std::vector<std::string>& includePaths,
-             std::unordered_set<std::string> globalInc, bool isFlatZinc, bool ignoreStdlib,
-             bool parseDocComments, bool verbose, std::ostream& err);
+             bool checkGlobalOverrides, bool isFlatZinc, bool ignoreStdlib, bool parseDocComments,
+             bool verbose, std::ostream& err);
 
 Model* parse_from_string(Env& env, const std::string& text, const std::string& filename,
                          const std::vector<std::string>& includePaths, bool isFlatZinc,

@@ -763,21 +763,19 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
             // This should maybe be moved to fill in fzn_mzn_flags when
             // --find-muses is implemented (these arguments will be passed
             // through to the subsolver of findMUS)
-            if (!sc.mznlib().empty()) {
-              if (sc.mznlib().substr(0, 2) == "-G") {
+            for (unsigned int mi = 0; mi < sc.mznlib().size(); mi++) {
+              const std::string& lib = sc.mznlib()[mi];
+              if (lib.empty()) {
+                continue;
+              }
+              if (lib.substr(0, 2) == "-G") {
                 additionalArgs_s.emplace_back("--mzn-flag");
-                additionalArgs_s.push_back(sc.mznlib());
+                additionalArgs_s.push_back(lib);
               } else {
                 additionalArgs_s.emplace_back("--mzn-flag");
                 additionalArgs_s.emplace_back("-G");
                 additionalArgs_s.emplace_back("--mzn-flag");
-                std::string _mznlib;
-                if (!sc.mznlibResolved().empty()) {
-                  _mznlib = sc.mznlibResolved();
-                } else {
-                  _mznlib = sc.mznlib();
-                }
-                additionalArgs_s.push_back(_mznlib);
+                additionalArgs_s.push_back(sc.mznlibAt(mi));
               }
             }
 
@@ -866,27 +864,22 @@ MznSolver::OptionStatus MznSolver::processOptions(std::vector<std::string>& argv
             }
           }
         }
-        if (!sc.mznlib().empty()) {
-          if (sc.mznlib().substr(0, 2) == "-G") {
-            std::vector<std::string> additionalArgs({sc.mznlib()});
-            int i = 0;
-            if (!_flt.processOption(i, additionalArgs)) {
-              std::stringstream ss;
-              ss << "Flattener does not recognise option " << sc.mznlib() << endl;
-              throw BadOption(ss.str());
-            }
+        for (unsigned int mi = 0; mi < sc.mznlib().size(); mi++) {
+          const std::string& lib = sc.mznlib()[mi];
+          if (lib.empty()) {
+            continue;
+          }
+          // --solver-globals-dir is ignored when the user gave -G on the command line
+          std::vector<std::string> additionalArgs(2);
+          additionalArgs[0] = "--solver-globals-dir";
+          if (lib.substr(0, 2) == "-G") {
+            additionalArgs[1] = lib.substr(2);
           } else {
-            std::vector<std::string> additionalArgs(2);
-            additionalArgs[0] = "-G";
-            if (!sc.mznlibResolved().empty()) {
-              additionalArgs[1] = sc.mznlibResolved();
-            } else {
-              additionalArgs[1] = sc.mznlib();
-            }
-            int i = 0;
-            if (!_flt.processOption(i, additionalArgs)) {
-              throw BadOption("Flattener does not recognise option -G.");
-            }
+            additionalArgs[1] = sc.mznlibAt(mi);
+          }
+          int i = 0;
+          if (!_flt.processOption(i, additionalArgs)) {
+            throw BadOption("Flattener does not recognise option --solver-globals-dir.");
           }
         }
         auto reducedDefaultFlags = reducedSolverDefaults.find(sc.id());

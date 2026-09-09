@@ -14,6 +14,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+#include <minizinc/library_bundle.hh>
 #include <minizinc/solns2out.hh>
 #include <minizinc/solver.hh>
 
@@ -136,7 +137,7 @@ bool Solns2Out::processOption(int& i, std::vector<std::string>& argv,
 bool Solns2Out::initFromEnv(Env* pE) {
   assert(pE);
   _env = pE;
-  _includePaths.push_back(_stdlibDir + "/std/");
+  _includePaths.push_back(stdIncludePath());
   init();
   return true;
 }
@@ -144,10 +145,10 @@ bool Solns2Out::initFromEnv(Env* pE) {
 void Solns2Out::initFromOzn(const std::string& filename) {
   std::vector<string> filenames(1, filename);
 
-  _includePaths.push_back(_stdlibDir + "/std/");
+  _includePaths.push_back(stdIncludePath());
 
   for (auto& includePath : _includePaths) {
-    if (!FileUtils::directory_exists(includePath)) {
+    if (!FileUtils::directory_exists(includePath) && !LibraryBundle::exists(includePath)) {
       std::cerr << "solns2out: cannot access include directory " << includePath << "\n";
       std::exit(EXIT_FAILURE);
     }
@@ -156,7 +157,7 @@ void Solns2Out::initFromOzn(const std::string& filename) {
   {
     _env = new Env();
     std::stringstream errstream;
-    _outputModel = parse(*_env, filenames, std::vector<std::string>(), "", "", _includePaths, {},
+    _outputModel = parse(*_env, filenames, std::vector<std::string>(), "", "", _includePaths, false,
                          false, false, false, false, errstream);
     if (_outputModel != nullptr) {
       std::vector<TypeError> typeErrors;
@@ -625,6 +626,14 @@ void Solns2Out::init() {
 
 Solns2Out::Solns2Out(std::ostream& os0, std::ostream& log0, std::string stdlibDir0)
     : _os(os0), _log(log0), _stdlibDir(std::move(stdlibDir0)) {}
+
+std::string Solns2Out::stdIncludePath() const {
+  std::string bundle = FileUtils::file_path(_stdlibDir + "/std" + LibraryBundle::SUFFIX);
+  if (LibraryBundle::exists(bundle)) {
+    return bundle;
+  }
+  return _stdlibDir + "/std/";
+}
 
 Solns2Out::~Solns2Out() {
   getOutput() << comments;

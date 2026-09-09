@@ -59,6 +59,9 @@ std::vector<std::string> directory_list(const std::string& dir,
                                         const std::string& ext = std::string("*"));
 /// Return share/minizinc directory if present anywhere above the executable
 std::string share_directory();
+/// Return the contents of \a filename, decoding base64-encoded deflate data
+/// when the file starts with "@". Throws errno if the file cannot be read.
+std::string read_file_contents(const std::string& filename);
 /// Return current working directory
 std::string working_directory();
 /// Get global configuration file name (in share/minizinc directory)

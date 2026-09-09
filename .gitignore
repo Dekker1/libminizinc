@@ -36,3 +36,6 @@ _build/
 .cache/
 !docs/Makefile
 result/
+
+# Generated MiniZinc library bundles
+share/minizinc/*.lib.mzn

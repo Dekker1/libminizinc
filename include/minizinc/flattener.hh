@@ -27,6 +27,7 @@
 #include <minizinc/typecheck.hh>
 #include <minizinc/utils.hh>
 
+#include <atomic>
 #include <ctime>
 #include <iomanip>
 #include <memory>
@@ -57,6 +58,9 @@ public:
   void printStatistics(std::ostream& os);
 
   void cancel() {
+    // Remembered as well as forwarded: the timeout thread can fire before the
+    // environment exists, and the cancellation must not be lost then
+    _cancelled = true;
     if (_pEnv != nullptr) {
       _pEnv->envi().cancel();
     }
@@ -133,8 +137,20 @@ private:
 
   unsigned int _flagPrePasses = 1;
 
+  /// Set when cancel() is called, possibly before the environment exists
+  std::atomic<bool> _cancelled{false};
+
   std::string _stdLibDir;
-  std::string _globalsDir;
+  std::vector<std::string> _globalsDirs;
+  /// True if the globals directories were given on the command line, in which
+  /// case they take precedence over those from the solver configuration
+  bool _globalsDirsFromCli = false;
+
+  /// Resolve a -G argument to an absolute path (a directory or a library bundle)
+  std::string resolveGlobalsDir(const std::string& g, const std::string& workingDir) const;
+  /// Include path for the library \a name shipped in the standard library
+  /// directory, preferring a library bundle over the directory
+  std::string libraryIncludePath(const std::string& name) const;
   std::string _cmdlineStr;
 
   std::string _flagOutputBase;

@@ -649,7 +649,7 @@ bool based_to_intval(const char* b, const char* e, int base, IntVal& out) {
 
 /// Location of a byte offset, used before a tree exists.
 ParserLocation nul_location(const ParserState& pp, unsigned int offset) {
-  unsigned int line = 1;
+  unsigned int line = 1 + pp.lineOffset;
   unsigned int lineStart = 0;
   for (unsigned int i = 0; i < offset; i++) {
     if (pp.buf[i] == '\n') {
@@ -954,7 +954,8 @@ ParserLocation Lowerer::loc(TSNode n) const {
   if (e.row == s.row && lastColumn < firstColumn) {
     lastColumn = firstColumn;  // zero-width node (a MISSING token)
   }
-  return {ASTString(_pp.filename), s.row + 1, firstColumn, e.row + 1, lastColumn};
+  return {ASTString(_pp.filename), s.row + 1 + _pp.lineOffset, firstColumn,
+          e.row + 1 + _pp.lineOffset, lastColumn};
 }
 
 void Lowerer::warn(TSNode n, const std::string& msg) { _pp.addWarning(Location(loc(n)), msg); }

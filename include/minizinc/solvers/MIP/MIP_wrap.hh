@@ -357,5 +357,5 @@ public:
   int getNOpen() const { return output.nOpenNodes; }
 
   /// Default MZN library for MIP
-  static std::string getMznLib();
+  static std::vector<std::string> getMznLib();
 };

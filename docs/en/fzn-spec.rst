@@ -208,19 +208,19 @@ Identifiers that correspond to the names of predicates, predicate parameters
 and annotations cannot have leading underscores.
 
 The following keywords are reserved and cannot be used as identifiers:
-``annotation``, 
-``any``, 
-``array``, 
-``bool``, 
+``annotation``,
+``any``,
+``array``,
+``bool``,
 ``case``,
-``constraint``, 
+``constraint``,
 ``diff``,
 ``div``,
 ``else``,
-``elseif``, 
-``endif``, 
-``enum``, 
-``false``, 
+``elseif``,
+``endif``,
+``enum``,
+``false``,
 ``float``,
 ``function``,
 ``if``,
@@ -286,12 +286,12 @@ Examples:
       % m is the median value of {x, y, z}.
       %
   predicate median_of_3(var int: x, var int: y, var int: z, var int: m);
-  
+
       % all_different([x1, .., xn]) iff
       % for all i, j in 1..n: xi != xj.
       %
   predicate all_different(array [int] of var int: xs);
-  
+
       % exactly_one([x1, .., xn]) iff
       % there exists an i in 1..n: xi = true
       % and for all j in 1..n: j != i -> xj = false.
@@ -405,14 +405,14 @@ Examples:
 .. code-block:: minizinc
 
   solve satisfy;      % Find any solution using the default strategy.
-  
+
   solve minimize w;   % Find a solution minimizing w, using the default strategy.
-  
+
       % First label the variables in xs in the order x[1], x[2], ...
       % trying values in ascending order.
   solve :: int_search(xs, input_order, indomain_min, complete)
       satisfy;    % Find any solution.
-  
+
       % First use first-fail on these variables, splitting domains
       % at each choice point.
   solve :: int_search([x, y, z], first_fail, indomain_split, complete)
@@ -496,7 +496,7 @@ support the starred options):
 +-----------------------+---------------+------------------------------------------------------------------------------------------------------+
 
 :mzndef:`<assignmentannotation>` specifies how the chosen variable should be
-constrained. 
+constrained.
 Possible choices are as follows (it is recommended that implementations
 support at least the starred options):
 
@@ -965,7 +965,7 @@ Example for a ``redefinitions.mzn``:
   % Redefine float_sinh function in terms of exp
   predicate float_sinh(var float: a, var float: b) =
       b == (exp(a)-exp(-a))/2.0;
-  
+
   % Mark float_tanh as unsupported
   predicate float_tanh(var float: a, var float: b) =
       abort("The builtin float_tanh is not supported by this solver.");
@@ -1067,7 +1067,7 @@ A reified constraint is a constraint that is not simply enforced, but whose trut
 If a predicate is called in such a reified context, the MiniZinc compiler will try to find a version of the predicate with :mzn:`_reif` added to its identifier and an additional :mzn:`var bool` argument. For the above example, the compiler will try to generate the following FlatZinc code:
 
 .. code-block:: minizinc
-  
+
   var bool: b;
   constraint all_different_reif(x, b);
 
@@ -1087,7 +1087,7 @@ For example, :mzn:`constraint y=0 \/ all_different(x)` might be translated as fo
   constraint all_different_imp(x, X_INTRODUCED_2);
   constraint bool_clause([X_INTRODUCED_1,X_INTRODUCED_2]);
 
-MiniZinc will decide whether to use half-reification case by case based on the availability of the :mzn:`_imp` predicate. As for reified constraints, it may be benefitial to provide specialised half-reified versions if the solver supports them. 
+MiniZinc decides whether to use half-reification based on the availability of the :mzn:`_imp` predicate. As with reified constraints, providing specialised half-reified versions may be beneficial when the solver supports them.
 
 .. _fzn-cmdline-options:
 
@@ -1119,11 +1119,11 @@ where ``<executable-name>`` is the name of the executable. Solvers may support t
   (only used with optimisation problems). This option should be supported rather
   than ``-a`` for solvers which only support printing of intermediate solutions
   for optimisation problems but no reporting of all solutions for satisfaction
-  problems. 
+  problems.
 
 .. option:: -f
 
-  Instructs the solver to conduct a "free search", i.e., ignore any search 
+  Instructs the solver to conduct a "free search", i.e., ignore any search
   annotations. The solver is not *required* to ignore the annotations, but it
   is *allowed* to do so.
 
@@ -1199,7 +1199,7 @@ Here is a list of all configuration options recognised by the configuration file
 - ``version`` (string, required): The version of the solver.
 - ``id`` (string, required): A unique identifier for the solver, "reverse domain name" notation.
 - ``executable`` (string or list of strings, required): The executable for this solver that can run FlatZinc files. This can be just a file name (in which case the solver has to be on the current PATH), an absolute path to the executable, or a relative path (which is interpreted relative to the location of the configuration file). When a list of strings is provided, the first string is treated as the executable and consecutive strings are treated as arguments or flags that are always passed to the executable (i.e., arguments and flags that are not configurable by the solver user).
-- ``mznlib`` (string, default ``""``): The solver-specific library of global constraints and redefinitions. This should be the name of a directory (either an absolute path or a relative path, interpreted relative to the location of the configuration file). For solvers whose libraries are installed in the same location as the MiniZinc standard library, this can also take the form ``-G<solverlib>``, e.g., ``-Ggecode`` (this is mostly the case for solvers that ship with the MiniZinc binary distribution).
+- ``mznlib`` (string or list of strings, default ``""``): The solver-specific libraries of global constraints and redefinitions. Each entry names a directory or library bundle (see :ref:`sec-library-bundles`). A path may be absolute or relative to the configuration file. Libraries installed alongside the MiniZinc standard library may instead use ``-G<solverlib>``, such as ``-Ggecode``. When multiple entries are given, MiniZinc searches them in order, followed by the standard library. Command-line ``-G`` options replace the solver's ``mznlib`` entries and may be repeated to layer libraries.
 - ``tags`` (list of strings, default empty): Each solver can have one or more tags that describe its features in an abstract way. Tags can be used for selecting a solver using the ``--solver`` option. There is no fixed list of tags, however we recommend using the following tags if they match the solver's behaviour:
 
   - ``"cp"``: for Constraint Programming solvers
@@ -1223,6 +1223,31 @@ Here is a list of all configuration options recognised by the configuration file
 - ``needsStdlibDir`` (bool, default ``false``): Whether the solver needs to know the location of the MiniZinc standard library directory. If true, it will be passed to the solver using the ``stdlib-dir`` option.
 - ``isGUIApplication`` (bool, default ``false``): Whether the solver has its own graphical user interface, which means that MiniZinc will detach from the process and not wait for it to finish or to produce any output.
 - ``isInteractive`` (bool, default ``false``): Whether the solver runs an interactive command-line session. When set, MiniZinc lets the solver read the user's terminal ``stdin`` directly (so the user can type commands to it) and echoes the solver's ``stdout`` back verbatim, *except* for solution blocks. A solution block is the text bracketed by the marker lines ``%%%mzn-sol-begin`` and ``%%%mzn-sol-end``; the lines between those markers must be standard FlatZinc solution output (variable assignments terminated by ``----------``) and are passed through the normal output processing (so they are mapped through the model's output item). The marker lines themselves are consumed. This is equivalent to passing ``--fzn-interactive`` to the generic FlatZinc driver. Because the solver's ``stdout`` is a pipe (not a terminal) in this mode, an interactive solver must flush its prompts and replies.
+
+.. _sec-library-bundles:
+
+Library bundles
+~~~~~~~~~~~~~~~
+
+A library directory can be packaged as a single ``.lib.mzn`` file. A bundle can be used wherever a library directory is accepted: with ``-I`` or ``-G``, or as an ``mznlib`` entry in a solver configuration file. Bundling avoids opening each library file separately, which is especially useful on slow or networked file systems.
+
+A bundle is the concatenation of the library's files, each preceded by a pragma naming the file that follows::
+
+  /*** @mzn_lib_version 1 ***/
+  /*** @override_file "fzn_all_different_int.mzn" ***/
+  predicate fzn_all_different_int(array [int] of var int: x) =
+    mysolver_all_different(x);
+  /*** @override_file "redefinitions.mzn" ***/
+  ...
+
+The pragma names the file relative to the library root, using ``/`` as the separator. This is the same name a model uses in an ``include`` item. There are two forms:
+
+- ``@override_file`` reports locations in the bundle, using bundle line numbers. This is appropriate for a solver library written as a single file, because there are no original files to reference.
+- ``@replace_file`` reports locations against the original file. This is used for the MiniZinc standard library.
+
+A bundle may be compressed. If it starts with ``@``, MiniZinc reads the remaining contents as base64-encoded deflate data.
+
+For libraries that MiniZinc locates within ``mznStdlibDir`` (reported by ``--config-dirs``), a bundle takes precedence over the directory of the same name. For example, ``std.lib.mzn`` takes precedence over ``std``; the first pass of ``--two-pass`` similarly prefers ``gecode_presolver.lib.mzn`` over ``gecode_presolver``. With ``-I``, ``-G``, or ``mznlib``, bundles must be named explicitly.
 
 .. _ch-fzn-syntax:
 

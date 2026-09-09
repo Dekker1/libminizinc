@@ -58,10 +58,10 @@ protected:
   std::string _executable;
   /// The path to the executable, after resolving
   std::string _executableResolved;
-  /// The path to the solver's MiniZinc library
-  std::string _mznlib;
-  /// The path to the solver's MiniZinc library, after resolving
-  std::string _mznlibResolved;
+  /// The paths to the solver's MiniZinc libraries, searched in order
+  std::vector<std::string> _mznlib;
+  /// The paths to the solver's MiniZinc libraries, after resolving
+  std::vector<std::string> _mznlibResolved;
   /// Version string
   std::string _version;
   /// MiniZinc library version
@@ -144,13 +144,18 @@ public:
   /// Return resolved executable path
   std::string executableResolved() const { return _executableResolved; }
 
-  /// Return MiniZinc library path
-  std::string mznlib() const { return _mznlib; }
-  /// Set MiniZinc library path
-  void mznlib(const std::string& s) { _mznlib = s; }
+  /// Return MiniZinc library paths
+  const std::vector<std::string>& mznlib() const { return _mznlib; }
+  /// Set MiniZinc library paths, searched in the order given
+  void mznlib(std::vector<std::string> s) { _mznlib = std::move(s); }
 
-  /// Return resolved MiniZinc library path
-  std::string mznlibResolved() const { return _mznlibResolved; }
+  /// Return resolved MiniZinc library paths
+  const std::vector<std::string>& mznlibResolved() const { return _mznlibResolved; }
+  /// Return the resolved path of library \a i, or its raw path if it was not resolved
+  const std::string& mznlibAt(size_t i) const {
+    return i < _mznlibResolved.size() && !_mznlibResolved[i].empty() ? _mznlibResolved[i]
+                                                                     : _mznlib[i];
+  }
 
   /// Return required MiniZinc library version
   int mznlibVersion() const { return _mznlibVersion; }

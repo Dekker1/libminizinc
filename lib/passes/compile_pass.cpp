@@ -53,7 +53,7 @@ ASTString strip_stdlib_path(const vector<string>& includePaths, const ASTString&
   return fs;
 }
 
-Env* change_library(Env& e, vector<string>& includePaths, const string& globals_dir,
+Env* change_library(Env& e, vector<string>& includePaths, const vector<string>& globals_dirs,
                     CompilePassFlags& compflags, bool verbose = false) {
   GCLock lock;
   CopyMap cm;
@@ -64,8 +64,10 @@ Env* change_library(Env& e, vector<string>& includePaths, const string& globals_
 
   vector<string> new_includePaths;
 
-  if (std::find(includePaths.begin(), includePaths.end(), globals_dir) == includePaths.end()) {
-    new_includePaths.push_back(globals_dir);
+  for (const auto& globals_dir : globals_dirs) {
+    if (std::find(includePaths.begin(), includePaths.end(), globals_dir) == includePaths.end()) {
+      new_includePaths.push_back(globals_dir);
+    }
   }
   new_includePaths.insert(new_includePaths.end(), includePaths.begin(), includePaths.end());
 
@@ -121,8 +123,8 @@ Env* change_library(Env& e, vector<string>& includePaths, const string& globals_
 }
 
 CompilePass::CompilePass(Env* e, FlatteningOptions& opts, CompilePassFlags& cflags,
-                         string globals_library, vector<string> include_paths, bool change_lib,
-                         bool ignore_unknown)
+                         vector<string> globals_library, vector<string> include_paths,
+                         bool change_lib, bool ignore_unknown)
     : _env(e),
       _fopts(opts),
       _compflags(cflags),
@@ -134,7 +136,11 @@ CompilePass::CompilePass(Env* e, FlatteningOptions& opts, CompilePassFlags& cfla
 Env* CompilePass::run(Env* store, std::ostream& log) {
   Timer lasttime;
   if (_compflags.verbose) {
-    log << "\n\tCompilePass: Flatten with \'" << _library << "\' library ...\n";
+    log << "\n\tCompilePass: Flatten with \'";
+    for (size_t i = 0; i < _library.size(); i++) {
+      log << (i > 0 ? ", " : "") << _library[i];
+    }
+    log << "\' library ...\n";
   }
 
   Env* new_env;

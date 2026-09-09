@@ -1,0 +1,28 @@
+# Configured by cmake/targets/libmzn.cmake; run during `install` to pack each
+# shipped MiniZinc library into a single .lib.mzn file next to its directory.
+
+set(MZN_BUNDLE_PYTHON "@Python3_EXECUTABLE@")
+set(MZN_BUNDLE_SCRIPT "@PROJECT_SOURCE_DIR@/scripts/mzn_bundle.py")
+set(MZN_BUNDLE_SOURCE "@PROJECT_SOURCE_DIR@/share/minizinc")
+set(MZN_BUNDLE_DEST "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DATAROOTDIR@/minizinc")
+
+file(MAKE_DIRECTORY "${MZN_BUNDLE_DEST}")
+
+foreach(lib @MZN_BUNDLED_LIBRARIES@)
+  if("${lib}" STREQUAL "std")
+    set(bundle_flags "")
+  else()
+    # Compressed like the standard library: these ship with MiniZinc, so nothing
+    # reads them as text
+    set(bundle_flags "--override" "--compress")
+  endif()
+  message(STATUS "Bundling MiniZinc library ${lib}")
+  execute_process(
+    COMMAND "${MZN_BUNDLE_PYTHON}" "${MZN_BUNDLE_SCRIPT}" ${bundle_flags}
+            -o "${MZN_BUNDLE_DEST}/${lib}.lib.mzn" "${MZN_BUNDLE_SOURCE}/${lib}"
+    RESULT_VARIABLE mzn_bundle_result
+  )
+  if(NOT mzn_bundle_result EQUAL 0)
+    message(FATAL_ERROR "Failed to bundle MiniZinc library ${lib}")
+  endif()
+endforeach()

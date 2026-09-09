@@ -687,7 +687,7 @@ void GeasSolverInstance::printStatistics() {
 GeasSolverFactory::GeasSolverFactory() {
   SolverConfig sc("org.minizinc.geas", getVersion(nullptr));
   sc.name("Geas");
-  sc.mznlib("-Ggeas");
+  sc.mznlib({"-Ggeas.lib.mzn", "-Ggeas"});
   sc.mznlibVersion(1);
   sc.supportsMzn(false);
   sc.description(getDescription(nullptr));

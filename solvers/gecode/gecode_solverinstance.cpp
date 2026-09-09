@@ -38,7 +38,7 @@ GecodeSolverFactory::GecodeSolverFactory() {
   sc.name("Presolver");
   sc.tags({"cp", "float", "api", "set", "gecode_presolver", "__internal__"});
 #endif
-  sc.mznlib("-Ggecode_presolver");
+  sc.mznlib({"-Ggecode_presolver.lib.mzn", "-Ggecode_presolver"});
   sc.mznlibVersion(1);
   sc.description("Internal Gecode presolver plugin");
   sc.stdFlags({"-a", "-n", "-p", "-s"});

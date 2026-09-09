@@ -310,13 +310,18 @@ SolverConfig SolverConfig::load(const string& filename) {
               sc._executableResolved = exe;
             }
           } else if (ai->id() == "mznlib") {
-            std::string libPath = get_string(ai);
-            sc._mznlib = libPath;
-            if (!libPath.empty()) {
-              if (libPath[0] == '-') {
-                sc._mznlibResolved = libPath;
+            if (Expression::isa<ArrayLit>(ai->e())) {
+              sc._mznlib = get_string_list(ai);
+            } else {
+              sc._mznlib = {get_string(ai)};
+            }
+            for (const auto& libPath : sc._mznlib) {
+              // A "-G<name>" library is resolved against the standard library
+              // directory later, so it is kept verbatim here
+              if (libPath.empty() || libPath[0] == '-') {
+                sc._mznlibResolved.push_back(libPath);
               } else {
-                sc._mznlibResolved = FileUtils::file_path(libPath, basePath);
+                sc._mznlibResolved.push_back(FileUtils::file_path(libPath, basePath));
               }
             }
           } else if (ai->id() == "version") {
@@ -412,6 +417,23 @@ SolverConfig SolverConfig::load(const string& filename) {
   return sc;
 }
 
+namespace {
+/// Print one entry as a string for compatibility with consumers that expect
+/// the original single-valued "mznlib" field.
+std::string json_string_or_list(const std::vector<std::string>& v) {
+  std::ostringstream oss;
+  if (v.size() == 1) {
+    return "\"" + Printer::escapeStringLit(v[0]) + "\"";
+  }
+  oss << "[";
+  for (size_t i = 0; i < v.size(); i++) {
+    oss << (i > 0 ? ", " : "") << "\"" << Printer::escapeStringLit(v[i]) << "\"";
+  }
+  oss << "]";
+  return oss.str();
+}
+}  // namespace
+
 std::string SolverConfig::toJSON(const SolverConfigs& configs) const {
   GCLock lock;
   std::ostringstream oss;
@@ -422,7 +444,7 @@ std::string SolverConfig::toJSON(const SolverConfigs& configs) const {
     oss << "    \"isDefault\": true,\n";
   }
   if (!mznlibResolved().empty()) {
-    oss << "    \"mznlib\": \"" << Printer::escapeStringLit(mznlibResolved()) << "\",\n";
+    oss << "    \"mznlib\": " << json_string_or_list(mznlibResolved()) << ",\n";
   }
   if (!executableResolved().empty()) {
     oss << "    \"executable\": \"" << Printer::escapeStringLit(executableResolved()) << "\",\n";
@@ -444,7 +466,7 @@ std::string SolverConfig::toJSON(const SolverConfigs& configs) const {
   oss << "  \"name\": \"" << Printer::escapeStringLit(name()) << "\",\n";
   oss << "  \"version\": \"" << Printer::escapeStringLit(version()) << "\",\n";
   if (!mznlib().empty()) {
-    oss << "  \"mznlib\": \"" << Printer::escapeStringLit(mznlib()) << "\",\n";
+    oss << "  \"mznlib\": " << json_string_or_list(mznlib()) << ",\n";
   }
   if (!executable().empty()) {
     oss << "  \"executable\": \"" << Printer::escapeStringLit(executable()) << "\",\n";
