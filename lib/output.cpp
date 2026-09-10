@@ -36,6 +36,8 @@ bool is_completely_par(EnvI& env, FunctionI* fi, const std::vector<Type>& tv) {
 
 }  // namespace
 
+void make_par(EnvI& env, Expression* e);
+
 void check_output_par_fn(EnvI& env, Call* rhs) {
   std::vector<Type> tv(rhs->argCount());
   for (unsigned int i = rhs->argCount(); (i--) != 0U;) {
@@ -192,19 +194,7 @@ bool cannot_use_rhs_for_output(EnvI& env, Expression* e,
                 ti->mkPar(env);
               }
 
-              class MakeBodyPar : public EVisitor {
-              public:
-                EnvI& env;
-                MakeBodyPar(EnvI& env0) : env(env0) {}
-                bool enter(Expression* e) {
-                  Type t(Expression::type(e));
-                  t.mkPar(env);
-                  t.cv(false);
-                  Expression::type(e, t);
-                  return true;
-                }
-              } _mbp(env);
-              top_down(_mbp, decl->e());
+              make_par(env, decl->e());
 
               CollectOccurrencesE ce(env, env.outputVarOccurrences, decl);
               top_down(ce, decl->e());

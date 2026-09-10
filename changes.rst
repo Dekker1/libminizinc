@@ -24,6 +24,9 @@ Bug fixes:
    (``--model-check-only``, ``--instance-check-only``, ``--model-interface-only``
    and ``--model-types-only``), rather than printing the warnings as errors but
    exiting successfully.
+-  Fix an "unexpected absent literal" internal error when a function that
+   compares optional values is used to compute an output value
+   (:bugref:`1057`).
 
 .. _v2.10.1:
 
@@ -39,7 +42,7 @@ Packaging changes:
 -  Windows ARM64 packages are now available.
 -  Separate ARM and Intel macOS packages are provided instead of a single
    universal binary.
--  Packages containing the MiniZinc command line tools and solvers are 
+-  Packages containing the MiniZinc command line tools and solvers are
    `now available <https://github.com/MiniZinc/libminizinc/releases/tag/2.10.1>`__
    without the IDE.
 -  Docker images are now released on the
