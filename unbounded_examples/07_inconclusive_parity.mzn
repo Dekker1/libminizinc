@@ -13,13 +13,17 @@
   solution and UNSAT carry information.
 ***/
 include "../unbounded.mzn";
-SLV_MIN = -100; SLV_MAX = 100;   % pretend the solver is this small
+SLV_MIN = -100;
+SLV_MAX = 100; % pretend the solver is this small
 
-Unbounded: x; Unbounded: y;
+Unbounded: x;
+Unbounded: y;
 constraint unb_var(x) /\ unb_var(y);
 
 constraint 2 * x = 2 * y + 1;
 
 solve satisfy;
-output ["x = " ++ show_unbounded(x) ++ ", y = " ++ show_unbounded(y) ++ "\n",
-        unb_status(["x", "y"], [x, y], unb_inexact) ++ "\n"];
+output [
+	"x = " ++ show_unbounded(x) ++ ", y = " ++ show_unbounded(y) ++ "\n",
+	unb_status(["x", "y"], [x, y], unb_inexact) ++ "\n",
+];

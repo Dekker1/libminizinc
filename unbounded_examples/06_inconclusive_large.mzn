@@ -11,7 +11,8 @@
   why the verdict tracks intermediate results and not just declared variables.
 ***/
 include "../unbounded.mzn";
-SLV_MIN = -100; SLV_MAX = 100;   % pretend the solver is this small
+SLV_MIN = -100;
+SLV_MAX = 100; % pretend the solver is this small
 
 Unbounded: x;
 constraint unb_var(x);

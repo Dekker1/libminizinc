@@ -38,32 +38,32 @@ array[1..NA] of set of int: cls =
     elseif i = NA then SLV_MAX + 1..SLV_MAX + K
     else {i + SLV_MIN - 2} endif | i in 1..NA ];
 
-function int: papply(int: op, int: a, int: b) =
-  if     op = UNB_ADD then a + b
-  elseif op = UNB_SUB then a - b
-  elseif op = UNB_MUL then a * b
-  elseif op = UNB_DIV then a div b
-  elseif op = UNB_MOD then a mod b
-  elseif op = UNB_MIN then min(a, b)
+function int: papply(int: tag, int: a, int: b) =
+  if     tag = UNB_ADD then a + b
+  elseif tag = UNB_SUB then a - b
+  elseif tag = UNB_MUL then a * b
+  elseif tag = UNB_DIV then a div b
+  elseif tag = UNB_MOD then a mod b
+  elseif tag = UNB_MIN then min(a, b)
   else                     max(a, b) endif;
 
 set of int: BINOPS = {UNB_ADD, UNB_SUB, UNB_MUL, UNB_DIV, UNB_MOD, UNB_MIN, UNB_MAX};
 
-constraint forall (op in BINOPS, ix, iy in 1..NA
-                   where not (op in {UNB_DIV, UNB_MOD} /\ iy = aix(0))) (
-  let { set of int: reach = { aix(papply(op, a, b)) | a in cls[ix], b in cls[iy] } } in
+constraint forall (tag in BINOPS, ix, iy in 1..NA
+                   where not (tag in {UNB_DIV, UNB_MOD} /\ iy = aix(0))) (
+  let { set of int: reach = { aix(papply(tag, a, b)) | a in cls[ix], b in cls[iy] } } in
   forall (iz in 1..NA) (
-    if iz in reach then unb_rel(op, aval(ix), aval(iy), aval(iz))
-    elseif tight   then not (unb_rel(op, aval(ix), aval(iy), aval(iz)))
+    if iz in reach then unb_rel(tag, aval(ix), aval(iy), aval(iz))
+    elseif tight   then not (unb_rel(tag, aval(ix), aval(iy), aval(iz)))
     else true endif
   )
 );
 
-constraint forall (op in {UNB_NEG, UNB_ABS}, ix in 1..NA) (
-  let { set of int: reach = { aix(if op = UNB_NEG then -a else abs(a) endif) | a in cls[ix] } } in
+constraint forall (tag in {UNB_NEG, UNB_ABS}, ix in 1..NA) (
+  let { set of int: reach = { aix(if tag = UNB_NEG then -a else abs(a) endif) | a in cls[ix] } } in
   forall (iz in 1..NA) (
-    if iz in reach then unb_rel1(op, aval(ix), aval(iz))
-    elseif tight   then not (unb_rel1(op, aval(ix), aval(iz)))
+    if iz in reach then unb_rel1(tag, aval(ix), aval(iz))
+    elseif tight   then not (unb_rel1(tag, aval(ix), aval(iz)))
     else true endif
   )
 );
@@ -90,4 +90,5 @@ constraint fr[1] < fr[2] /\ not (fr[3] < fr[4]);
 constraint fr[5] < fr[6] /\ not (fr[7] < fr[8]);
 
 solve satisfy;
-output ["" ++ (if tight then "exact" else "sound" endif) ++ " over the full abstract space for \(SLV_MIN)..\(SLV_MAX)\n"];
+output [(if tight then "exact" else "sound" endif)
+     ++ " over the full abstract space for \(SLV_MIN)..\(SLV_MAX)\n"];
