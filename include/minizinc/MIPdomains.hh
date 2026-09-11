@@ -43,6 +43,7 @@
     if (!(cond)) { /* NOLINT(readability-simplify-boolean-expr) */                \
       std::ostringstream oss;                                                     \
       oss << "from MIPDomains: " << msg; /* NOLINT(bugprone-macro-parentheses) */ \
+      (envi).fail(oss.str(), loc);                                                \
       throw ModelInconsistent(envi, loc, oss.str());                              \
     }                                                                             \
   } while (0)

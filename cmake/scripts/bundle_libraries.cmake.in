@@ -8,10 +8,26 @@ set(MZN_BUNDLE_DEST "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DATAROO
 
 file(MAKE_DIRECTORY "${MZN_BUNDLE_DEST}")
 
+# A library that owns the files it ships reports their original locations, so
+# that a path still says which library a declaration came from. `fznso_*` is
+# matched that way: `NativePredicates::libraryDirs` holds directory prefixes,
+# and a bundle location would match none of them.
+set(MZN_BUNDLE_OWN_FILES std fznso_constraints fznso_rewrite)
+
 foreach(lib @MZN_BUNDLED_LIBRARIES@)
-  if("${lib}" STREQUAL "std")
-    set(bundle_flags "")
+  # `list(FIND)` rather than `IN_LIST`: a script `include`d from
+  # `cmake_install.cmake` does not inherit the project's policies, so CMP0057
+  # is unset there and `IN_LIST` is not an operator.
+  list(FIND MZN_BUNDLE_OWN_FILES "${lib}" mzn_bundle_own)
+  if(NOT mzn_bundle_own EQUAL -1)
+    # Compressed, except the standard library, which stays readable as text
+    if("${lib}" STREQUAL "std")
+      set(bundle_flags "")
+    else()
+      set(bundle_flags "--compress")
+    endif()
   else()
+    # Overrides files it does not own, so it reports bundle locations.
     # Compressed like the standard library: these ship with MiniZinc, so nothing
     # reads them as text
     set(bundle_flags "--override" "--compress")

@@ -44,6 +44,7 @@ add_library(mzn
   lib/lexer.lxx
   lib/thirdparty/miniz.c
   lib/model.cpp
+  lib/native_predicates.cpp
   lib/optimize.cpp
   lib/optimize_constraints.cpp
   lib/output.cpp
@@ -96,6 +97,7 @@ add_library(mzn
   include/minizinc/iter.hh
   include/minizinc/json_parser.hh
   include/minizinc/model.hh
+  include/minizinc/native_predicates.hh
   include/minizinc/optimize.hh
   include/minizinc/optimize_constraints.hh
   include/minizinc/output.hh
@@ -166,6 +168,7 @@ endif()
 include(cmake/targets/libminizinc_atlantis.cmake)
 include(cmake/targets/libminizinc_chuffed.cmake)
 include(cmake/targets/libminizinc_cplex.cmake)
+include(cmake/targets/libminizinc_fznso.cmake)
 include(cmake/targets/libminizinc_geas.cmake)
 include(cmake/targets/libminizinc_gecode.cmake)
 include(cmake/targets/libminizinc_gurobi.cmake)
@@ -204,7 +207,8 @@ if(MZN_BUNDLE_LIBRARIES)
   endif()
   # The standard library reports original source locations. Solver libraries
   # report bundle locations because they override files they do not own.
-  set(MZN_BUNDLED_LIBRARIES std linear gecode_presolver geas)
+  set(MZN_BUNDLED_LIBRARIES std linear gecode_presolver geas fznso_constraints fznso_nosets
+      fznso_rewrite)
   configure_file(
     ${PROJECT_SOURCE_DIR}/cmake/scripts/bundle_libraries.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/bundle_libraries.cmake
