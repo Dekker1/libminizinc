@@ -111,6 +111,7 @@ public:
         isSTDLib(isSTDLib0),
         parseDocComments(parseDocComments0),
         hadError(false),
+        hasOpIdentifier(false),
         env(env0),
         err(err0) {
 #ifdef _WIN32
@@ -156,6 +157,12 @@ public:
   bool isSTDLib;
   bool parseDocComments;
   bool hadError;
+  /// Whether `op' was used as an identifier, and where it first appeared. The
+  /// warning is deferred until the file has parsed: `op' in a file that does
+  /// not parse may have been meant as an operation type, which this version
+  /// cannot parse at all.
+  bool hasOpIdentifier;
+  ParserLocation opIdentifierLoc;
   std::vector<SyntaxError> syntaxErrors;
   EnvI& env;
   std::ostream& err;

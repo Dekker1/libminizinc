@@ -48,13 +48,22 @@ namespace {
 void run_parser(MiniZinc::ParserState& pp) {
   if (MiniZinc::use_tree_sitter_parser) {
     MiniZinc::parse_tree_sitter(pp);
-    return;
+  } else {
+    mzn_yylex_init(&pp.yyscanner);
+    mzn_yyset_extra(&pp, pp.yyscanner);
+    mzn_yyparse(&pp);
+    if (pp.yyscanner != nullptr) {
+      mzn_yylex_destroy(pp.yyscanner);
+    }
   }
-  mzn_yylex_init(&pp.yyscanner);
-  mzn_yyset_extra(&pp, pp.yyscanner);
-  mzn_yyparse(&pp);
-  if (pp.yyscanner != nullptr) {
-    mzn_yylex_destroy(pp.yyscanner);
+  // Only warn when the file parsed: `op(int: (int)): f' is an operation type
+  // this version cannot parse, and reporting it as a misused identifier on top
+  // of the syntax error would be wrong.
+  if (pp.hasOpIdentifier && !pp.hadError) {
+    MiniZinc::GCLock lock;
+    pp.addWarning(MiniZinc::Location(pp.opIdentifierLoc),
+                  "`op' will become a reserved word in a future version of MiniZinc; rename this "
+                  "identifier");
   }
 }
 }  // namespace
