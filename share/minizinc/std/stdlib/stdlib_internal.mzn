@@ -177,6 +177,48 @@ function var int: lin_exp(array [int] of int, array [int] of var int, int)
 function var float: lin_exp(array [int] of float, array [int] of var float, float)
   :: mzn_internal_representation;
 
+% Deferred compiler-internal relations; never emitted to a solver.
+predicate lin_exp_le(var int, var int) :: mzn_internal_representation;
+predicate lin_exp_le_reif(var int, var int, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_le_imp(var int, var int, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_lt(var int, var int) :: mzn_internal_representation;
+predicate lin_exp_lt_reif(var int, var int, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_lt_imp(var int, var int, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_eq(var int, var int) :: mzn_internal_representation;
+predicate lin_exp_eq_reif(var int, var int, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_eq_imp(var int, var int, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_ne(var int, var int) :: mzn_internal_representation;
+predicate lin_exp_ne_reif(var int, var int, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_ne_imp(var int, var int, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_le(var float, var float) :: mzn_internal_representation;
+predicate lin_exp_le_reif(var float, var float, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_le_imp(var float, var float, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_lt(var float, var float) :: mzn_internal_representation;
+predicate lin_exp_lt_reif(var float, var float, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_lt_imp(var float, var float, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_eq(var float, var float) :: mzn_internal_representation;
+predicate lin_exp_eq_reif(var float, var float, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_eq_imp(var float, var float, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_ne(var float, var float) :: mzn_internal_representation;
+predicate lin_exp_ne_reif(var float, var float, var bool)
+  :: mzn_internal_representation;
+predicate lin_exp_ne_imp(var float, var float, var bool)
+  :: mzn_internal_representation;
+
 test mzn_in_root_context() :: mzn_internal_representation;
 
 test mzn_in_root_context(var $T) :: mzn_internal_representation;

@@ -17,7 +17,7 @@
 #include <minizinc/eval_par.hh>
 #include <minizinc/flat_exp.hh>
 #include <minizinc/flatten.hh>
-#include <minizinc/flatten_internal.hh>
+#include <minizinc/flatten_linear.hh>
 #include <minizinc/gc.hh>
 #include <minizinc/hash.hh>
 #include <minizinc/iter.hh>
@@ -4555,27 +4555,6 @@ void flatten(Env& e, FlatteningOptions opt) {
     int startItem = 0;
     int endItem = static_cast<int>(m.size()) - 1;
 
-    FunctionI* int_lin_eq;
-    {
-      std::vector<Type> int_lin_eq_t(3);
-      int_lin_eq_t[0] = Type::parint(1);
-      int_lin_eq_t[1] = Type::varint(1);
-      int_lin_eq_t[2] = Type::parint(0);
-      GCLock lock;
-      FunctionI* fi = env.model->matchFn(env, env.constants.ids.int_.lin_eq, int_lin_eq_t, false);
-      int_lin_eq = ((fi != nullptr) && (fi->e() != nullptr)) ? fi : nullptr;
-    }
-    FunctionI* float_lin_eq;
-    {
-      std::vector<Type> float_lin_eq_t(3);
-      float_lin_eq_t[0] = Type::parfloat(1);
-      float_lin_eq_t[1] = Type::varfloat(1);
-      float_lin_eq_t[2] = Type::parfloat(0);
-      GCLock lock;
-      FunctionI* fi =
-          env.model->matchFn(env, env.constants.ids.float_.lin_eq, float_lin_eq_t, false);
-      float_lin_eq = ((fi != nullptr) && (fi->e() != nullptr)) ? fi : nullptr;
-    }
     FunctionI* array_bool_and;
     FunctionI* array_bool_and_imp;
     FunctionI* array_bool_clause;
@@ -4681,6 +4660,8 @@ void flatten(Env& e, FlatteningOptions opt) {
                   env.flatAddItem(ci);
                 } else if (vdi->e()->type().isPar() || vdi->e()->ti()->computedDomain()) {
                   env.flatRemoveItem(vdi);
+                  continue;
+                } else if (release_linear_definition(env, vdi)) {
                   continue;
                 }
               } else {
@@ -4843,56 +4824,26 @@ void flatten(Env& e, FlatteningOptions opt) {
             if (Call* c = Expression::dynamicCast<Call>(vd->e())) {
               GCLock lock;
               Call* nc = nullptr;
+              VarDecl* reifiedInto = nullptr;
+              if (is_deferred_relation(c->id())) {
+                if (BinOp* bo = linear_relation(env, c, reifiedInto)) {
+                  rebuild_linear(env, vdi, c, bo, reifiedInto);
+                  continue;
+                }
+              }
               if (c->id() == env.constants.ids.lin_exp) {
-                if (c->type().isfloat() && (float_lin_eq != nullptr)) {
-                  std::vector<Expression*> args(c->argCount());
-                  auto* le_c = Expression::cast<ArrayLit>(follow_id(c->arg(0)));
-                  std::vector<Expression*> nc_c(le_c->size());
-                  for (auto ii = static_cast<unsigned int>(nc_c.size()); (ii--) != 0U;) {
-                    nc_c[ii] = (*le_c)[ii];
+                if (!doLastProcessing) {
+                  // Reader counts are final only after the main agenda is empty.
+                  processLast.push_back(i);
+                } else if (linear_keeps_name(env, vd, c)) {
+                  nc = linear_definition_call(env, vd, c);
+                } else {
+                  // Unsupported readers leave the definition for the fallback below.
+                  inline_linear_definition(env, vdi);
+                  if (env.varOccurrences.occurrences(vd) == 0) {
+                    continue;
                   }
-                  nc_c.push_back(FloatLit::a(-1));
-                  args[0] = new ArrayLit(Location().introduce(), nc_c);
-                  Expression::type(args[0], Type::parfloat(1));
-                  auto* le_x = Expression::cast<ArrayLit>(follow_id(c->arg(1)));
-                  std::vector<Expression*> nx(le_x->size());
-                  for (auto ii = static_cast<unsigned int>(nx.size()); (ii--) != 0U;) {
-                    nx[ii] = (*le_x)[ii];
-                  }
-                  nx.push_back(vd->id());
-                  args[1] = new ArrayLit(Location().introduce(), nx);
-                  Expression::type(args[1], Type::varfloat(1));
-                  FloatVal d = FloatLit::v(Expression::cast<FloatLit>(c->arg(2)));
-                  args[2] = FloatLit::a(-d);
-                  Expression::type(args[2], Type::parfloat(0));
-                  nc = Call::a(Expression::loc(c).introduce(), ASTString("float_lin_eq"), args);
-                  nc->type(Type::varbool());
-                  nc->decl(float_lin_eq);
-                } else if (int_lin_eq != nullptr) {
-                  assert(c->type().isint());
-                  std::vector<Expression*> args(c->argCount());
-                  auto* le_c = Expression::cast<ArrayLit>(follow_id(c->arg(0)));
-                  std::vector<Expression*> nc_c(le_c->size());
-                  for (auto ii = static_cast<unsigned int>(nc_c.size()); (ii--) != 0U;) {
-                    nc_c[ii] = (*le_c)[ii];
-                  }
-                  nc_c.push_back(IntLit::a(-1));
-                  args[0] = new ArrayLit(Location().introduce(), nc_c);
-                  Expression::type(args[0], Type::parint(1));
-                  auto* le_x = Expression::cast<ArrayLit>(follow_id(c->arg(1)));
-                  std::vector<Expression*> nx(le_x->size());
-                  for (auto ii = static_cast<unsigned int>(nx.size()); (ii--) != 0U;) {
-                    nx[ii] = (*le_x)[ii];
-                  }
-                  nx.push_back(vd->id());
-                  args[1] = new ArrayLit(Location().introduce(), nx);
-                  Expression::type(args[1], Type::varint(1));
-                  IntVal d = IntLit::v(Expression::cast<IntLit>(c->arg(2)));
-                  args[2] = IntLit::a(-d);
-                  Expression::type(args[2], Type::parint(0));
-                  nc = Call::a(Expression::loc(c).introduce(), ASTString("int_lin_eq"), args);
-                  nc->type(Type::varbool());
-                  nc->decl(int_lin_eq);
+                  nc = linear_definition_call(env, vd, c);
                 }
               } else if (c->id() == env.constants.ids.exists) {
                 if (isTrueVar && array_bool_clause != nullptr) {
@@ -5149,6 +5100,13 @@ void flatten(Env& e, FlatteningOptions opt) {
           if (Call* c = Expression::dynamicCast<Call>(ci->e())) {
             GCLock lock;
             Call* nc = nullptr;
+            VarDecl* reifiedInto = nullptr;
+            if (is_deferred_relation(c->id())) {
+              if (BinOp* bo = linear_relation(env, c, reifiedInto)) {
+                rebuild_linear(env, ci, c, bo, reifiedInto);
+                continue;
+              }
+            }
             if (c->id() == env.constants.ids.exists) {
               if (array_bool_clause != nullptr) {
                 std::vector<Expression*> args(2);
@@ -5242,6 +5200,8 @@ void flatten(Env& e, FlatteningOptions opt) {
       startItem = endItem + 1;
       endItem = static_cast<int>(m.size()) - 1;
     }
+    // Later output and reverse-map expressions are built directly.
+    env.deferLinearRelations = false;
 
     // Add redefinitions for output variables that may have been redefined since create_output
     for (unsigned int i = 0; i < env.output->size(); i++) {
@@ -5514,43 +5474,11 @@ std::vector<Expression*> cleanup_vardecl(EnvI& env, VarDeclI* vdi, VarDecl* vd,
         std::vector<Expression*> args(cc->argCount());
         ASTString cid;
         if (cc->id() == env.constants.ids.lin_exp) {
-          // a = lin_exp([1],[b],5) => int_lin_eq([1,-1],[b,a],-5):: defines_var(a)
-          auto* le_c = Expression::cast<ArrayLit>(follow_id(cc->arg(0)));
-          std::vector<Expression*> nc(le_c->size());
-          for (auto i = static_cast<unsigned int>(nc.size()); (i--) != 0U;) {
-            nc[i] = (*le_c)[i];
-          }
-          if (le_c->type().bt() == Type::BT_INT) {
-            cid = env.constants.ids.int_.lin_eq;
-            nc.push_back(IntLit::a(-1));
-            args[0] = new ArrayLit(Location().introduce(), nc);
-            Expression::type(args[0], Type::parint(1));
-            auto* le_x = Expression::cast<ArrayLit>(follow_id(cc->arg(1)));
-            std::vector<Expression*> nx(le_x->size());
-            for (auto i = static_cast<unsigned int>(nx.size()); (i--) != 0U;) {
-              nx[i] = (*le_x)[i];
-            }
-            nx.push_back(vd->id());
-            args[1] = new ArrayLit(Location().introduce(), nx);
-            Expression::type(args[1], le_x->type());
-            IntVal d = IntLit::v(Expression::cast<IntLit>(cc->arg(2)));
-            args[2] = IntLit::a(-d);
-          } else {
-            // float
-            cid = env.constants.ids.float_.lin_eq;
-            nc.push_back(FloatLit::a(-1.0));
-            args[0] = new ArrayLit(Location().introduce(), nc);
-            Expression::type(args[0], Type::parfloat(1));
-            auto* le_x = Expression::cast<ArrayLit>(follow_id(cc->arg(1)));
-            std::vector<Expression*> nx(le_x->size());
-            for (auto i = static_cast<unsigned int>(nx.size()); (i--) != 0U;) {
-              nx[i] = (*le_x)[i];
-            }
-            nx.push_back(vd->id());
-            args[1] = new ArrayLit(Location().introduce(), nx);
-            Expression::type(args[1], le_x->type());
-            FloatVal d = FloatLit::v(Expression::cast<FloatLit>(cc->arg(2)));
-            args[2] = FloatLit::a(-d);
+          Call* def = linear_definition_call(env, vd, cc);
+          cid = def->id();
+          args.resize(def->argCount());
+          for (unsigned int i = 0; i < def->argCount(); i++) {
+            args[i] = def->arg(i);
           }
         } else {
           if (cc->id() == env.constants.ids.card) {

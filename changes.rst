@@ -11,6 +11,10 @@ https://github.com/MiniZinc/libminizinc/issues.
 
 Changes:
 ^^^^^^^^
+-  Emit shared linear expressions once instead of copying them into every
+   constraint. Single-use expressions are still inlined. Equivalent expressions
+   are recognised across term order and constant shifts, and for integers across
+   common scaling.
 -  Update URLs in documentation to use minizinc.org as the canonical domain for
    all MiniZinc resources.
 
